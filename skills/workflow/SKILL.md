@@ -13,6 +13,8 @@ You are an expert in the Vercel Workflow DevKit. WDK is an open-source TypeScrip
 npm install @workflow/core
 # For AI agent durability:
 npm install @workflow/ai
+# For self-hosted Postgres worlds:
+npm install @workflow/world-postgres
 ```
 
 ## Core Concepts
@@ -83,7 +85,7 @@ A "World" is where workflow state gets stored. WDK is portable across environmen
 ```ts
 // Use Postgres, Redis, or build your own World
 // Full control over state storage
-import { createPostgresWorld } from '@workflow/postgres'
+import { createPostgresWorld } from '@workflow/world-postgres'
 
 const world = createPostgresWorld({
   connectionString: process.env.DATABASE_URL,
@@ -232,4 +234,4 @@ export async function POST(req: Request) {
 
 - [Workflow DevKit](https://vercel.com/docs/workflow)
 - [Vercel Functions](https://vercel.com/docs/functions) — Workflows compile to Vercel Functions
-- [AI SDK Agents](https://sdk.vercel.ai/docs/ai-sdk-core/agents) — DurableAgent wraps AI SDK Agent
+- [AI SDK Agents](https://ai-sdk.dev/docs/ai-sdk-core/agents) — DurableAgent wraps AI SDK Agent
