@@ -197,3 +197,4 @@ export default function Error({ error, reset }: {
 - [Caching](https://nextjs.org/docs/app/building-your-application/caching)
 - [Deploying](https://nextjs.org/docs/app/getting-started/deploying)
 - [Upgrading](https://nextjs.org/docs/app/guides/upgrading)
+- [GitHub: Next.js](https://github.com/vercel/next.js)

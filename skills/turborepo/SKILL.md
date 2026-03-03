@@ -430,3 +430,4 @@ Vercel auto-detects Turborepo and optimizes builds. Each app in `apps/` can be a
 - [Crafting Your Repository](https://turborepo.dev/repo/docs/crafting-your-repository)
 - [Task Configuration](https://turborepo.dev/repo/docs/reference/configuration)
 - [Filtering](https://turborepo.dev/repo/docs/crafting-your-repository/running-tasks#using-filters)
+- [GitHub: Turborepo](https://github.com/vercel/turborepo)
