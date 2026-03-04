@@ -47,19 +47,19 @@ What does the AI feature need to do?
 Choosing a model?
 ├─ What's the priority?
 │  ├─ Speed + low cost
-│  │  ├─ Simple tasks (classification, extraction) → `gpt-5-mini`
-│  │  ├─ Fast with good quality → `gemini-2.5-flash`
-│  │  └─ Lowest latency → `claude-haiku-4-5`
+│  │  ├─ Simple tasks (classification, extraction) → `gpt-5.2`
+│  │  ├─ Fast with good quality → `gemini-3-flash`
+│  │  └─ Lowest latency → `claude-haiku-4.5`
 │  │
 │  ├─ Maximum quality
-│  │  ├─ Complex reasoning → `claude-opus-4-6` or `gpt-5`
-│  │  ├─ Long context (> 100K tokens) → `gemini-2.5-pro` (1M context)
-│  │  └─ Balanced quality/speed → `claude-sonnet-4-6`
+│  │  ├─ Complex reasoning → `claude-opus-4.6` or `gpt-5`
+│  │  ├─ Long context (> 100K tokens) → `gemini-3.1-pro-preview` (1M context)
+│  │  └─ Balanced quality/speed → `claude-sonnet-4.6`
 │  │
 │  ├─ Code generation
 │  │  ├─ Inline completions → `gpt-5.3-codex` (optimized for code)
-│  │  ├─ Full file generation → `claude-sonnet-4-6` or `gpt-5`
-│  │  └─ Code review / analysis → `claude-opus-4-6`
+│  │  ├─ Full file generation → `claude-sonnet-4.6` or `gpt-5`
+│  │  └─ Code review / analysis → `claude-opus-4.6`
 │  │
 │  └─ Embeddings
 │     ├─ English-only, budget-conscious → `text-embedding-3-small`
@@ -68,7 +68,7 @@ Choosing a model?
 │
 ├─ Production reliability concerns?
 │  ├─ Use AI Gateway with fallback ordering:
-│  │  primary: claude-sonnet-4-6 → fallback: gpt-5 → fallback: gemini-2.5-pro
+│  │  primary: claude-sonnet-4.6 → fallback: gpt-5 → fallback: gemini-3.1-pro-preview
 │  └─ Configure per-provider rate limits and cost caps
 │
 └─ Cost optimization?
@@ -90,7 +90,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { z } from 'zod';
 
 const agent = new Agent({
-  model: anthropic('claude-sonnet-4-6'),
+  model: anthropic('claude-sonnet-4.6'),
   system: 'You are a helpful assistant that can look up information.',
   tools: {
     search: {
@@ -119,7 +119,7 @@ import { DurableAgent } from '@vercel/workflow/ai';
 import { anthropic } from '@ai-sdk/anthropic';
 
 const researchAgent = new DurableAgent({
-  model: anthropic('claude-sonnet-4-6'),
+  model: anthropic('claude-sonnet-4.6'),
   system: 'You are a research agent that thoroughly investigates topics.',
   tools: { /* ... */ },
   maxSteps: 50, // survives function restarts
@@ -147,7 +147,7 @@ const mcpClient = createMCPClient({
 });
 
 const agent = new Agent({
-  model: anthropic('claude-sonnet-4-6'),
+  model: anthropic('claude-sonnet-4.6'),
   tools: await mcpClient.tools(), // auto-discovers available tools
 });
 ```
@@ -163,13 +163,13 @@ const world = new World({
 });
 
 const researcher = new DurableAgent({
-  model: anthropic('claude-sonnet-4-6'),
+  model: anthropic('claude-sonnet-4.6'),
   system: 'Research agent. Add findings to world state.',
   world,
 });
 
 const analyst = new DurableAgent({
-  model: anthropic('claude-sonnet-4-6'),
+  model: anthropic('claude-sonnet-4.6'),
   system: 'Analyst. Review findings in world state and make decisions.',
   world,
 });

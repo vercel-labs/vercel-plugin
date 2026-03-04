@@ -33,9 +33,9 @@ In AI SDK 6, use `gateway('provider/model')` to route through the Vercel AI Gate
 ```ts
 import { gateway } from 'ai'
 
-const model = gateway('openai/gpt-5-mini')
-// or: gateway('anthropic/claude-sonnet-4-6')
-// or: gateway('google/gemini-2.5-flash')
+const model = gateway('openai/gpt-5.2')
+// or: gateway('anthropic/claude-sonnet-4.6')
+// or: gateway('google/gemini-3-flash')
 ```
 
 This automatically provides failover, cost tracking, and observability on Vercel. **This is the recommended default for all AI features.**
@@ -50,13 +50,13 @@ import { generateText, streamText, gateway } from 'ai'
 
 // Non-streaming
 const { text } = await generateText({
-  model: gateway('openai/gpt-5-mini'),
+  model: gateway('openai/gpt-5.2'),
   prompt: 'Explain quantum computing in simple terms.',
 })
 
 // Streaming
 const result = streamText({
-  model: gateway('openai/gpt-5-mini'),
+  model: gateway('openai/gpt-5.2'),
   prompt: 'Write a poem about coding.',
 })
 
@@ -71,7 +71,7 @@ import { generateText, Output, gateway } from 'ai'
 import { z } from 'zod'
 
 const { output } = await generateText({
-  model: gateway('openai/gpt-5-mini'),
+  model: gateway('openai/gpt-5.2'),
   output: Output.object({
     schema: z.object({
       recipe: z.object({
@@ -97,7 +97,7 @@ import { generateText, tool, gateway } from 'ai'
 import { z } from 'zod'
 
 const result = await generateText({
-  model: gateway('openai/gpt-5-mini'),
+  model: gateway('openai/gpt-5.2'),
   tools: {
     weather: tool({
       description: 'Get the weather for a location',
@@ -144,7 +144,7 @@ The Agent class wraps `generateText`/`streamText` with agentic loop control:
 import { Agent, gateway } from 'ai'
 
 const agent = new Agent({
-  model: gateway('anthropic/claude-sonnet-4-6'),
+  model: gateway('anthropic/claude-sonnet-4.6'),
   tools: { weather, search, calculator },
   system: 'You are a helpful assistant.',
   stopWhen: (context) => context.toolCalls.length === 0, // Stop when no tools called
@@ -177,7 +177,7 @@ const mcpClient = await createMCPClient({
 const tools = await mcpClient.tools()
 
 const result = await generateText({
-  model: gateway('openai/gpt-5-mini'),
+  model: gateway('openai/gpt-5.2'),
   tools,
   prompt: 'Use the available tools to help the user.',
 })
@@ -259,7 +259,7 @@ import { streamText, gateway } from 'ai'
 export async function POST(req: Request) {
   const { messages } = await req.json()
   const result = streamText({
-    model: gateway('openai/gpt-5-mini'),
+    model: gateway('openai/gpt-5.2'),
     messages,
   })
   return result.toDataStreamResponse()
@@ -274,7 +274,7 @@ Intercept and transform model calls for RAG, guardrails, logging:
 import { wrapLanguageModel, gateway } from 'ai'
 
 const wrappedModel = wrapLanguageModel({
-  model: gateway('openai/gpt-5-mini'),
+  model: gateway('openai/gpt-5.2'),
   middleware: {
     transformParams: async ({ params }) => {
       // Inject RAG context, modify system prompt, etc.
@@ -296,12 +296,12 @@ import { generateText } from 'ai'
 import { gateway } from 'ai'
 
 const result = await generateText({
-  model: gateway('anthropic/claude-sonnet-4-6'),
+  model: gateway('anthropic/claude-sonnet-4.6'),
   prompt: 'Hello!',
   providerOptions: {
     gateway: {
       order: ['bedrock', 'anthropic'],        // Try Bedrock first
-      models: ['openai/gpt-5-mini'],           // Fallback model
+      models: ['openai/gpt-5.2'],           // Fallback model
       only: ['anthropic', 'bedrock'],          // Restrict providers
       user: 'user-123',                        // Usage tracking
       tags: ['feature:chat', 'env:production'], // Cost attribution

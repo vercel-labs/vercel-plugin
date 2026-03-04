@@ -667,7 +667,7 @@ Three distinct caching systems serve different purposes. They can be used indepe
 2. Enable AI Gateway in Vercel dashboard → auto-provisions credentials
 3. vercel env pull (pulls gateway env vars to .env.local)
 4. npm install ai (no provider SDK needed — gateway is built in)
-5. Code: import { gateway } from 'ai' → gateway('anthropic/claude-sonnet-4-6')
+5. Code: import { gateway } from 'ai' → gateway('anthropic/claude-sonnet-4.6')
 6. Next.js (App Router) → AI SDK (useChat + streamText) → AI Gateway
                         → Vercel Functions (streaming) → vercel deploy
 ```
@@ -736,7 +736,7 @@ Git Push → CI Pipeline → vercel build → vercel deploy --prebuilt
 
 ### AI SDK v6
 
-- **Default to AI Gateway** — use `import { gateway } from 'ai'` and `gateway('provider/model')` (e.g., `gateway('anthropic/claude-sonnet-4-6')`). Do NOT install or import direct provider SDKs (`@ai-sdk/anthropic`, `@ai-sdk/openai`, etc.) unless you need provider-specific features not exposed through the gateway.
+- **Default to AI Gateway** — use `import { gateway } from 'ai'` and `gateway('provider/model')` (e.g., `gateway('anthropic/claude-sonnet-4.6')`). Do NOT install or import direct provider SDKs (`@ai-sdk/anthropic`, `@ai-sdk/openai`, etc.) unless you need provider-specific features not exposed through the gateway.
 - **For AI projects, set up a Vercel project first** — run `vercel link` (or create via dashboard) so AI Gateway credentials are auto-provisioned. Use `vercel env pull` to get them locally. Do NOT manually create `.env.local` with provider-specific API keys like `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
 - Use `inputSchema` (not `parameters`) and `output`/`outputSchema` (not `result`) for tool definitions — aligned with MCP spec.
 - Always stream for user-facing AI: use `streamText` + `useChat`, not `generateText`.

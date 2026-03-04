@@ -20,7 +20,7 @@ import { generateText } from 'ai'
 import { gateway } from 'ai' // Available since AI SDK 5.0.36+
 
 const result = await generateText({
-  model: gateway('openai/gpt-5-mini'),
+  model: gateway('openai/gpt-5.2'),
   prompt: 'Hello!',
 })
 ```
@@ -33,7 +33,7 @@ Configure how AI Gateway routes requests across providers:
 
 ```ts
 const result = await generateText({
-  model: gateway('anthropic/claude-sonnet-4-6'),
+  model: gateway('anthropic/claude-sonnet-4.6'),
   prompt: 'Hello!',
   providerOptions: {
     gateway: {
@@ -44,7 +44,7 @@ const result = await generateText({
       only: ['anthropic', 'vertex'],
 
       // Fallback models if primary model fails
-      models: ['openai/gpt-5-mini', 'google/gemini-2.5-flash'],
+      models: ['openai/gpt-5.2', 'google/gemini-3-flash'],
 
       // Track usage per end-user
       user: 'user-123',
@@ -72,7 +72,7 @@ AI Gateway supports response caching to reduce latency and cost for repeated or 
 
 ```ts
 const result = await generateText({
-  model: gateway('openai/gpt-5-mini'),
+  model: gateway('openai/gpt-5.2'),
   prompt: 'What is the capital of France?',
   providerOptions: {
     gateway: {
@@ -109,7 +109,7 @@ Control usage at the individual user level to prevent abuse and manage costs:
 
 ```ts
 const result = await generateText({
-  model: gateway('openai/gpt-5-mini'),
+  model: gateway('openai/gpt-5.2'),
   prompt: userMessage,
   providerOptions: {
     gateway: {
@@ -137,7 +137,7 @@ import { generateText, APICallError } from 'ai'
 
 try {
   const result = await generateText({
-    model: gateway('openai/gpt-5-mini'),
+    model: gateway('openai/gpt-5.2'),
     prompt: userMessage,
     providerOptions: { gateway: { user: userId } },
   })
@@ -240,12 +240,12 @@ When a provider is down, the gateway automatically fails over if you configured 
 
 ```ts
 const result = await generateText({
-  model: gateway('anthropic/claude-sonnet-4-6'),
+  model: gateway('anthropic/claude-sonnet-4.6'),
   prompt: 'Summarize this document',
   providerOptions: {
     gateway: {
       order: ['anthropic', 'bedrock'], // Bedrock as fallback
-      models: ['openai/gpt-5-mini'],   // Final fallback model
+      models: ['openai/gpt-5.2'],   // Final fallback model
     },
   },
 })
@@ -262,7 +262,7 @@ If your provider API key hits its quota, the gateway tries the next provider in 
 model: gateway('openai/gpt-99')  // Returns 400 with descriptive error
 
 // Good — use models listed in Vercel docs
-model: gateway('openai/gpt-5-mini')
+model: gateway('openai/gpt-5.2')
 ```
 
 ### Timeout handling
@@ -273,7 +273,7 @@ Gateway has a default timeout per provider. For long-running generations, use st
 import { streamText } from 'ai'
 
 const result = streamText({
-  model: gateway('anthropic/claude-sonnet-4-6'),
+  model: gateway('anthropic/claude-sonnet-4.6'),
   prompt: longDocument,
 })
 
@@ -290,13 +290,13 @@ import { generateText, APICallError } from 'ai'
 async function callAI(prompt: string, userId: string) {
   try {
     return await generateText({
-      model: gateway('openai/gpt-5-mini'),
+      model: gateway('openai/gpt-5.2'),
       prompt,
       providerOptions: {
         gateway: {
           user: userId,
           order: ['openai', 'azure-openai'],
-          models: ['anthropic/claude-haiku-4-5'],
+          models: ['anthropic/claude-haiku-4.5'],
           tags: ['feature:chat'],
         },
       },
@@ -377,7 +377,7 @@ Text, image, and video generation all route through the gateway:
 ```ts
 // Text
 const { text } = await generateText({
-  model: gateway('openai/gpt-5-mini'),
+  model: gateway('openai/gpt-5.2'),
   prompt: 'Hello',
 })
 

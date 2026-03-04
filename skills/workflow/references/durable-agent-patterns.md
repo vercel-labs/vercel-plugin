@@ -9,7 +9,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 
 const agent = new DurableAgent({
-  model: openai('gpt-5-mini'),
+  model: openai('gpt-5.2'),
   system: 'You are a helpful research assistant.',
   tools: {
     searchWeb: tool({

@@ -101,7 +101,7 @@ import { DurableAgent } from '@workflow/ai/agent'
 import { openai } from '@ai-sdk/openai'
 
 const agent = new DurableAgent({
-  model: openai('gpt-5-mini'),
+  model: openai('gpt-5.2'),
   tools: {
     searchWeb: { /* ... */ },
     writeFile: { /* ... */ },

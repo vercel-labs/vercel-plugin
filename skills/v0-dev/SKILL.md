@@ -243,7 +243,7 @@ import { openai } from '@ai-sdk/openai'
 import { v0Tools } from '@v0-sdk/ai-tools'
 
 const result = await generateText({
-  model: openai('gpt-5-mini'),
+  model: openai('gpt-5.2'),
   prompt: 'Create a new React dashboard project with charts and a data table',
   tools: v0Tools({ apiKey: process.env.V0_API_KEY }),
 })
@@ -428,7 +428,7 @@ import { Agent } from 'ai'
 import { v0Tools } from '@v0-sdk/ai-tools'
 
 const agent = new Agent({
-  model: openai('gpt-5-mini'),
+  model: openai('gpt-5.2'),
   tools: {
     ...v0Tools({ apiKey: process.env.V0_API_KEY }),
     // ... other tools
