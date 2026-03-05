@@ -119,7 +119,7 @@ export async function POST(req: Request) {
 }
 ```
 
-For AI streaming, use the AI SDK's `toDataStreamResponse()` which handles SSE formatting automatically.
+For AI streaming, use the AI SDK's `toUIMessageStreamResponse()` (for chat UIs with `useChat`) which handles SSE formatting automatically.
 
 ## Cron Jobs
 

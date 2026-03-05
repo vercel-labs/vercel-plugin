@@ -105,8 +105,14 @@ Invalidate with `updateTag('users')` from a Server Action. This replaces PPR fro
 
 In Next.js 16, `middleware.ts` is renamed to `proxy.ts`. It runs on the Node.js runtime (not Edge).
 
+**File location**: Place `proxy.ts` at the same level as your `app/` directory:
+- Standard project: `proxy.ts` at project root
+- With `--src-dir` (or `srcDir: true`): `src/proxy.ts` (inside `src/`, alongside `app/`)
+
+If you place `proxy.ts` in the wrong location, Next.js will silently ignore it and no request interception will occur.
+
 ```ts
-// proxy.ts
+// proxy.ts (or src/proxy.ts if using src directory)
 import type { NextRequest } from 'next/server'
 
 export function proxy(request: NextRequest) {

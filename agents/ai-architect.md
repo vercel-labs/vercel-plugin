@@ -107,7 +107,7 @@ const agent = new Agent({
 export async function POST(req: Request) {
   const { messages } = await req.json();
   const result = agent.streamText({ messages });
-  return result.toDataStreamResponse();
+  return result.toUIMessageStreamResponse();
 }
 ```
 
@@ -116,13 +116,14 @@ export async function POST(req: Request) {
 ```typescript
 // app/api/research/route.ts
 import { DurableAgent } from '@vercel/workflow/ai';
+import { stepCountIs } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
 
 const researchAgent = new DurableAgent({
   model: anthropic('claude-sonnet-4.6'),
   system: 'You are a research agent that thoroughly investigates topics.',
   tools: { /* ... */ },
-  maxSteps: 50, // survives function restarts
+  stopWhen: stepCountIs(50), // survives function restarts
 });
 
 export async function POST(req: Request) {
@@ -208,7 +209,7 @@ AI feature failing?
 │  └─ Using deprecated `parameters`? → Migrate to `inputSchema` (AI SDK v6)
 │
 ├─ Agent stuck in loop
-│  ├─ No `maxSteps` set? → Add `maxSteps` to prevent infinite loops
+│  ├─ No step limit? → Add `stopWhen: stepCountIs(N)` to prevent infinite loops (v6; `maxSteps` was removed)
 │  ├─ Tool always returns same result? → Add variation or "give up" condition
 │  └─ Circular tool dependency? → Redesign tool set to break cycle
 │
@@ -296,7 +297,7 @@ Use when: Q&A over custom documents, knowledge bases, semantic search.
 | `experimental_telemetry` | `telemetry` | Stable API |
 | `generateObject` / `streamObject` | `generateText` / `streamText` with `Output.object()` | Unified API |
 | `CoreMessage` | `ModelMessage` | Use `convertToModelMessages()` |
-| `OpenAIStream` / `AnthropicStream` | `toDataStreamResponse()` | Unified streaming |
+| `OpenAIStream` / `AnthropicStream` | `toUIMessageStreamResponse()` | Unified streaming (for chat UIs) |
 | Manual retry on rate limit | AI Gateway fallbacks | Infrastructure-level resilience |
 
 ---

@@ -85,6 +85,14 @@ The guide returns structured setup steps: required env vars, SDK packages, code 
 vercel integration add <name>
 ```
 
+**AI agent limitation**: `vercel integration add` requires accepting terms of service interactively. The Vercel CLI blocks this when it detects an AI agent (`Error: Term acceptance cannot be performed by an AI agent`). When this happens:
+1. Tell the user to run `vercel integration add <name>` directly in their terminal
+2. Wait for them to confirm completion
+3. Verify env vars were provisioned with `vercel env ls`
+4. Pull env vars locally with `vercel env pull`
+
+Some integrations (like Clerk, Neon) also require completing setup in the Vercel Dashboard web UI after the CLI step. The CLI will prompt to open the dashboard automatically.
+
 After installation, the integration auto-provisions environment variables. For observability vendors (Datadog, Sentry, Axiom), this also auto-creates **log and trace drains**.
 
 ### 5. Confirm Env Vars Provisioned

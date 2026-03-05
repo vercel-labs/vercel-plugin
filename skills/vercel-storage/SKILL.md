@@ -104,6 +104,34 @@ const sql = neon(process.env.DATABASE_URL!)
 const db = drizzle(sql)
 ```
 
+**Build-time safety**: The `neon()` call above throws if `DATABASE_URL` is not set. Since Next.js evaluates top-level module code at build time, this will crash `next build` when env vars aren't yet configured (e.g., first deploy before Marketplace provisioning). Use lazy initialization:
+
+```ts
+// src/db/index.ts — lazy initialization (safe for build time)
+import { neon } from '@neondatabase/serverless'
+import { drizzle } from 'drizzle-orm/neon-http'
+import * as schema from './schema'
+
+function createDb() {
+  const sql = neon(process.env.DATABASE_URL!)
+  return drizzle(sql, { schema })
+}
+
+let _db: ReturnType<typeof createDb> | null = null
+
+export function getDb() {
+  if (!_db) _db = createDb()
+  return _db
+}
+```
+
+**Drizzle Kit migrations**: `drizzle-kit` does NOT auto-load `.env.local`. Source env vars manually:
+
+```bash
+# Load .env.local before running drizzle-kit
+source <(grep -v '^#' .env.local | sed 's/^/export /') && npx drizzle-kit push
+```
+
 Install via Vercel Marketplace for automatic environment variable provisioning.
 
 ### Upstash Redis (replaces @vercel/kv)

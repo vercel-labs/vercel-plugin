@@ -706,7 +706,7 @@ Three distinct caching systems serve different purposes. They can be used indepe
 1. vercel link (or create project in dashboard)
 2. Enable AI Gateway in Vercel dashboard → auto-provisions OIDC credentials
 3. vercel env pull (pulls VERCEL_OIDC_TOKEN + gateway env vars to .env.local)
-4. npm install ai (no provider SDK needed — gateway is built in)
+4. npm install ai @ai-sdk/react (core SDK + React hooks — `@ai-sdk/react` is required for `useChat`)
 5. npx ai-elements (install chat UI components — Message, Conversation, PromptInput)
 6. Code: import { gateway } from 'ai' → gateway('anthropic/claude-sonnet-4.6')
 7. Server: convertToModelMessages(messages) → streamText → toUIMessageStreamResponse()
@@ -730,6 +730,13 @@ Next.js (App Router) → Neon Postgres (data) → Clerk (auth, via Marketplace)
                      → Stripe (payments, via Marketplace) → Vercel Blob (uploads)
                      → Edge Config (feature flags) → Vercel Analytics
 ```
+
+**Clerk integration gotchas**:
+- `vercel integration add clerk` requires terms acceptance in the terminal (AI agents are blocked — user must run it manually)
+- After CLI install, the user must complete setup in the Vercel Dashboard to connect Clerk to the project
+- Clerk auto-provisions `CLERK_SECRET_KEY` and `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, but you must manually set `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in` and `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up`
+- **Organization flow**: After sign-in, if the user has no organization, `auth()` returns `{ userId, orgSlug: null }`. Handle this explicitly — redirect to an org creation page or show `<CreateOrganization />`. Without this, the app will loop back to the landing page endlessly.
+- The `proxy.ts` (or `middleware.ts`) must call `clerkMiddleware()` for `auth()` to work in Server Components. If proxy is in the wrong location, you get: `Clerk: auth() was called without Clerk middleware`
 
 ### 4. Monorepo with Multiple Apps
 ```
@@ -761,6 +768,7 @@ Git Push → CI Pipeline → vercel build → vercel deploy --prebuilt
 | `generateObject` / `streamObject` | `generateText` / `streamText` + `Output.object()` | Unified structured output API |
 | `parameters` (AI SDK tools) | `inputSchema` | Aligned with MCP spec |
 | `result` (AI SDK tools) | `output` | Aligned with MCP spec |
+| `maxSteps` (AI SDK) | `stopWhen: stepCountIs(N)` | Import `stepCountIs` from `ai` |
 | `CoreMessage` | `ModelMessage` | Use `convertToModelMessages()` |
 | `Experimental_Agent` | `ToolLoopAgent` | `system` → `instructions` |
 | `useChat({ api })` | `useChat({ transport: new DefaultChatTransport({ api }) })` | v6 transport pattern |
@@ -779,7 +787,7 @@ Git Push → CI Pipeline → vercel build → vercel deploy --prebuilt
 - Push `'use client'` boundaries as far down the component tree as possible.
 - Use Server Actions (`'use server'`) for data mutations, not Route Handlers (unless building a public API).
 - All request APIs are async in Next.js 16: `await cookies()`, `await headers()`, `await params`, `await searchParams`.
-- Use `proxy.ts` instead of `middleware.ts` (Next.js 16 rename). Proxy runs on Node.js runtime only.
+- Use `proxy.ts` instead of `middleware.ts` (Next.js 16 rename). Proxy runs on Node.js runtime only. **Location**: place `proxy.ts` at the same level as `app/` — at project root normally, or inside `src/` if using `--src-dir`.
 - Turbopack config is top-level in `next.config.ts`, not under `experimental.turbopack`.
 - Use Cache Components (`'use cache'`) instead of PPR for mixing static and dynamic content.
 - Prefer `next/image` for images and `next/font` for fonts — both optimize automatically on Vercel.
@@ -788,6 +796,7 @@ Git Push → CI Pipeline → vercel build → vercel deploy --prebuilt
 ### AI SDK v6
 
 - **Default to AI Gateway** — use `import { gateway } from 'ai'` and `gateway('provider/model')` (e.g., `gateway('anthropic/claude-sonnet-4.6')`). Do NOT install or import direct provider SDKs (`@ai-sdk/anthropic`, `@ai-sdk/openai`, etc.) unless you need provider-specific features not exposed through the gateway.
+- **Install `@ai-sdk/react` for React hooks** — `useChat`, `useCompletion`, and `useObject` live in `@ai-sdk/react` (not `ai`). Always `npm install ai @ai-sdk/react` together for React/Next.js projects.
 - **OIDC is the default auth for AI Gateway** — when you run `vercel env pull`, it provisions `VERCEL_OIDC_TOKEN` which the `@ai-sdk/gateway` package reads automatically via `@vercel/oidc`. No `AI_GATEWAY_API_KEY` or provider-specific API keys needed. On Vercel deployments, OIDC tokens are auto-refreshed. For local dev, re-run `vercel env pull` if the token expires (~24h).
 - **For AI projects, set up a Vercel project first** — run `vercel link` (or create via dashboard) → enable AI Gateway in dashboard → `vercel env pull` to get OIDC credentials locally. Do NOT manually create `.env.local` with provider-specific API keys like `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
 - **Use AI Elements for chat UIs** — `npx ai-elements` installs pre-built Message, Conversation, and Tool components that handle UIMessage parts, streaming, and markdown automatically. Built on shadcn/ui.
@@ -795,6 +804,7 @@ Git Push → CI Pipeline → vercel build → vercel deploy --prebuilt
 - Use `inputSchema` (not `parameters`) and `output`/`outputSchema` (not `result`) for tool definitions — aligned with MCP spec.
 - Always stream for user-facing AI: use `streamText` + `useChat`, not `generateText`.
 - `generateObject` and `streamObject` are removed in v6 — use `generateText` / `streamText` with `Output.object()` instead.
+- **`maxSteps` was removed** — use `stopWhen: stepCountIs(N)` (import `stepCountIs` from `ai`) for multi-step tool calling in both `streamText` and the `Agent` class.
 - Use the `Agent` class for multi-step reasoning instead of manual tool-calling loops.
 - Use `DurableAgent` from `@workflow/ai/agent` for production agents that must survive crashes.
 - Use `@ai-sdk/mcp` (stable, not experimental) for MCP server connections.

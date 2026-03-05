@@ -10,8 +10,11 @@ You are an expert in the Vercel AI SDK v6. The AI SDK is the leading TypeScript 
 ## Installation
 
 ```bash
-npm install ai  # AI Gateway is built in — no provider SDK needed
+npm install ai                # Core SDK — AI Gateway is built in, no provider SDK needed
+npm install @ai-sdk/react     # Required for React hooks (useChat, useCompletion, useObject)
 ```
+
+> **`@ai-sdk/react` is a separate package** — it is NOT included in the `ai` package. You must install it alongside `ai` for any React/Next.js project that uses `useChat` or other UI hooks.
 
 > **Only install a direct provider SDK** (e.g., `@ai-sdk/anthropic`) if you need provider-specific features not exposed through the gateway.
 
@@ -303,15 +306,20 @@ function Chat() {
 ### Server-side for useChat
 ```ts
 // app/api/chat/route.ts
-import { streamText, convertToModelMessages, gateway } from 'ai'
+import { streamText, convertToModelMessages, stepCountIs, gateway } from 'ai'
+import type { UIMessage } from 'ai'
 
 export async function POST(req: Request) {
-  const { messages } = await req.json()
+  const { messages }: { messages: UIMessage[] } = await req.json()
   // IMPORTANT: convertToModelMessages is async in v6
   const modelMessages = await convertToModelMessages(messages)
   const result = streamText({
     model: gateway('openai/gpt-5.2'),
     messages: modelMessages,
+    tools: { /* your tools */ },
+    // IMPORTANT: use stopWhen with stepCountIs for multi-step tool calling
+    // maxSteps was removed in v6 — use this instead
+    stopWhen: stepCountIs(5),
   })
   // Use toUIMessageStreamResponse (not toDataStreamResponse) for chat UIs
   return result.toUIMessageStreamResponse()
@@ -387,6 +395,7 @@ Run `npx @ai-sdk/codemod v6` to auto-migrate. Key changes:
 - `generateObject` / `streamObject` → `generateText` / `streamText` with `Output.object()`
 - `parameters` → `inputSchema`
 - `result` → `output`
+- `maxSteps` → `stopWhen: stepCountIs(N)` (import `stepCountIs` from `ai`)
 - `CoreMessage` → `ModelMessage` (use `convertToModelMessages()` — now async)
 - `Experimental_Agent` → `ToolLoopAgent` (`system` → `instructions`)
 - `experimental_createMCPClient` → `createMCPClient` (stable)
@@ -395,6 +404,7 @@ Run `npx @ai-sdk/codemod v6` to auto-migrate. Key changes:
 - `toDataStreamResponse()` → `toUIMessageStreamResponse()` (for chat UIs)
 - `message.content` → `message.parts` (UIMessage format with typed parts)
 - UIMessage / ModelMessage types introduced
+- `@ai-sdk/react` must be installed separately (`npm install @ai-sdk/react`)
 
 ## Official Documentation
 

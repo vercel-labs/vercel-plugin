@@ -22,7 +22,7 @@ There are THREE "middleware" concepts in the Vercel ecosystem:
 | Concept | File | Runtime | Scope | When to Use |
 |---------|------|---------|-------|-------------|
 | **Vercel Routing Middleware** | `middleware.ts` (root) | Edge/Node/Bun | Any framework, platform-level | Request interception before cache: rewrites, redirects, geo, A/B |
-| **Next.js 16 Proxy** | `proxy.ts` (root) | Node.js only | Next.js 16+ only | Network-boundary proxy needing full Node APIs. NOT for auth. |
+| **Next.js 16 Proxy** | `proxy.ts` (root, or `src/proxy.ts` if using `--src-dir`) | Node.js only | Next.js 16+ only | Network-boundary proxy needing full Node APIs. NOT for auth. |
 | **Edge Functions** | Any function file | V8 isolates | General-purpose | Standalone edge compute endpoints, not an interception layer |
 
 **Why the rename in Next.js 16**: `middleware.ts` → `proxy.ts` clarifies it sits at the network boundary (not general-purpose middleware). Partly motivated by CVE-2025-29927 (middleware auth bypass via `x-middleware-subrequest` header). Migration codemod: `npx @next/codemod@latest middleware-to-proxy`
