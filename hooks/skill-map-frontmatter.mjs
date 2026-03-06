@@ -5,7 +5,6 @@
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import yaml from "js-yaml";
 
 /**
  * Extract YAML frontmatter and body from a markdown string.
@@ -25,10 +24,274 @@ export function extractFrontmatter(markdown) {
   return { yaml: match[1], body: match[2] };
 }
 
+function invalidYaml(message, lineNumber) {
+  const location = typeof lineNumber === "number" ? ` (line ${lineNumber})` : "";
+  return new Error(`Invalid YAML frontmatter: ${message}${location}`);
+}
+
+function isIgnorableLine(line) {
+  const trimmed = line.trim();
+  return trimmed === "" || line.trimStart().startsWith("#");
+}
+
+function nextSignificantLine(lines, startIndex) {
+  for (let i = startIndex; i < lines.length; i += 1) {
+    if (!isIgnorableLine(lines[i])) return i;
+  }
+  return -1;
+}
+
+function countIndent(line) {
+  let indent = 0;
+  while (indent < line.length) {
+    const char = line[indent];
+    if (char === " ") {
+      indent += 1;
+      continue;
+    }
+    if (char === "\t") {
+      throw invalidYaml("tab indentation is not allowed");
+    }
+    break;
+  }
+  return indent;
+}
+
+function parseYamlScalar(raw) {
+  const value = raw.trim();
+  if (value === "") return "";
+
+  const first = value[0];
+  const last = value[value.length - 1];
+  if ((first === "'" || first === "\"") && last === first && value.length >= 2) {
+    return value.slice(1, -1);
+  }
+  if (first === "'" || first === "\"") {
+    throw invalidYaml("unterminated quoted scalar");
+  }
+
+  if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
+    return Number(value);
+  }
+
+  return value;
+}
+
+function parseInlineArray(raw) {
+  const value = raw.trim();
+  if (!value.startsWith("[") || !value.endsWith("]")) {
+    throw invalidYaml("inline array must start with '[' and end with ']'");
+  }
+
+  const inner = value.slice(1, -1);
+  if (inner.trim() === "") return [];
+
+  const items = [];
+  let token = "";
+  let quote = null;
+
+  for (let i = 0; i < inner.length; i += 1) {
+    const char = inner[i];
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      }
+      token += char;
+      continue;
+    }
+
+    if (char === "'" || char === "\"") {
+      quote = char;
+      token += char;
+      continue;
+    }
+
+    if (char === ",") {
+      const part = token.trim();
+      if (part === "") {
+        throw invalidYaml("inline array contains an empty entry");
+      }
+      items.push(part);
+      token = "";
+      continue;
+    }
+
+    token += char;
+  }
+
+  if (quote) {
+    throw invalidYaml("unterminated quoted scalar in inline array");
+  }
+
+  const lastToken = token.trim();
+  if (lastToken === "") {
+    throw invalidYaml("inline array contains an empty entry");
+  }
+  items.push(lastToken);
+
+  return items.map((item) => {
+    if (item.trim().startsWith("[") && item.trim().endsWith("]")) {
+      return parseInlineArray(item);
+    }
+    return parseYamlScalar(item);
+  });
+}
+
+function parseInlineValue(raw) {
+  const value = raw.trim();
+  if (value.startsWith("[") && value.endsWith("]")) {
+    return parseInlineArray(value);
+  }
+  return parseYamlScalar(value);
+}
+
+function parseYamlBlock(lines, startIndex, indent) {
+  let index = nextSignificantLine(lines, startIndex);
+  if (index === -1) {
+    return { value: "", nextIndex: lines.length };
+  }
+
+  const firstIndent = countIndent(lines[index]);
+  if (firstIndent < indent) {
+    return { value: "", nextIndex: index };
+  }
+  if (firstIndent !== indent) {
+    throw invalidYaml(`unexpected indentation, expected ${indent} spaces but found ${firstIndent}`, index + 1);
+  }
+
+  const firstContent = lines[index].slice(indent);
+  if (firstContent.startsWith("-")) {
+    const arr = [];
+
+    while (index < lines.length) {
+      if (isIgnorableLine(lines[index])) {
+        index += 1;
+        continue;
+      }
+
+      const lineIndent = countIndent(lines[index]);
+      if (lineIndent < indent) break;
+      if (lineIndent !== indent) {
+        throw invalidYaml(`unexpected indentation inside array, expected ${indent} spaces but found ${lineIndent}`, index + 1);
+      }
+
+      const content = lines[index].slice(indent);
+      if (!content.startsWith("-")) {
+        throw invalidYaml("array items must start with '-'", index + 1);
+      }
+
+      const remainder = content.slice(1).trim();
+      if (remainder !== "") {
+        arr.push(parseInlineValue(remainder));
+        index += 1;
+        continue;
+      }
+
+      const childStart = nextSignificantLine(lines, index + 1);
+      if (childStart === -1) {
+        arr.push("");
+        index += 1;
+        continue;
+      }
+
+      const childIndent = countIndent(lines[childStart]);
+      if (childIndent <= indent) {
+        arr.push("");
+        index += 1;
+        continue;
+      }
+
+      const child = parseYamlBlock(lines, childStart, childIndent);
+      arr.push(child.value);
+      index = child.nextIndex;
+    }
+
+    return { value: arr, nextIndex: index };
+  }
+
+  const obj = {};
+  while (index < lines.length) {
+    if (isIgnorableLine(lines[index])) {
+      index += 1;
+      continue;
+    }
+
+    const lineIndent = countIndent(lines[index]);
+    if (lineIndent < indent) break;
+    if (lineIndent !== indent) {
+      throw invalidYaml(`unexpected indentation inside object, expected ${indent} spaces but found ${lineIndent}`, index + 1);
+    }
+
+    const content = lines[index].slice(indent);
+    if (content.startsWith("-")) {
+      throw invalidYaml("found list item where key-value pair was expected", index + 1);
+    }
+
+    const colonIndex = content.indexOf(":");
+    if (colonIndex === -1) {
+      throw invalidYaml("missing ':' in key-value pair", index + 1);
+    }
+
+    const key = content.slice(0, colonIndex).trim();
+    if (key === "") {
+      throw invalidYaml("empty key is not allowed", index + 1);
+    }
+
+    const remainder = content.slice(colonIndex + 1);
+    if (remainder.trim() !== "") {
+      obj[key] = parseInlineValue(remainder);
+      index += 1;
+      continue;
+    }
+
+    const childStart = nextSignificantLine(lines, index + 1);
+    if (childStart === -1) {
+      obj[key] = "";
+      index += 1;
+      continue;
+    }
+
+    const childIndent = countIndent(lines[childStart]);
+    if (childIndent <= indent) {
+      obj[key] = "";
+      index += 1;
+      continue;
+    }
+
+    const child = parseYamlBlock(lines, childStart, childIndent);
+    obj[key] = child.value;
+    index = child.nextIndex;
+  }
+
+  return { value: obj, nextIndex: index };
+}
+
+function parseSimpleYaml(yamlStr) {
+  const normalized = yamlStr.replace(/\r\n?/g, "\n");
+  const lines = normalized.split("\n");
+  const start = nextSignificantLine(lines, 0);
+  if (start === -1) return {};
+
+  const firstIndent = countIndent(lines[start]);
+  if (firstIndent !== 0) {
+    throw invalidYaml(`top-level entries must start at column 1 (found ${firstIndent} leading spaces)`, start + 1);
+  }
+
+  const parsed = parseYamlBlock(lines, start, 0);
+  const trailing = nextSignificantLine(lines, parsed.nextIndex);
+  if (trailing !== -1) {
+    throw invalidYaml("unexpected trailing content", trailing + 1);
+  }
+
+  if (parsed.value == null || typeof parsed.value !== "object" || Array.isArray(parsed.value)) {
+    throw invalidYaml("root document must be a key-value object");
+  }
+
+  return parsed.value;
+}
+
 /**
  * Parse a YAML frontmatter string into a structured skill object.
- * Uses js-yaml with the DEFAULT_SCHEMA to avoid interpreting
- * backslash sequences in single-quoted strings.
  * @param {string} yamlStr
  * @returns {{ name: string, description: string, metadata: { priority?: number, filePattern?: string[], bashPattern?: string[] } }}
  */
@@ -36,7 +299,7 @@ export function parseSkillFrontmatter(yamlStr) {
   if (!yamlStr || !yamlStr.trim()) {
     return { name: "", description: "", metadata: {} };
   }
-  const doc = yaml.load(yamlStr, { schema: yaml.DEFAULT_SCHEMA });
+  const doc = parseSimpleYaml(yamlStr);
   return {
     name: doc?.name ?? "",
     description: doc?.description ?? "",
