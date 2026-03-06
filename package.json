@@ -5,10 +5,17 @@
     "vercel-plugin": "src/cli/index.ts"
   },
   "scripts": {
+    "build:hooks": "tsc -p hooks/tsconfig.json && cp hooks/compiled/*.mjs hooks/",
     "build:manifest": "bun run scripts/build-manifest.ts",
+    "build": "bun run build:hooks && bun run build:manifest",
     "validate": "bun run scripts/validate.ts",
     "doctor": "bun run src/cli/index.ts doctor",
     "test": "bun test",
     "test:update-snapshots": "UPDATE_SNAPSHOTS=1 bun test tests/snapshot-runner.test.ts"
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.70",
+    "@types/node": "^25.3.5",
+    "typescript": "^5.9.3"
   }
 }

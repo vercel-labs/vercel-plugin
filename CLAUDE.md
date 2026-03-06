@@ -2,6 +2,8 @@
 
 ## Quick Reference
 
+- **Build hooks**: `bun run build:hooks` (compiles `hooks/src/*.mts` → `hooks/*.mjs`)
+- **Build all**: `bun run build` (hooks + manifest)
 - **Test**: `bun test` (runs all tests across 11 files)
 - **Single test file**: `bun test tests/<file>.test.ts`
 - **Validate skills**: `bun run scripts/validate.ts`
@@ -10,12 +12,17 @@
 
 ### Skill Injection Pipeline
 
+Hook source lives in `hooks/src/*.mts` (TypeScript) and compiles to `hooks/*.mjs` (ESM, committed).
+Run `bun run build:hooks` after editing any `.mts` file. A pre-commit hook auto-compiles when `.mts` files are staged.
+
 1. `session-start-seen-skills.sh` — runs on SessionStart, exports `VERCEL_PLUGIN_SEEN_SKILLS=""` into `CLAUDE_ENV_FILE`
-2. `pretooluse-skill-inject.mjs` — PreToolUse hook, matches tool calls to skills and injects SKILL.md content
-3. `skill-map-frontmatter.mjs` — parses SKILL.md frontmatter into the skill map
-4. `patterns.mjs` — glob-to-regex conversion and seen-skills env var helpers
-5. `vercel-config.mjs` — vercel.json key-aware skill routing
-6. `logger.mjs` — structured log levels (off/summary/debug/trace)
+2. `pretooluse-skill-inject.mts` → `.mjs` — PreToolUse hook, matches tool calls to skills and injects SKILL.md content
+3. `skill-map-frontmatter.mts` → `.mjs` — parses SKILL.md frontmatter into the skill map
+4. `patterns.mts` → `.mjs` — glob-to-regex conversion and seen-skills env var helpers
+5. `vercel-config.mts` → `.mjs` — vercel.json key-aware skill routing
+6. `logger.mts` → `.mjs` — structured log levels (off/summary/debug/trace)
+
+Hook output is type-checked against `SyncHookJSONOutput` from `@anthropic-ai/claude-agent-sdk` to prevent schema violations (Claude Code rejects unknown fields in `hookSpecificOutput`).
 
 ### Dedup Contract (Canonical)
 

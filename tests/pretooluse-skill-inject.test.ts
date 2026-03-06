@@ -29,6 +29,18 @@ beforeEach(() => {
 // High budget disables budget-based limiting so existing cap tests are unaffected
 const UNLIMITED_BUDGET = "999999";
 
+/**
+ * Extract skillInjection metadata from additionalContext.
+ * The metadata is embedded as an HTML comment to comply with Claude Code's
+ * strict hookSpecificOutput schema (unknown keys cause validation failure).
+ */
+function extractSkillInjection(hookSpecificOutput: any): any {
+  const ctx = hookSpecificOutput?.additionalContext || "";
+  const match = ctx.match(/<!-- skillInjection: ({.*?}) -->/);
+  if (!match) return undefined;
+  try { return JSON.parse(match[1]); } catch { return undefined; }
+}
+
 async function runHook(input: object): Promise<{ code: number; stdout: string; stderr: string }> {
   const payload = JSON.stringify({ ...input, session_id: testSession });
   const proc = Bun.spawn(["node", HOOK_SCRIPT], {
@@ -428,7 +440,7 @@ describe("pretooluse-skill-inject.mjs", () => {
     // No other top-level keys
     expect(Object.keys(result)).toEqual(["hookSpecificOutput"]);
     expect(Object.keys(result.hookSpecificOutput)).toContain("additionalContext");
-    expect(Object.keys(result.hookSpecificOutput)).toContain("skillInjection");
+    expect(extractSkillInjection(result.hookSpecificOutput)).toBeDefined();
   });
 
   test("no-match output is empty object", async () => {
@@ -924,8 +936,8 @@ describe("setup mode bootstrap routing", () => {
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
     expect(result.hookSpecificOutput.additionalContext).toContain("skill:bootstrap");
-    expect(result.hookSpecificOutput.skillInjection.matchedSkills).toContain("bootstrap");
-    expect(result.hookSpecificOutput.skillInjection.injectedSkills[0]).toBe("bootstrap");
+    expect(extractSkillInjection(result.hookSpecificOutput).matchedSkills).toContain("bootstrap");
+    expect(extractSkillInjection(result.hookSpecificOutput).injectedSkills[0]).toBe("bootstrap");
   });
 
   test("boosts bootstrap ahead of other skills in setup mode", async () => {
@@ -939,7 +951,7 @@ describe("setup mode bootstrap routing", () => {
 
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const injectedSkills = result.hookSpecificOutput.skillInjection.injectedSkills;
+    const injectedSkills = extractSkillInjection(result.hookSpecificOutput).injectedSkills;
     expect(injectedSkills[0]).toBe("bootstrap");
   });
 
@@ -1574,7 +1586,7 @@ describe("injection byte budget", () => {
     );
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     expect(si.injectedSkills.length).toBeLessThan(3);
     expect(si.droppedByBudget.length).toBeGreaterThan(0);
@@ -1591,7 +1603,7 @@ describe("injection byte budget", () => {
     );
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     expect(si.injectedSkills.length).toBe(3);
     expect(si.droppedByBudget.length).toBe(0);
@@ -1610,7 +1622,7 @@ describe("injection byte budget", () => {
     const result = JSON.parse(stdout);
     expect(result.hookSpecificOutput).toBeDefined();
     // First skill always allowed even if over budget
-    const si = result.hookSpecificOutput.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si.injectedSkills.length).toBe(1);
   });
 
@@ -1626,7 +1638,7 @@ describe("injection byte budget", () => {
     );
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     // MAX_SKILLS=3 ceiling still applies
     expect(si.injectedSkills.length).toBeLessThanOrEqual(3);
@@ -1657,7 +1669,7 @@ describe("injection byte budget", () => {
     );
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     expect(Array.isArray(si.droppedByBudget)).toBe(true);
     expect(Array.isArray(si.droppedByCap)).toBe(true);
@@ -1734,7 +1746,7 @@ describe("sectional injection (summary fallback)", () => {
     );
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     // First skill always allowed, second dropped by budget
     expect(si.injectedSkills.length).toBe(1);
@@ -1760,7 +1772,7 @@ describe("sectional injection (summary fallback)", () => {
     );
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     // Both skills should be injected
     expect(si.injectedSkills.length).toBe(2);
@@ -1790,7 +1802,7 @@ describe("sectional injection (summary fallback)", () => {
     );
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     expect(si.injectedSkills.length).toBe(1);
     expect(si.droppedByBudget.length).toBe(1);
@@ -1819,7 +1831,7 @@ describe("sectional injection (summary fallback)", () => {
     const ctx = result.hookSpecificOutput?.additionalContext || "";
     // Total bytes must not exceed budget (first skill exempted, but subsequent ones
     // including summaries should keep total within budget)
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     // All injected + summaryOnly + dropped should account for all matched
     expect(si.injectedSkills.length + si.droppedByCap.length + si.droppedByBudget.length).toBe(
@@ -1843,7 +1855,7 @@ describe("sectional injection (summary fallback)", () => {
     );
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     expect(Array.isArray(si.summaryOnly)).toBe(true);
 
@@ -2363,9 +2375,9 @@ describe("coverage matrix — file paths", () => {
     expect(skills).toEqual([]);
   });
 
-  test("package.json → no skills", async () => {
+  test("package.json → bootstrap only", async () => {
     const skills = await matchFile("/project/package.json");
-    expect(skills).toEqual([]);
+    expect(skills).toEqual(["bootstrap"]);
   });
 });
 
@@ -3045,7 +3057,7 @@ describe("hookSpecificOutput.skillInjection metadata", () => {
     });
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
 
     // Version
@@ -3072,7 +3084,7 @@ describe("hookSpecificOutput.skillInjection metadata", () => {
     });
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     expect(si.toolName).toBe("Bash");
     // No secrets → command passes through unchanged
@@ -3089,7 +3101,7 @@ describe("hookSpecificOutput.skillInjection metadata", () => {
     );
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     expect(si.toolName).toBe("Bash");
     // Token must be redacted
@@ -3105,7 +3117,7 @@ describe("hookSpecificOutput.skillInjection metadata", () => {
     });
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     expect(si.toolTarget).toBe("/project/next.config.ts");
   });
@@ -3121,7 +3133,7 @@ describe("hookSpecificOutput.skillInjection metadata", () => {
     );
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
-    const si = result.hookSpecificOutput?.skillInjection;
+    const si = extractSkillInjection(result.hookSpecificOutput);
     expect(si).toBeDefined();
     expect(si.injectedSkills.length).toBeLessThanOrEqual(3);
     expect(Array.isArray(si.droppedByBudget)).toBe(true);
@@ -3878,7 +3890,7 @@ describe("decision logging — reason codes", () => {
     const result = JSON.parse(stdout);
     expect(result).toHaveProperty("hookSpecificOutput");
     expect(result.hookSpecificOutput).toHaveProperty("additionalContext");
-    expect(result.hookSpecificOutput).toHaveProperty("skillInjection");
+    expect(extractSkillInjection(result.hookSpecificOutput)).toBeDefined();
     expect(Object.keys(result)).toEqual(["hookSpecificOutput"]);
   });
 
@@ -3907,9 +3919,9 @@ describe("decision logging — reason codes", () => {
 
         const result = JSON.parse(stdout);
         expect(result).toHaveProperty("hookSpecificOutput");
-        expect(result.hookSpecificOutput).toHaveProperty("skillInjection");
+        expect(extractSkillInjection(result.hookSpecificOutput)).toBeDefined();
 
-        const actual = result.hookSpecificOutput.skillInjection;
+        const actual = extractSkillInjection(result.hookSpecificOutput);
         const expected = fixture.expected.skillInjection;
 
         // Version and tool metadata must match exactly
@@ -3945,5 +3957,64 @@ describe("decision logging — reason codes", () => {
         }
       });
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Hook output schema validation
+  // ---------------------------------------------------------------------------
+  // Claude Code validates hookSpecificOutput with a strict Zod schema.
+  // Unknown fields cause "Hook JSON output validation failed: Invalid input"
+  // and the entire hook output is silently discarded.
+  //
+  // Allowed fields in hookSpecificOutput for PreToolUse:
+  //   hookEventName, permissionDecision, permissionDecisionReason,
+  //   updatedInput, additionalContext
+  // See: hooks/types/hook-output.d.ts (vendored from @anthropic-ai/claude-agent-sdk)
+
+  const ALLOWED_HOOK_SPECIFIC_KEYS = new Set([
+    "hookEventName",
+    "permissionDecision",
+    "permissionDecisionReason",
+    "updatedInput",
+    "additionalContext",
+  ]);
+
+  describe("hook output schema compliance", () => {
+    test("matched skill output has no unknown keys in hookSpecificOutput", async () => {
+      const { code, stdout } = await runHook({
+        tool_name: "Read",
+        tool_input: { file_path: "/Users/me/project/next.config.ts" },
+      });
+      expect(code).toBe(0);
+      const result = JSON.parse(stdout);
+      expect(result.hookSpecificOutput).toBeDefined();
+      const keys = Object.keys(result.hookSpecificOutput);
+      const unknownKeys = keys.filter((k) => !ALLOWED_HOOK_SPECIFIC_KEYS.has(k));
+      expect(unknownKeys).toEqual([]);
+    });
+
+    test("bash-matched skill output has no unknown keys", async () => {
+      const { code, stdout } = await runHook({
+        tool_name: "Bash",
+        tool_input: { command: "npm install ai @ai-sdk/openai" },
+      });
+      expect(code).toBe(0);
+      const result = JSON.parse(stdout);
+      expect(result.hookSpecificOutput).toBeDefined();
+      const keys = Object.keys(result.hookSpecificOutput);
+      const unknownKeys = keys.filter((k) => !ALLOWED_HOOK_SPECIFIC_KEYS.has(k));
+      expect(unknownKeys).toEqual([]);
+    });
+
+    test("empty output ({}) is valid", async () => {
+      const { code, stdout } = await runHook({
+        tool_name: "Read",
+        tool_input: { file_path: "/some/random/file.txt" },
+      });
+      expect(code).toBe(0);
+      const result = JSON.parse(stdout);
+      // {} has no hookSpecificOutput — that's fine
+      expect(result.hookSpecificOutput).toBeUndefined();
+    });
   });
 });
