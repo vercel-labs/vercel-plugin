@@ -44,7 +44,7 @@ AI Gateway uses **OIDC (OpenID Connect)** as the default authentication method. 
 
 ```bash
 vercel link                    # Connect to your Vercel project
-# Enable AI Gateway in Vercel dashboard
+# Enable AI Gateway in Vercel dashboard: https://vercel.com/{team}/{project}/settings → AI Gateway
 vercel env pull .env.local     # Provisions VERCEL_OIDC_TOKEN automatically
 ```
 
@@ -174,7 +174,7 @@ const result = await generateText({
 
 ### Rate limit configuration
 
-Configure rate limits in the Vercel dashboard under AI Gateway settings:
+Configure rate limits at `https://vercel.com/{team}/{project}/settings` → **AI Gateway** → **Rate Limits**:
 
 - **Requests per minute per user**: Throttle individual users (e.g., 20 RPM)
 - **Tokens per day per user**: Cap daily token consumption (e.g., 100K tokens/day)
@@ -227,7 +227,7 @@ providerOptions: {
 
 ### Setting up budget alerts
 
-In the Vercel dashboard:
+In the Vercel dashboard at `https://vercel.com/{team}/{project}/settings` → **AI Gateway**:
 
 1. Navigate to **AI Gateway → Usage & Budgets**
 2. Set monthly budget thresholds (e.g., $500/month warning, $1000/month hard limit)
@@ -267,7 +267,7 @@ AI Gateway logs every request for compliance and debugging:
 
 ### Accessing logs
 
-- **Vercel Dashboard**: AI Gateway → Logs — filter by model, user, tag, status, date range
+- **Vercel Dashboard** at `https://vercel.com/{team}/{project}/ai` → **Logs** — filter by model, user, tag, status, date range
 - **Vercel API**: Query logs programmatically:
 
 ```bash
@@ -275,7 +275,7 @@ curl -H "Authorization: Bearer $VERCEL_TOKEN" \
   "https://api.vercel.com/v1/ai-gateway/logs?projectId=$PROJECT_ID&limit=100"
 ```
 
-- **Log Drains**: Forward AI Gateway logs to Datadog, Splunk, or other providers via Vercel Log Drains for long-term retention and custom dashboards
+- **Log Drains**: Forward AI Gateway logs to Datadog, Splunk, or other providers via Vercel Log Drains (configure at `https://vercel.com/dashboard/{team}/~/settings/log-drains`) for long-term retention and custom analysis
 
 ### Compliance considerations
 
