@@ -4,7 +4,7 @@
 
 - **Build hooks**: `bun run build:hooks` (compiles `hooks/src/*.mts` → `hooks/*.mjs`)
 - **Build all**: `bun run build` (hooks + manifest)
-- **Test**: `bun test` (runs all tests across 11 files)
+- **Test**: `bun test` (runs all tests across 20 files)
 - **Single test file**: `bun test tests/<file>.test.ts`
 - **Validate skills**: `bun run scripts/validate.ts`
 
@@ -16,11 +16,13 @@ Hook source lives in `hooks/src/*.mts` (TypeScript) and compiles to `hooks/*.mjs
 Run `bun run build:hooks` after editing any `.mts` file. A pre-commit hook auto-compiles when `.mts` files are staged.
 
 1. `session-start-seen-skills.mjs` — runs on SessionStart, exports `VERCEL_PLUGIN_SEEN_SKILLS=""` into `CLAUDE_ENV_FILE`
-2. `pretooluse-skill-inject.mts` → `.mjs` — PreToolUse hook, matches tool calls to skills and injects SKILL.md content
-3. `skill-map-frontmatter.mts` → `.mjs` — parses SKILL.md frontmatter into the skill map
-4. `patterns.mts` → `.mjs` — glob-to-regex conversion and seen-skills env var helpers
-5. `vercel-config.mts` → `.mjs` — vercel.json key-aware skill routing
-6. `logger.mts` → `.mjs` — structured log levels (off/summary/debug/trace)
+2. `session-start-profiler.mts` → `.mjs` — runs on SessionStart, scans config files and package deps to pre-prime `VERCEL_PLUGIN_LIKELY_SKILLS`
+3. `inject-claude-md.mts` → `.mjs` — injects `vercel.md` ecosystem graph into session context
+4. `pretooluse-skill-inject.mts` → `.mjs` — PreToolUse hook, matches tool calls to skills and injects SKILL.md content
+5. `skill-map-frontmatter.mts` → `.mjs` — parses SKILL.md frontmatter into the skill map
+6. `patterns.mts` → `.mjs` — glob-to-regex conversion and seen-skills env var helpers
+7. `vercel-config.mts` → `.mjs` — vercel.json key-aware skill routing
+8. `logger.mts` → `.mjs` — structured log levels (off/summary/debug/trace)
 
 Hook output is type-checked against `SyncHookJSONOutput` from `@anthropic-ai/claude-agent-sdk` to prevent schema violations (Claude Code rejects unknown fields in `hookSpecificOutput`).
 
@@ -58,6 +60,8 @@ Tests that create temporary plugin directories must copy all hook modules:
 - `patterns.mjs`
 - `vercel-config.mjs`
 - `logger.mjs`
+- `session-start-profiler.mjs`
+- `inject-claude-md.mjs`
 
 ### Log Levels
 

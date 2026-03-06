@@ -16,17 +16,30 @@ A text-form relational graph covering:
 - Common cross-product workflows
 - Migration awareness for sunset products
 
-### Skills (21 skills)
+### Skills (34 skills)
 
 | Skill | Covers |
 |-------|--------|
+| `agent-browser` | Browser automation CLI — dev server verification, page interaction, screenshots, form filling |
+| `ai-elements` | Pre-built React components for AI interfaces — chat UIs, tool call rendering, streaming responses |
 | `ai-gateway` | Unified model API, provider routing, failover, cost tracking, 100+ models |
 | `ai-sdk` | AI SDK v6 — text/object generation, streaming, tool calling, agents, MCP, providers, embeddings |
+| `auth` | Authentication integrations — Clerk, Descope, Auth0 setup for Next.js with Marketplace provisioning |
+| `bootstrap` | Project bootstrapping orchestrator — linking, env provisioning, db setup, first-run commands |
+| `chat-sdk` | Multi-platform chat bots — Slack, Telegram, Teams, Discord, Google Chat, GitHub, Linear |
+| `cms` | Headless CMS integrations — Sanity, Contentful, DatoCMS, Storyblok, Builder.io, Visual Editing |
+| `cron-jobs` | Vercel Cron Jobs configuration, scheduling, and best practices |
+| `deployments-cicd` | Deployment and CI/CD — deploy, promote, rollback, --prebuilt, CI workflow files |
+| `email` | Email sending — Resend with React Email templates, domain verification, transactional emails |
+| `env-vars` | Environment variable management — .env files, vercel env commands, OIDC tokens |
+| `json-render` | AI chat response rendering — UIMessage parts, tool call displays, streaming states |
 | `marketplace` | Integration discovery, installation, auto-provisioned env vars, unified billing |
 | `nextjs` | App Router, Server Components, Server Actions, Cache Components, routing, rendering strategies |
 | `observability` | Web Analytics, Speed Insights, runtime logs, Log Drains, OpenTelemetry, monitoring |
+| `payments` | Stripe payments — Marketplace setup, checkout sessions, webhooks, subscription billing |
 | `routing-middleware` | Request interception before cache, rewrites, redirects, personalization — Edge/Node.js/Bun runtimes |
 | `runtime-cache` | Ephemeral per-region key-value cache, tag-based invalidation, shared across Functions/Middleware/Builds |
+| `shadcn` | shadcn/ui — CLI, component installation, custom registries, theming, Tailwind CSS integration |
 | `sign-in-with-vercel` | OAuth 2.0/OIDC identity provider, user authentication via Vercel accounts |
 | `turbopack` | Next.js bundler, HMR, configuration, Turbopack vs Webpack |
 | `turborepo` | Monorepo orchestration, caching, remote caching, --affected, pruned subsets |
@@ -50,10 +63,11 @@ A text-form relational graph covering:
 | `performance-optimizer` | Core Web Vitals, rendering strategies, caching, asset optimization |
 | `ai-architect` | AI application design, model selection, streaming architecture, MCP integration |
 
-### Commands (4 commands)
+### Commands (5 commands)
 
 | Command | Purpose |
 |---------|---------|
+| `/vercel-plugin:bootstrap` | Bootstrap project — linking, env provisioning, db setup |
 | `/vercel-plugin:deploy` | Deploy to Vercel (preview or production) |
 | `/vercel-plugin:env` | Manage environment variables |
 | `/vercel-plugin:status` | Project status overview |
@@ -62,6 +76,8 @@ A text-form relational graph covering:
 ### Hooks
 
 - **SessionStart context injection** — Injects `vercel.md` (ecosystem graph + conventions) into every session via a `SessionStart` hook
+- **SessionStart repo profiler** — Scans config files and dependencies to pre-prime `VERCEL_PLUGIN_LIKELY_SKILLS` for faster first tool call matching
+- **PreToolUse skill injection** — Matches tool calls to skills and injects SKILL.md content with dedup via `VERCEL_PLUGIN_SEEN_SKILLS` env var
 - **Pre-write/edit validation** — Catches deprecated patterns before they're written (sunset packages, old API names, renamed files)
 
 ## Usage
@@ -85,14 +101,27 @@ claude --plugin-dir ./vercel-plugin
 vercel-plugin/
 ├── .plugin/plugin.json              # Plugin manifest
 ├── vercel.md                        # Ecosystem graph + conventions (injected via SessionStart hook)
-├── skills/                          # 21 deep-dive skills
+├── skills/                          # 34 deep-dive skills
+│   ├── agent-browser/
+│   ├── ai-elements/
 │   ├── ai-gateway/
 │   ├── ai-sdk/
+│   ├── auth/
+│   ├── bootstrap/
+│   ├── chat-sdk/
+│   ├── cms/
+│   ├── cron-jobs/
+│   ├── deployments-cicd/
+│   ├── email/
+│   ├── env-vars/
+│   ├── json-render/
 │   ├── marketplace/
 │   ├── nextjs/
 │   ├── observability/
+│   ├── payments/
 │   ├── routing-middleware/
 │   ├── runtime-cache/
+│   ├── shadcn/
 │   ├── sign-in-with-vercel/
 │   ├── turbopack/
 │   ├── turborepo/
@@ -108,15 +137,17 @@ vercel-plugin/
 │   ├── vercel-storage/
 │   └── workflow/
 ├── agents/                          # 3 specialist agents
-├── commands/                        # 4 slash commands
-├── vercel.md                        # Ecosystem graph + conventions (injected via SessionStart hook)
-└── hooks/                           # SessionStart injection + deprecation guard
+├── commands/                        # 5 slash commands
+└── hooks/                           # SessionStart injection, repo profiler, skill injection, deprecation guard
+    └── src/                         # TypeScript source (compiled to .mjs via tsup)
 ```
 
 ## Ecosystem Coverage (March 2026)
 
 - Next.js 16 (App Router, Cache Components, Proxy, View Transitions)
 - AI SDK v6 (Agents, MCP, DevTools, Reranking, Image Editing)
+- AI Elements (pre-built React components for AI interfaces)
+- Chat SDK (multi-platform chat bots — Slack, Telegram, Teams, Discord)
 - Workflow DevKit (DurableAgent, Worlds, open source)
 - AI Gateway (100+ models, provider routing, cost tracking)
 - Vercel Functions (Fluid Compute, streaming, Cron Jobs)
@@ -128,6 +159,11 @@ vercel-plugin/
 - Vercel Agent (AI code review, incident investigation)
 - Vercel Sandbox (Firecracker microVMs for untrusted code)
 - Sign in with Vercel (OAuth 2.0/OIDC identity provider)
+- Auth integrations (Clerk, Descope, Auth0)
+- CMS integrations (Sanity, Contentful, DatoCMS, Storyblok, Builder.io)
+- Email (Resend with React Email templates)
+- Payments (Stripe via Vercel Marketplace)
+- shadcn/ui (CLI, component installation, custom registries, theming)
 - Turborepo (--affected, remote caching, Rust core)
 - Turbopack (default bundler in Next.js 16)
 - Microfrontends (multi-app composition, independent deploys)
@@ -137,3 +173,4 @@ vercel-plugin/
 - Vercel CLI (cache management, MCP integration, marketplace discovery)
 - Vercel Observability (Analytics, Speed Insights, Drains)
 - Vercel Marketplace (one-click integrations, unified billing)
+- Agent Browser (browser automation for dev server verification and testing)
