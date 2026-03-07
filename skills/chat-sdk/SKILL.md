@@ -66,25 +66,60 @@ metadata:
 
 You are an expert in the Vercel Chat SDK. Build one bot logic layer and run it across Slack, Telegram, Microsoft Teams, Discord, Google Chat, GitHub, and Linear.
 
+## Packages
+
+- `chat@^4.17.0`
+- `@chat-adapter/slack@^4.17.0`
+- `@chat-adapter/telegram@^4.17.0`
+- `@chat-adapter/teams@^4.17.0`
+- `@chat-adapter/discord@^4.17.0`
+- `@chat-adapter/gchat@^4.17.0`
+- `@chat-adapter/github@^4.17.0`
+- `@chat-adapter/linear@^4.17.0`
+- `@chat-adapter/state-redis@^4.17.0`
+- `@chat-adapter/state-ioredis@^4.17.0`
+- `@chat-adapter/state-memory@^4.17.0`
+
 ## Installation
 
 ```bash
 # Core SDK
-npm install chat
+npm install chat@^4.17.0
 
 # Platform adapters (install only what you need)
-npm install @chat-adapter/slack
-npm install @chat-adapter/telegram
-npm install @chat-adapter/teams
-npm install @chat-adapter/discord
-npm install @chat-adapter/gchat
-npm install @chat-adapter/github
-npm install @chat-adapter/linear
+npm install @chat-adapter/slack@^4.17.0
+npm install @chat-adapter/telegram@^4.17.0
+npm install @chat-adapter/teams@^4.17.0
+npm install @chat-adapter/discord@^4.17.0
+npm install @chat-adapter/gchat@^4.17.0
+npm install @chat-adapter/github@^4.17.0
+npm install @chat-adapter/linear@^4.17.0
 
 # State adapters (pick one)
-npm install @chat-adapter/state-redis
-npm install @chat-adapter/state-ioredis
-npm install @chat-adapter/state-memory
+npm install @chat-adapter/state-redis@^4.17.0
+npm install @chat-adapter/state-ioredis@^4.17.0
+npm install @chat-adapter/state-memory@^4.17.0
+```
+
+## Critical API Notes
+
+- `Field` takes an `options` array of `{ label, value }` objects. Do not pass JSX child options.
+- `Thread<TState>` / `Channel<TState>` generics require object state shapes (`Record<string, unknown>`), not primitives.
+- Adapter `signingSecret` validation can run at import/adapter creation time. Use lazy initialization to avoid crashing at module import.
+
+```ts
+import { createSlackAdapter } from "@chat-adapter/slack";
+
+let slackAdapter: ReturnType<typeof createSlackAdapter> | undefined;
+
+export function getSlackAdapter() {
+  if (!slackAdapter) {
+    slackAdapter = createSlackAdapter({
+      signingSecret: process.env.SLACK_SIGNING_SECRET!,
+    });
+  }
+  return slackAdapter;
+}
 ```
 
 ## Quick Start
@@ -153,7 +188,7 @@ class Chat {
 `Thread` and `Channel` share the same `Postable` interface.
 
 ```ts
-interface Postable<TState = Record<string, unknown>> {
+interface Postable<TState extends Record<string, unknown> = Record<string, unknown>> {
   post(content: PostableContent): Promise<SentMessage>;
   postEphemeral(
     userId: string,
@@ -173,7 +208,7 @@ interface Postable<TState = Record<string, unknown>> {
 ### Thread
 
 ```ts
-interface Thread<TState = Record<string, unknown>> extends Postable<TState> {
+interface Thread<TState extends Record<string, unknown> = Record<string, unknown>> extends Postable<TState> {
   id: string;
   channelId: string;
   subscribe(): Promise<void>;
@@ -221,7 +256,7 @@ await sent.addReaction("thumbsup");
 ### Channel
 
 ```ts
-interface Channel<TState = Record<string, unknown>> extends Postable<TState> {
+interface Channel<TState extends Record<string, unknown> = Record<string, unknown>> extends Postable<TState> {
   id: string;
   name?: string;
 }
@@ -295,10 +330,15 @@ await thread.post(
     <Text style="success">Deployment succeeded.</Text>
     <Text style="muted">Commit: a1b2c3d</Text>
 
-    <RadioSelect id="deploy-target" label="Target" value="prod">
-      <SelectOption value="staging">Staging</SelectOption>
-      <SelectOption value="prod">Production</SelectOption>
-    </RadioSelect>
+    <Field
+      id="deploy-target"
+      label="Target"
+      options={[
+        { label: "Staging", value: "staging" },
+        { label: "Production", value: "prod" },
+      ]}
+      value="prod"
+    />
 
     <Table>
       <TableRow>
@@ -326,7 +366,7 @@ Card additions to use when needed:
 - `Card.subtitle`
 - `Card.imageUrl`
 - `CardLink`
-- `RadioSelect`
+- `Field` (`options` uses `{ label, value }[]`, not JSX children)
 - `Table`
 - `Text` styles (`default`, `muted`, `success`, `warning`, `danger`, `code`)
 
