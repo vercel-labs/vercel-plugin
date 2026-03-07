@@ -47,8 +47,11 @@ export function requireEnvFile(): string {
 // Audit log helpers
 // ---------------------------------------------------------------------------
 
-function resolveAuditLogPath(): string | null {
-  const projectRoot = process.env.CLAUDE_PROJECT_ROOT || process.cwd();
+function resolveAuditLogPath(hookInputCwd?: string | null): string | null {
+  const cwdFromHookInput = typeof hookInputCwd === "string" && hookInputCwd.trim() !== ""
+    ? hookInputCwd
+    : null;
+  const projectRoot = process.env.CLAUDE_PROJECT_ROOT || cwdFromHookInput || process.cwd();
   const configuredPath = process.env.VERCEL_PLUGIN_AUDIT_LOG_FILE;
 
   if (configuredPath === "off") {
@@ -62,8 +65,8 @@ function resolveAuditLogPath(): string | null {
   return join(projectRoot, ".vercel-plugin", "skill-injections.jsonl");
 }
 
-export function appendAuditLog(record: Record<string, unknown>): void {
-  const auditLogPath = resolveAuditLogPath();
+export function appendAuditLog(record: Record<string, unknown>, hookInputCwd?: string | null): void {
+  const auditLogPath = resolveAuditLogPath(hookInputCwd);
   if (auditLogPath === null) return;
 
   try {

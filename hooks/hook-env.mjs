@@ -12,8 +12,9 @@ function requireEnvFile() {
   }
   return envFile;
 }
-function resolveAuditLogPath() {
-  const projectRoot = process.env.CLAUDE_PROJECT_ROOT || process.cwd();
+function resolveAuditLogPath(hookInputCwd) {
+  const cwdFromHookInput = typeof hookInputCwd === "string" && hookInputCwd.trim() !== "" ? hookInputCwd : null;
+  const projectRoot = process.env.CLAUDE_PROJECT_ROOT || cwdFromHookInput || process.cwd();
   const configuredPath = process.env.VERCEL_PLUGIN_AUDIT_LOG_FILE;
   if (configuredPath === "off") {
     return null;
@@ -23,8 +24,8 @@ function resolveAuditLogPath() {
   }
   return join(projectRoot, ".vercel-plugin", "skill-injections.jsonl");
 }
-function appendAuditLog(record) {
-  const auditLogPath = resolveAuditLogPath();
+function appendAuditLog(record, hookInputCwd) {
+  const auditLogPath = resolveAuditLogPath(hookInputCwd);
   if (auditLogPath === null) return;
   try {
     mkdirSync(dirname(auditLogPath), { recursive: true });

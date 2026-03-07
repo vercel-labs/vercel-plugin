@@ -4,7 +4,7 @@
  * when Claude reads/edits/writes files or runs bash commands that match
  * skill-map patterns.
  *
- * Input: JSON on stdin with tool_name, tool_input, session_id
+ * Input: JSON on stdin with tool_name, tool_input, session_id, cwd
  * Output: JSON on stdout with { hookSpecificOutput: { additionalContext: "..." } } or {}
  *
  * Injects skills in priority order until byte budget (default 12KB) is exhausted,
@@ -352,6 +352,7 @@ export interface ParsedInput {
   toolName: string;
   toolInput: Record<string, unknown>;
   sessionId: string | null;
+  cwd: string | null;
   toolTarget: string;
 }
 
@@ -380,14 +381,16 @@ export function parseInput(raw: string, logger?: Logger): ParsedInput | null {
   const toolName = (input.tool_name as string) || "";
   const toolInput = (input.tool_input as Record<string, unknown>) || {};
   const sessionId = (input.session_id as string) || process.env.SESSION_ID || null;
+  const cwdCandidate = input.cwd ?? input.working_directory;
+  const cwd = typeof cwdCandidate === "string" && cwdCandidate.trim() !== "" ? cwdCandidate : null;
   const toolTarget = toolName === "Bash"
     ? ((toolInput.command as string) || "")
     : ((toolInput.file_path as string) || "");
 
-  l.debug("input-parsed", { toolName, sessionId: sessionId as string });
+  l.debug("input-parsed", { toolName, sessionId: sessionId as string, cwd });
   l.debug("tool-target", { toolName, target: redactCommand(toolTarget) });
 
-  return { toolName, toolInput, sessionId, toolTarget };
+  return { toolName, toolInput, sessionId, cwd, toolTarget };
 }
 
 // ---------------------------------------------------------------------------
@@ -937,7 +940,7 @@ function run(): string {
   if (!parsed) return "{}";
   if (log.active) timing.stdin_parse = Math.round(log.now() - tPhase);
 
-  const { toolName, toolInput, sessionId, toolTarget } = parsed;
+  const { toolName, toolInput, sessionId, cwd, toolTarget } = parsed;
 
   // Stage 2: loadSkills
   const tSkillmap = log.active ? log.now() : 0;
@@ -1180,7 +1183,7 @@ function run(): string {
       summaryOnly,
       droppedByCap,
       droppedByBudget,
-    });
+    }, cwd);
   }
 
   return result;

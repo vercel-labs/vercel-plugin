@@ -209,10 +209,12 @@ function parseInput(raw, logger) {
   const toolName = input.tool_name || "";
   const toolInput = input.tool_input || {};
   const sessionId = input.session_id || process.env.SESSION_ID || null;
+  const cwdCandidate = input.cwd ?? input.working_directory;
+  const cwd = typeof cwdCandidate === "string" && cwdCandidate.trim() !== "" ? cwdCandidate : null;
   const toolTarget = toolName === "Bash" ? toolInput.command || "" : toolInput.file_path || "";
-  l.debug("input-parsed", { toolName, sessionId });
+  l.debug("input-parsed", { toolName, sessionId, cwd });
   l.debug("tool-target", { toolName, target: redactCommand(toolTarget) });
-  return { toolName, toolInput, sessionId, toolTarget };
+  return { toolName, toolInput, sessionId, cwd, toolTarget };
 }
 function loadSkills(pluginRoot, logger) {
   const root = pluginRoot || PLUGIN_ROOT;
@@ -577,7 +579,7 @@ function run() {
   const parsed = parseInput(raw, log);
   if (!parsed) return "{}";
   if (log.active) timing.stdin_parse = Math.round(log.now() - tPhase);
-  const { toolName, toolInput, sessionId, toolTarget } = parsed;
+  const { toolName, toolInput, sessionId, cwd, toolTarget } = parsed;
   const tSkillmap = log.active ? log.now() : 0;
   const skills = loadSkills(PLUGIN_ROOT, log);
   if (!skills) return "{}";
@@ -770,7 +772,7 @@ function run() {
       summaryOnly,
       droppedByCap,
       droppedByBudget
-    });
+    }, cwd);
   }
   return result;
 }
