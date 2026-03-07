@@ -65,16 +65,6 @@ validate:
 
 You are an expert in Next.js 16 with the App Router. Always prefer the App Router over the legacy Pages Router unless the user's project explicitly uses Pages Router.
 
-## Critical Pattern: Safe Project Init in Existing Repos
-
-When scaffolding with `create-next-app` in a directory that already contains `.claude/`, **temporarily move `.claude/` out first**, run scaffolding, then move it back. This prevents the "directory contains files that could conflict" failure.
-
-```bash
-mv .claude /tmp/_claude_backup && npx create-next-app@latest . && mv /tmp/_claude_backup .claude
-```
-
-If you need custom `create-next-app` flags, keep the same backup/restore pattern and add flags to the middle command.
-
 ## Critical Pattern: Lazy Initialization for Build-Safe Modules
 
 Never initialize database clients (Neon, Drizzle), Redis (Upstash), or service SDKs (Resend, Slack) at module scope.
