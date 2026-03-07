@@ -48,14 +48,29 @@ metadata:
 
 You are an expert in the Vercel AI SDK v6. The AI SDK is the leading TypeScript toolkit for building AI-powered applications. It provides a unified API across all LLM providers.
 
+## v6 Migration Pitfalls (Read First)
+
+- `ai@^6.0.0` is the umbrella package for AI SDK v6.
+- `@ai-sdk/react` is `^3.0.x` in v6 projects (NOT `^6.0.0`).
+- `@ai-sdk/gateway` is `^3.x` in v6 projects (NOT `^1.x`).
+- In `createUIMessageStream`, write with `stream.writer.write(...)` (NOT `stream.write(...)`).
+- `useChat` no longer supports `body` or `onResponse`; configure behavior through `transport`.
+- UI tool parts are typed as `tool-<toolName>` (for example `tool-weather`), not `tool-invocation`.
+- `DynamicToolCall` does not provide typed `.args`; cast via `unknown` first.
+- `TypedToolResult` exposes `.output` (NOT `.result`).
+- The class name is `Agent` (NOT `ToolLoopAgent`).
+- `gateway()` does not support embeddings or image generation; use `@ai-sdk/openai` directly for `openai.embedding(...)` and `openai.image(...)`.
+
 ## Installation
 
 ```bash
-npm install ai                # Core SDK — AI Gateway is built in, no provider SDK needed
-npm install @ai-sdk/react     # Required for React hooks (useChat, useCompletion, useObject)
+npm install ai@^6.0.0 @ai-sdk/react@^3.0.0
+npm install @ai-sdk/openai              # Optional: required for embeddings/image models
 ```
 
-> **`@ai-sdk/react` is a separate package** — it is NOT included in the `ai` package. You must install it alongside `ai` for any React/Next.js project that uses `useChat` or other UI hooks.
+> **`@ai-sdk/react` is a separate package** — it is NOT included in the `ai` package. For v6 projects, install `@ai-sdk/react@^3.0.x` alongside `ai@^6.0.0`.
+
+> **If you install `@ai-sdk/gateway` directly, use `@ai-sdk/gateway@^3.x`** (NOT `^1.x`).
 
 > **Only install a direct provider SDK** (e.g., `@ai-sdk/anthropic`) if you need provider-specific features not exposed through the gateway.
 
@@ -67,7 +82,7 @@ For the smoothest experience, link to a Vercel project so AI Gateway credentials
 vercel link                    # Connect to your Vercel project
 # Enable AI Gateway at https://vercel.com/{team}/{project}/settings → AI Gateway
 vercel env pull .env.local     # Provisions VERCEL_OIDC_TOKEN automatically
-npm install ai                 # Gateway is built in
+npm install ai@^6.0.0         # Gateway is built in
 npx ai-elements                # Optional: install chat UI components
 ```
 
@@ -87,7 +102,9 @@ const model = gateway("openai/gpt-5.2");
 // or: gateway('google/gemini-3-flash')
 ```
 
-This automatically provides failover, cost tracking, and observability on Vercel. **This is the recommended default for all AI features.**
+This automatically provides failover, cost tracking, and observability on Vercel. **This is the recommended default for text generation, streaming, and tool-calling features.**
+
+> `gateway()` does not support embeddings or image generation. Use a direct provider SDK such as `@ai-sdk/openai` for those features.
 
 > **Direct provider SDKs** (`@ai-sdk/openai`, `@ai-sdk/anthropic`, etc.) are only needed for provider-specific features not exposed through the gateway (e.g., Anthropic computer use, OpenAI fine-tuned model endpoints).
 
@@ -243,8 +260,11 @@ MCP OAuth for remote servers is handled automatically by `@ai-sdk/mcp`.
 
 ### Embeddings & Reranking
 
+Use a direct provider SDK for embeddings. `gateway()` does not support embedding models.
+
 ```ts
 import { embed, embedMany, rerank } from "ai";
+import { openai } from "@ai-sdk/openai";
 
 // Single embedding
 const { embedding } = await embed({
@@ -268,8 +288,11 @@ const { results } = await rerank({
 
 ### Image Generation & Editing
 
+Use a direct provider SDK for image models. `gateway()` does not support image generation.
+
 ```ts
 import { generateImage, editImage } from "ai";
+import { openai } from "@ai-sdk/openai";
 
 const { image } = await generateImage({
   model: openai.image("dall-e-3"),
@@ -348,6 +371,7 @@ function Chat() {
 - `useChat({ api })` → `useChat({ transport: new DefaultChatTransport({ api }) })`
 - `handleSubmit` → `sendMessage({ text })`
 - `input` / `handleInputChange` → manage your own `useState`
+- `body` / `onResponse` options were removed from `useChat`; use `transport` to configure requests/responses
 - `isLoading` → `status === 'streaming' || status === 'submitted'`
 - `message.content` → iterate `message.parts` (UIMessage format)
 
@@ -492,15 +516,21 @@ Run `npx @ai-sdk/codemod v6` to auto-migrate. Key changes:
 - `result` → `output`
 - `maxSteps` → `stopWhen: stepCountIs(N)` (import `stepCountIs` from `ai`)
 - `CoreMessage` → `ModelMessage` (use `convertToModelMessages()` — now async)
-- `Experimental_Agent` → `ToolLoopAgent` (`system` → `instructions`)
+- `Experimental_Agent` / `ToolLoopAgent` → `Agent`
 - `experimental_createMCPClient` → `createMCPClient` (stable)
 - `useChat({ api })` → `useChat({ transport: new DefaultChatTransport({ api }) })`
+- `useChat` `body` / `onResponse` options removed → configure with transport
 - `handleSubmit` / `input` → `sendMessage({ text })` / manage own state
 - `toDataStreamResponse()` → `toUIMessageStreamResponse()` (for chat UIs)
+- `createUIMessageStream`: use `stream.writer.write(...)` (not `stream.write(...)`)
 - text-only clients / text stream protocol → `toTextStreamResponse()`
-- `message.content` → `message.parts` (UIMessage format with typed parts)
+- `message.content` → `message.parts` (tool parts use `tool-<toolName>`, not `tool-invocation`)
 - UIMessage / ModelMessage types introduced
-- `@ai-sdk/react` must be installed separately (`npm install @ai-sdk/react`)
+- `DynamicToolCall.args` is not strongly typed; cast via `unknown` first
+- `TypedToolResult.result` → `TypedToolResult.output`
+- `ai@^6.0.0` is the umbrella package
+- `@ai-sdk/react` must be installed separately at `^3.0.x`
+- `@ai-sdk/gateway` (if installed directly) is `^3.x`, not `^1.x`
 
 ## Official Documentation
 
