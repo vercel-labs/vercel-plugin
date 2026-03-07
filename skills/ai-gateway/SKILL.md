@@ -5,6 +5,7 @@ metadata:
   priority: 7
   pathPatterns: []
   importPatterns:
+    - 'ai'
     - '@ai-sdk/gateway'
   bashPatterns:
     - '\bvercel\s+env\s+pull\b'
@@ -19,8 +20,16 @@ validate:
     severity: error
   -
     pattern: AI_GATEWAY_API_KEY
-    message: 'AI_GATEWAY_API_KEY is not needed — use OIDC-based auth via Vercel environment'
+    message: 'AI_GATEWAY_API_KEY is a fallback auth method — prefer OIDC-based auth via vercel env pull for automatic token management'
+    severity: warn
+  -
+    pattern: gateway\(['"][^'"/]+['"]\)
+    message: 'Model string missing provider/ prefix — use provider/model format (e.g., openai/gpt-5.4, anthropic/claude-sonnet-4.6)'
     severity: error
+  -
+    pattern: gpt-4o
+    message: 'gpt-4o is outdated — use gpt-5.4 or call gateway.getAvailableModels() for current model IDs'
+    severity: warn
   -
     pattern: (OPENAI_API_KEY|ANTHROPIC_API_KEY)
     message: 'Provider API keys bypass the gateway — use OIDC auth via vercel env pull'

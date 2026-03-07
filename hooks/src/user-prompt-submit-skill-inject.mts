@@ -28,6 +28,8 @@ import { parseSeenSkills, appendSeenSkill, rankEntries } from "./patterns.mjs";
 import type { CompiledSkillEntry } from "./patterns.mjs";
 import { normalizePromptText, compilePromptSignals, matchPromptWithReason } from "./prompt-patterns.mjs";
 import type { CompiledPromptSignals } from "./prompt-patterns.mjs";
+import { analyzePrompt } from "./prompt-analysis.mjs";
+import type { PromptAnalysisReport } from "./prompt-analysis.mjs";
 import { createLogger } from "./logger.mjs";
 import type { Logger } from "./logger.mjs";
 
@@ -309,21 +311,90 @@ export function run(): string {
   if (!skills) return "{}";
   if (log.active) timing.skillmap_load = Math.round(log.now() - tSkillmap);
 
-  // Stage 3: matchPromptSignals
-  const tMatch = log.active ? log.now() : 0;
-  const matches = matchPromptSignals(normalizedPrompt, skills, log);
-  if (log.active) timing.match = Math.round(log.now() - tMatch);
+  // Stage 3: analyzePrompt — structured analysis of matching + dedup + cap
+  const tAnalyze = log.active ? log.now() : 0;
+  const seenEnv = getSeenSkillsEnv();
+  const budget = getInjectionBudget();
+  const report = analyzePrompt(prompt, skills.skillMap, seenEnv, budget, MAX_SKILLS);
+  if (log.active) timing.analyze = Math.round(log.now() - tAnalyze);
 
-  if (matches.length === 0) {
+  // --- Trace: full report ---
+  log.trace("prompt-analysis-full", report as unknown as Record<string, unknown>);
+
+  // --- Debug: per-skill breakdown ---
+  for (const [skill, r] of Object.entries(report.perSkillResults)) {
+    log.debug("prompt-signal-eval", {
+      skill,
+      score: r.score,
+      reason: r.reason,
+      matched: r.matched,
+      suppressed: r.suppressed,
+    });
+  }
+
+  log.debug("prompt-selection", {
+    selectedSkills: report.selectedSkills,
+    droppedByCap: report.droppedByCap,
+    droppedByBudget: report.droppedByBudget,
+    dedupStrategy: report.dedupState.strategy,
+    filteredByDedup: report.dedupState.filteredByDedup,
+    budgetBytes: report.budgetBytes,
+    timingMs: report.timingMs,
+  });
+
+  // No matches at all
+  const allMatched = Object.entries(report.perSkillResults)
+    .filter(([, r]) => r.matched)
+    .map(([skill]) => skill);
+
+  if (allMatched.length === 0) {
+    log.debug("prompt-analysis-issue", {
+      issue: "no_prompt_matches",
+      evaluatedSkills: Object.keys(report.perSkillResults),
+      suppressedSkills: Object.entries(report.perSkillResults)
+        .filter(([, r]) => r.suppressed)
+        .map(([skill]) => skill),
+    });
     log.complete("no_prompt_matches", { matchedCount: 0 }, log.active ? timing : null);
     return "{}";
   }
 
-  // Stage 4: dedup + inject
+  // All matched but filtered by dedup
+  if (report.selectedSkills.length === 0) {
+    log.debug("prompt-analysis-issue", {
+      issue: "all_deduped",
+      matchedSkills: allMatched,
+      seenSkills: report.dedupState.seenSkills,
+      dedupStrategy: report.dedupState.strategy,
+    });
+    log.complete("all_deduped", {
+      matchedCount: allMatched.length,
+      dedupedCount: allMatched.length,
+    }, log.active ? timing : null);
+    return "{}";
+  }
+
+  // Stage 4: inject selected skills (file I/O for SKILL.md bodies)
   const tInject = log.active ? log.now() : 0;
-  const { parts, loaded, summaryOnly, droppedByCap, droppedByBudget, matchedSkills } =
-    deduplicateAndInject(matches, skills, log);
+  const dedupOff = process.env.VERCEL_PLUGIN_HOOK_DEDUP === "off";
+  const hasEnvDedup = !dedupOff && typeof process.env.VERCEL_PLUGIN_SEEN_SKILLS === "string";
+  const injectedSkills = hasEnvDedup ? parseSeenSkills(seenEnv) : new Set<string>();
+
+  const injectResult = injectSkills(report.selectedSkills, {
+    pluginRoot: PLUGIN_ROOT,
+    hasEnvDedup,
+    injectedSkills,
+    budgetBytes: budget,
+    maxSkills: MAX_SKILLS,
+    skillMap: skills.skillMap,
+    logger: log,
+  });
   if (log.active) timing.inject = Math.round(log.now() - tInject);
+
+  const { parts, loaded, summaryOnly } = injectResult;
+  const droppedByCap = [...injectResult.droppedByCap, ...report.droppedByCap];
+  const droppedByBudget = [...injectResult.droppedByBudget, ...report.droppedByBudget];
+  const matchedSkills = allMatched;
 
   if (parts.length === 0) {
     log.complete("all_deduped", {

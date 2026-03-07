@@ -99,6 +99,93 @@ describe("ai-sdk validation rules", () => {
     expect(violations.filter((v) => v.message.includes("Agent")).length).toBeGreaterThanOrEqual(2);
   });
 
+  test("flags toDataStreamResponse usage", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `return result.toDataStreamResponse();\n`,
+      ["ai-sdk"],
+      data!.rulesMap,
+    );
+    const errors = violations.filter((v) => v.severity === "error");
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    expect(errors.some((v) => v.message.includes("toUIMessageStreamResponse"))).toBe(true);
+  });
+
+  test("does not flag toUIMessageStreamResponse", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `return result.toUIMessageStreamResponse();\n`,
+      ["ai-sdk"],
+      data!.rulesMap,
+    );
+    const errors = violations.filter((v) => v.severity === "error" && v.message.includes("toDataStreamResponse"));
+    expect(errors.length).toBe(0);
+  });
+
+  test("flags maxSteps config", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `const result = streamText({ model, maxSteps: 5 });\n`,
+      ["ai-sdk"],
+      data!.rulesMap,
+    );
+    const errors = violations.filter((v) => v.severity === "error");
+    expect(errors.some((v) => v.message.includes("stopWhen"))).toBe(true);
+  });
+
+  test("does not flag stopWhen: stepCountIs", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `const result = streamText({ model, stopWhen: stepCountIs(5) });\n`,
+      ["ai-sdk"],
+      data!.rulesMap,
+    );
+    const errors = violations.filter((v) => v.message.includes("maxSteps"));
+    expect(errors.length).toBe(0);
+  });
+
+  test("flags onResponse callback (warn)", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `useChat({ onResponse: (res) => console.log(res) });\n`,
+      ["ai-sdk"],
+      data!.rulesMap,
+    );
+    expect(violations.some((v) => v.severity === "warn" && v.message.includes("onResponse"))).toBe(true);
+  });
+
+  test("flags useChat({ api: }) v5 pattern", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `const chat = useChat({ api: '/api/chat' });\n`,
+      ["ai-sdk"],
+      data!.rulesMap,
+    );
+    const errors = violations.filter((v) => v.severity === "error");
+    expect(errors.some((v) => v.message.includes("DefaultChatTransport"))).toBe(true);
+  });
+
+  test("does not flag useChat with transport", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `const chat = useChat({ transport: new DefaultChatTransport({ api: '/api/chat' }) });\n`,
+      ["ai-sdk"],
+      data!.rulesMap,
+    );
+    const errors = violations.filter((v) => v.message.includes("useChat({ api })"));
+    expect(errors.length).toBe(0);
+  });
+
+  test("flags body option in useChat (warn)", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `useChat({ body: { userId: '123' } });\n`,
+      ["ai-sdk"],
+      data!.rulesMap,
+    );
+    expect(violations.some((v) => v.severity === "warn" && v.message.includes("body option"))).toBe(true);
+  });
+
   test("passes clean ai-sdk usage", () => {
     const data = loadRealRules();
     const violations = runValidation(
@@ -147,14 +234,60 @@ describe("ai-gateway validation rules", () => {
     expect(violations.some((v) => v.message.includes("dots not hyphens"))).toBe(true);
   });
 
-  test("flags AI_GATEWAY_API_KEY usage", () => {
+  test("AI_GATEWAY_API_KEY is warn severity (fallback auth)", () => {
     const data = loadRealRules();
     const violations = runValidation(
       `const key = process.env.AI_GATEWAY_API_KEY;\n`,
       ["ai-gateway"],
       data!.rulesMap,
     );
-    expect(violations.some((v) => v.message.includes("OIDC"))).toBe(true);
+    const matching = violations.filter((v) => v.message.includes("AI_GATEWAY_API_KEY") || v.message.includes("OIDC") || v.message.includes("fallback"));
+    expect(matching.length).toBeGreaterThanOrEqual(1);
+    // Should be warn, not error — it's a supported fallback auth mechanism
+    expect(matching.every((v) => v.severity === "warn")).toBe(true);
+  });
+
+  test("flags raw model string without provider/ prefix", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `const model = gateway('gpt-4o');\n`,
+      ["ai-gateway"],
+      data!.rulesMap,
+    );
+    const errors = violations.filter((v) => v.severity === "error");
+    expect(errors.some((v) => v.message.includes("provider/"))).toBe(true);
+  });
+
+  test("does not flag model string with provider/ prefix", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `const model = gateway('openai/gpt-5.4');\n`,
+      ["ai-gateway"],
+      data!.rulesMap,
+    );
+    const prefixErrors = violations.filter((v) => v.severity === "error" && v.message.includes("provider/"));
+    expect(prefixErrors.length).toBe(0);
+  });
+
+  test("flags outdated gpt-4o model (warn)", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `const model = gateway('openai/gpt-4o');\n`,
+      ["ai-gateway"],
+      data!.rulesMap,
+    );
+    expect(violations.some((v) => v.severity === "warn" && v.message.includes("gpt-4o"))).toBe(true);
+  });
+
+  test("does not warn about gpt-5.4", () => {
+    const data = loadRealRules();
+    const violations = runValidation(
+      `const model = gateway('openai/gpt-5.4');\n`,
+      ["ai-gateway"],
+      data!.rulesMap,
+    );
+    const outdatedWarns = violations.filter((v) => v.message.includes("gpt-4o"));
+    expect(outdatedWarns.length).toBe(0);
   });
 
   test("flags provider API key env vars", () => {
@@ -496,16 +629,25 @@ describe("no false positives", () => {
 // Warn-severity suppression at default log level
 // ---------------------------------------------------------------------------
 
-describe("warn-severity suppression", () => {
-  test("formatOutput suppresses warn-only violations at default log level", () => {
+describe("warn-severity as suggestions", () => {
+  test("formatOutput surfaces warn-only violations as suggestions", () => {
     const violations = [
       { skill: "nextjs", line: 1, message: "hook warning", severity: "warn" as const, matchedText: "useState" },
     ];
     const result = formatOutput(violations, ["nextjs"], "/test/file.tsx");
-    expect(result).toBe("{}");
+    const parsed = JSON.parse(result);
+    expect(parsed.hookSpecificOutput).toBeDefined();
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    expect(ctx).toContain("[SUGGESTION]");
+    expect(ctx).toContain("hook warning");
+    expect(ctx).toContain("Consider applying these suggestions");
+    expect(ctx).not.toContain("[ERROR]");
+    const meta = extractPostValidation(parsed.hookSpecificOutput);
+    expect(meta.errorCount).toBe(0);
+    expect(meta.warnCount).toBe(1);
   });
 
-  test("formatOutput includes errors even when mixed with warns", () => {
+  test("formatOutput includes both errors and warns when mixed", () => {
     const violations = [
       { skill: "ai-sdk", line: 1, message: "Use @ai-sdk/openai", severity: "error" as const, matchedText: "openai" },
       { skill: "nextjs", line: 5, message: "hook warning", severity: "warn" as const, matchedText: "useState" },
@@ -513,20 +655,30 @@ describe("warn-severity suppression", () => {
     const result = formatOutput(violations, ["ai-sdk", "nextjs"], "/test/file.tsx");
     const parsed = JSON.parse(result);
     expect(parsed.hookSpecificOutput).toBeDefined();
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    expect(ctx).toContain("[ERROR]");
+    expect(ctx).toContain("[SUGGESTION]");
+    expect(ctx).toContain("Please fix these issues");
     const meta = extractPostValidation(parsed.hookSpecificOutput);
     expect(meta.errorCount).toBe(1);
-    // Warns are suppressed at default level
-    expect(meta.warnCount).toBe(0);
+    expect(meta.warnCount).toBe(1);
   });
 
-  test("multiple warn violations all suppressed at default level", () => {
+  test("multiple warn violations all surfaced as suggestions", () => {
     const violations = [
       { skill: "nextjs", line: 1, message: "warn 1", severity: "warn" as const, matchedText: "x" },
       { skill: "nextjs", line: 2, message: "warn 2", severity: "warn" as const, matchedText: "y" },
       { skill: "vercel-functions", line: 3, message: "warn 3", severity: "warn" as const, matchedText: "z" },
     ];
     const result = formatOutput(violations, ["nextjs", "vercel-functions"], "/test/file.ts");
-    expect(result).toBe("{}");
+    const parsed = JSON.parse(result);
+    expect(parsed.hookSpecificOutput).toBeDefined();
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    expect(ctx).toContain("3 suggestions");
+    expect(ctx).toContain("Consider applying these suggestions");
+    const meta = extractPostValidation(parsed.hookSpecificOutput);
+    expect(meta.errorCount).toBe(0);
+    expect(meta.warnCount).toBe(3);
   });
 });
 
@@ -653,6 +805,17 @@ describe("matchFileToSkills with real rules", () => {
     const matched = matchFileToSkills(
       "lib/chat.ts",
       `import { gateway } from '@ai-sdk/gateway';\n`,
+      data!.compiledSkills,
+      data!.rulesMap,
+    );
+    expect(matched).toContain("ai-gateway");
+  });
+
+  test("file importing gateway from 'ai' matches ai-gateway", () => {
+    const data = loadRealRules();
+    const matched = matchFileToSkills(
+      "lib/chat.ts",
+      `import { gateway } from 'ai';\n`,
       data!.compiledSkills,
       data!.rulesMap,
     );

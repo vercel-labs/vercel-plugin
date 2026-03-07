@@ -575,15 +575,31 @@ interface NormalizePatternFieldOpts {
  * Parse a raw promptSignals value from frontmatter metadata into a typed
  * PromptSignals object. Returns undefined if the value is missing/invalid.
  */
-function parsePromptSignals(raw: unknown): PromptSignals | undefined {
+interface ParsePromptSignalsOpts {
+  skill: string;
+  addWarning?: (msg: string, detail: Omit<WarningDetail, "message">) => void;
+}
+
+function parsePromptSignals(
+  raw: unknown,
+  opts?: ParsePromptSignalsOpts,
+): PromptSignals | undefined {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
     return undefined;
   }
   const obj = raw as Record<string, unknown>;
+  const skill = opts?.skill ?? "";
+  const warn = opts?.addWarning;
 
   const toStringArray = (v: unknown): string[] => {
     if (!Array.isArray(v)) return [];
     return v.filter((x): x is string => typeof x === "string" && x !== "");
+  };
+
+  // Count empty strings before filtering (for warning)
+  const countEmptyStrings = (v: unknown): number => {
+    if (!Array.isArray(v)) return 0;
+    return v.filter((x) => typeof x === "string" && x === "").length;
   };
 
   const toStringArrayArray = (v: unknown): string[][] => {
@@ -594,6 +610,12 @@ function parsePromptSignals(raw: unknown): PromptSignals | undefined {
       .filter((g) => g.length > 0);
   };
 
+  // Count non-array elements in allOf (for warning)
+  const countNonArrayAllOf = (v: unknown): number => {
+    if (!Array.isArray(v)) return 0;
+    return v.filter((g) => !Array.isArray(g)).length;
+  };
+
   const phrases = toStringArray(obj.phrases);
   const allOf = toStringArrayArray(obj.allOf);
   const anyOf = toStringArray(obj.anyOf);
@@ -602,6 +624,71 @@ function parsePromptSignals(raw: unknown): PromptSignals | undefined {
     typeof obj.minScore === "number" && !Number.isNaN(obj.minScore)
       ? obj.minScore
       : 6;
+
+  // Emit warnings for malformed promptSignals
+  if (warn) {
+    // PROMPT_SIGNALS_EMPTY_PHRASES: phrases is an array but all entries are empty or filtered out
+    if (Array.isArray(obj.phrases) && phrases.length === 0) {
+      warn(
+        `skill "${skill}": promptSignals.phrases is empty after filtering`,
+        {
+          code: "PROMPT_SIGNALS_EMPTY_PHRASES",
+          skill,
+          field: "promptSignals.phrases",
+          valueType: "array",
+          hint: "Add at least one non-empty phrase string",
+        },
+      );
+    }
+
+    // Warn about empty strings in phrases
+    const emptyCount = countEmptyStrings(obj.phrases);
+    if (emptyCount > 0) {
+      warn(
+        `skill "${skill}": promptSignals.phrases contains ${emptyCount} empty string(s)`,
+        {
+          code: "PROMPT_SIGNALS_EMPTY_PHRASES",
+          skill,
+          field: "promptSignals.phrases",
+          valueType: "array",
+          hint: "Remove empty strings from phrases",
+        },
+      );
+    }
+
+    // PROMPT_SIGNALS_INVALID_ALLOF_GROUP: allOf contains non-array elements
+    const nonArrayCount = countNonArrayAllOf(obj.allOf);
+    if (nonArrayCount > 0) {
+      warn(
+        `skill "${skill}": promptSignals.allOf contains ${nonArrayCount} non-array element(s)`,
+        {
+          code: "PROMPT_SIGNALS_INVALID_ALLOF_GROUP",
+          skill,
+          field: "promptSignals.allOf",
+          valueType: "array",
+          hint: "Each allOf entry must be an array of strings (e.g. [term1, term2])",
+        },
+      );
+    }
+
+    // PROMPT_SIGNALS_LOW_MINSCORE: minScore below 1
+    if (
+      typeof obj.minScore === "number" &&
+      !Number.isNaN(obj.minScore) &&
+      obj.minScore < 1
+    ) {
+      warn(
+        `skill "${skill}": promptSignals.minScore is ${obj.minScore}, below minimum of 1`,
+        {
+          code: "PROMPT_SIGNALS_LOW_MINSCORE",
+          skill,
+          field: "promptSignals.minScore",
+          valueType: "number",
+          hint: "Set minScore to at least 1",
+        },
+      );
+    }
+  }
 
   // Only return if there's at least one signal defined
   if (phrases.length === 0 && allOf.length === 0 && anyOf.length === 0 && noneOf.length === 0) {
@@ -784,8 +871,11 @@ export function buildSkillMap(rootDir: string): SkillMapResult {
       addWarning,
     });
 
-    // Parse optional promptSignals from metadata
-    const promptSignals = parsePromptSignals(meta.promptSignals);
+    // Parse optional promptSignals from metadata (with warnings)
+    const promptSignals = parsePromptSignals(meta.promptSignals, {
+      skill: skill.dir,
+      addWarning,
+    });
 
     // Key by directory name -- the canonical identity of a skill.
     // Frontmatter `name` may differ; directory name is authoritative.
@@ -990,8 +1080,11 @@ export function validateSkillMap(raw: unknown): ValidationResult {
     // Normalize validate (optional array of ValidationRule, default [])
     const validate = parseValidateRules(cfg.validate);
 
-    // Normalize promptSignals (optional, preserved if valid)
-    const promptSignals = parsePromptSignals(cfg.promptSignals);
+    // Normalize promptSignals (optional, preserved if valid, with warnings)
+    const promptSignals = parsePromptSignals(cfg.promptSignals, {
+      skill,
+      addWarning,
+    });
 
     const normalizedEntry: SkillConfig = {
       priority,

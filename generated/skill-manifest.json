@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-07T19:30:53.129Z",
+  "generatedAt": "2026-03-07T20:09:23.871Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -715,6 +715,7 @@
         "\\byarn\\s+add\\s+[^\\n]*@ai-sdk/gateway\\b"
       ],
       "importPatterns": [
+        "ai",
         "@ai-sdk/gateway"
       ],
       "bodyPath": "skills/ai-gateway/SKILL.md",
@@ -728,6 +729,10 @@
       ],
       "importRegexSources": [
         {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]ai(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        },
+        {
           "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]@ai-sdk\\/gateway(?:\\/[^'\"]*)?['\"]",
           "flags": "m"
         }
@@ -740,8 +745,18 @@
         },
         {
           "pattern": "AI_GATEWAY_API_KEY",
-          "message": "AI_GATEWAY_API_KEY is not needed — use OIDC-based auth via Vercel environment",
+          "message": "AI_GATEWAY_API_KEY is a fallback auth method — prefer OIDC-based auth via vercel env pull for automatic token management",
+          "severity": "warn"
+        },
+        {
+          "pattern": "gateway\\(['\"][^'\"/]+['\"]\\)",
+          "message": "Model string missing provider/ prefix — use provider/model format (e.g., openai/gpt-5.4, anthropic/claude-sonnet-4.6)",
           "severity": "error"
+        },
+        {
+          "pattern": "gpt-4o",
+          "message": "gpt-4o is outdated — use gpt-5.4 or call gateway.getAvailableModels() for current model IDs",
+          "severity": "warn"
         },
         {
           "pattern": "(OPENAI_API_KEY|ANTHROPIC_API_KEY)",
@@ -1811,6 +1826,31 @@
           "pattern": "ToolLoopAgent",
           "message": "ToolLoopAgent is deprecated — use the AI SDK Agent pattern instead",
           "severity": "error"
+        },
+        {
+          "pattern": "toDataStreamResponse",
+          "message": "toDataStreamResponse() was renamed in v6 — use toUIMessageStreamResponse() for chat UIs or toTextStreamResponse() for text-only clients",
+          "severity": "error"
+        },
+        {
+          "pattern": "\\bmaxSteps\\s*:",
+          "message": "maxSteps was removed in AI SDK v6 — use stopWhen: stepCountIs(N) instead (import stepCountIs from ai)",
+          "severity": "error"
+        },
+        {
+          "pattern": "\\bonResponse\\s*[:,]",
+          "message": "onResponse was removed from useChat in v6 — configure response handling through transport",
+          "severity": "warn"
+        },
+        {
+          "pattern": "useChat\\(\\{\\s*api\\s*:",
+          "message": "useChat({ api }) is v5 syntax — use useChat({ transport: new DefaultChatTransport({ api }) }) in v6",
+          "severity": "error"
+        },
+        {
+          "pattern": "\\bbody\\s*:\\s*\\{",
+          "message": "body option was removed from useChat in v6 — pass data through transport configuration",
+          "severity": "warn"
         }
       ],
       "promptSignals": {

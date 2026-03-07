@@ -1061,3 +1061,191 @@ describe("buildSkillMap — promptSignals", () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 });
+
+// ─── promptSignals malformed warnings ──────────────────────────────
+
+describe("promptSignals malformed warnings via buildSkillMap", () => {
+  function buildWithSignals(promptSignalsYaml: string) {
+    const tmp = join(tmpdir(), `skill-signals-warn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    const skillDir = join(tmp, "test-skill");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, "SKILL.md"),
+      `---\nname: test-skill\ndescription: Test\nmetadata:\n  priority: 5\n  pathPatterns: []\n  bashPatterns: []\n  promptSignals:\n${promptSignalsYaml}\n---\n# Test`,
+    );
+    const result = buildSkillMap(tmp);
+    rmSync(tmp, { recursive: true, force: true });
+    return result;
+  }
+
+  test("empty phrases array emits PROMPT_SIGNALS_EMPTY_PHRASES", () => {
+    const result = buildWithSignals(
+      "    phrases: []\n    anyOf:\n      - fallback",
+    );
+    const codes = result.warningDetails.map((w) => w.code);
+    expect(codes).toContain("PROMPT_SIGNALS_EMPTY_PHRASES");
+    const detail = result.warningDetails.find(
+      (w) => w.code === "PROMPT_SIGNALS_EMPTY_PHRASES",
+    );
+    expect(detail!.skill).toBe("test-skill");
+    expect(detail!.field).toBe("promptSignals.phrases");
+  });
+
+  test("phrases with empty strings emits PROMPT_SIGNALS_EMPTY_PHRASES", () => {
+    // Inline array with empty-string entry: phrases: ['', valid]
+    // Our YAML parser doesn't support '' inside inline arrays easily,
+    // so test via validateSkillMap which takes raw objects
+    const result = validateSkillMap({
+      skills: {
+        "test-skill": {
+          priority: 5,
+          pathPatterns: [],
+          bashPatterns: [],
+          importPatterns: [],
+          validate: [],
+          promptSignals: {
+            phrases: ["", "valid phrase"],
+            allOf: [],
+            anyOf: [],
+            noneOf: [],
+            minScore: 6,
+          },
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const codes = result.warningDetails.map((w) => w.code);
+      expect(codes).toContain("PROMPT_SIGNALS_EMPTY_PHRASES");
+    }
+  });
+
+  test("allOf with non-array element emits PROMPT_SIGNALS_INVALID_ALLOF_GROUP", () => {
+    const result = validateSkillMap({
+      skills: {
+        "test-skill": {
+          priority: 5,
+          pathPatterns: [],
+          bashPatterns: [],
+          importPatterns: [],
+          validate: [],
+          promptSignals: {
+            phrases: ["test phrase"],
+            allOf: ["not-an-array" as any, ["valid", "group"]],
+            anyOf: [],
+            noneOf: [],
+            minScore: 6,
+          },
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const codes = result.warningDetails.map((w) => w.code);
+      expect(codes).toContain("PROMPT_SIGNALS_INVALID_ALLOF_GROUP");
+      const detail = result.warningDetails.find(
+        (w) => w.code === "PROMPT_SIGNALS_INVALID_ALLOF_GROUP",
+      );
+      expect(detail!.field).toBe("promptSignals.allOf");
+      expect(detail!.hint).toContain("array of strings");
+    }
+  });
+
+  test("minScore below 1 emits PROMPT_SIGNALS_LOW_MINSCORE", () => {
+    const result = validateSkillMap({
+      skills: {
+        "test-skill": {
+          priority: 5,
+          pathPatterns: [],
+          bashPatterns: [],
+          importPatterns: [],
+          validate: [],
+          promptSignals: {
+            phrases: ["test phrase"],
+            allOf: [],
+            anyOf: [],
+            noneOf: [],
+            minScore: 0,
+          },
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const codes = result.warningDetails.map((w) => w.code);
+      expect(codes).toContain("PROMPT_SIGNALS_LOW_MINSCORE");
+      const detail = result.warningDetails.find(
+        (w) => w.code === "PROMPT_SIGNALS_LOW_MINSCORE",
+      );
+      expect(detail!.field).toBe("promptSignals.minScore");
+      expect(detail!.hint).toContain("at least 1");
+    }
+  });
+
+  test("negative minScore emits PROMPT_SIGNALS_LOW_MINSCORE", () => {
+    const result = validateSkillMap({
+      skills: {
+        "test-skill": {
+          priority: 5,
+          pathPatterns: [],
+          bashPatterns: [],
+          importPatterns: [],
+          validate: [],
+          promptSignals: {
+            phrases: ["test phrase"],
+            allOf: [],
+            anyOf: [],
+            noneOf: [],
+            minScore: -5,
+          },
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const codes = result.warningDetails.map((w) => w.code);
+      expect(codes).toContain("PROMPT_SIGNALS_LOW_MINSCORE");
+    }
+  });
+
+  test("existing skills (streamdown, ai-sdk, nextjs, swr) produce zero promptSignals warnings", () => {
+    const map = buildSkillMap(SKILLS_DIR);
+    const promptWarningCodes = new Set([
+      "PROMPT_SIGNALS_EMPTY_PHRASES",
+      "PROMPT_SIGNALS_INVALID_ALLOF_GROUP",
+      "PROMPT_SIGNALS_LOW_MINSCORE",
+    ]);
+    const promptWarnings = map.warningDetails.filter((w) =>
+      promptWarningCodes.has(w.code),
+    );
+    expect(promptWarnings).toEqual([]);
+  });
+
+  test("validateSkillMap propagates promptSignals warnings", () => {
+    const result = validateSkillMap({
+      skills: {
+        "bad-skill": {
+          priority: 5,
+          pathPatterns: [],
+          bashPatterns: [],
+          importPatterns: [],
+          validate: [],
+          promptSignals: {
+            phrases: [],
+            allOf: [42 as any],
+            anyOf: ["something"],
+            noneOf: [],
+            minScore: 0.5,
+          },
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const codes = result.warningDetails.map((w) => w.code);
+      expect(codes).toContain("PROMPT_SIGNALS_EMPTY_PHRASES");
+      expect(codes).toContain("PROMPT_SIGNALS_INVALID_ALLOF_GROUP");
+      expect(codes).toContain("PROMPT_SIGNALS_LOW_MINSCORE");
+    }
+  });
+});

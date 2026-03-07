@@ -324,24 +324,86 @@ function scanSkillsDir(rootDir) {
   }
   return { skills, diagnostics };
 }
-function parsePromptSignals(raw) {
+function parsePromptSignals(raw, opts) {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
     return void 0;
   }
   const obj = raw;
+  const skill = opts?.skill ?? "";
+  const warn = opts?.addWarning;
   const toStringArray = (v) => {
     if (!Array.isArray(v)) return [];
     return v.filter((x) => typeof x === "string" && x !== "");
   };
+  const countEmptyStrings = (v) => {
+    if (!Array.isArray(v)) return 0;
+    return v.filter((x) => typeof x === "string" && x === "").length;
+  };
   const toStringArrayArray = (v) => {
     if (!Array.isArray(v)) return [];
     return v.filter((g) => Array.isArray(g)).map((g) => g.filter((x) => typeof x === "string" && x !== "")).filter((g) => g.length > 0);
+  };
+  const countNonArrayAllOf = (v) => {
+    if (!Array.isArray(v)) return 0;
+    return v.filter((g) => !Array.isArray(g)).length;
   };
   const phrases = toStringArray(obj.phrases);
   const allOf = toStringArrayArray(obj.allOf);
   const anyOf = toStringArray(obj.anyOf);
   const noneOf = toStringArray(obj.noneOf);
   const minScore = typeof obj.minScore === "number" && !Number.isNaN(obj.minScore) ? obj.minScore : 6;
+  if (warn) {
+    if (Array.isArray(obj.phrases) && phrases.length === 0) {
+      warn(
+        `skill "${skill}": promptSignals.phrases is empty after filtering`,
+        {
+          code: "PROMPT_SIGNALS_EMPTY_PHRASES",
+          skill,
+          field: "promptSignals.phrases",
+          valueType: "array",
+          hint: "Add at least one non-empty phrase string"
+        }
+      );
+    }
+    const emptyCount = countEmptyStrings(obj.phrases);
+    if (emptyCount > 0) {
+      warn(
+        `skill "${skill}": promptSignals.phrases contains ${emptyCount} empty string(s)`,
+        {
+          code: "PROMPT_SIGNALS_EMPTY_PHRASES",
+          skill,
+          field: "promptSignals.phrases",
+          valueType: "array",
+          hint: "Remove empty strings from phrases"
+        }
+      );
+    }
+    const nonArrayCount = countNonArrayAllOf(obj.allOf);
+    if (nonArrayCount > 0) {
+      warn(
+        `skill "${skill}": promptSignals.allOf contains ${nonArrayCount} non-array element(s)`,
+        {
+          code: "PROMPT_SIGNALS_INVALID_ALLOF_GROUP",
+          skill,
+          field: "promptSignals.allOf",
+          valueType: "array",
+          hint: "Each allOf entry must be an array of strings (e.g. [term1, term2])"
+        }
+      );
+    }
+    if (typeof obj.minScore === "number" && !Number.isNaN(obj.minScore) && obj.minScore < 1) {
+      warn(
+        `skill "${skill}": promptSignals.minScore is ${obj.minScore}, below minimum of 1`,
+        {
+          code: "PROMPT_SIGNALS_LOW_MINSCORE",
+          skill,
+          field: "promptSignals.minScore",
+          valueType: "number",
+          hint: "Set minScore to at least 1"
+        }
+      );
+    }
+  }
   if (phrases.length === 0 && allOf.length === 0 && anyOf.length === 0 && noneOf.length === 0) {
     return void 0;
   }
@@ -479,7 +541,10 @@ function buildSkillMap(rootDir) {
       coerceStrings: true,
       addWarning
     });
-    const promptSignals = parsePromptSignals(meta.promptSignals);
+    const promptSignals = parsePromptSignals(meta.promptSignals, {
+      skill: skill.dir,
+      addWarning
+    });
     const entry = {
       priority: meta.priority ?? 5,
       summary: skill.summary || "",
@@ -642,7 +707,10 @@ function validateSkillMap(raw) {
     });
     const summary = typeof cfg.summary === "string" ? cfg.summary : "";
     const validate = parseValidateRules(cfg.validate);
-    const promptSignals = parsePromptSignals(cfg.promptSignals);
+    const promptSignals = parsePromptSignals(cfg.promptSignals, {
+      skill,
+      addWarning
+    });
     const normalizedEntry = {
       priority,
       summary,

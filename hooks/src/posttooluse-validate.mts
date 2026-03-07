@@ -326,8 +326,8 @@ export function markValidated(filePath: string, hash: string): void {
 
 /**
  * Format validation violations into the hook output JSON.
- * Only error-severity violations produce additionalContext by default.
- * Warn-severity violations are included only at debug log level.
+ * Error-severity violations produce mandatory fix instructions.
+ * Warn-severity violations produce soft-fix suggestions at all log levels.
  */
 export function formatOutput(
   violations: ValidationViolation[],
@@ -336,47 +336,52 @@ export function formatOutput(
   logger?: Logger,
 ): string {
   const l = logger || log;
-  const includeWarns = l.isEnabled("debug");
 
-  const filtered = includeWarns
-    ? violations
-    : violations.filter((v) => v.severity === "error");
-
-  if (filtered.length === 0) {
+  if (violations.length === 0) {
     l.debug("posttooluse-validate-no-output", { reason: "no_actionable_violations" });
     return "{}";
   }
 
+  const errors = violations.filter((v) => v.severity === "error");
+  const warns = violations.filter((v) => v.severity === "warn");
+  const hasErrors = errors.length > 0;
+  const hasWarns = warns.length > 0;
+
   // Group by skill for clear output
   const bySkill = new Map<string, ValidationViolation[]>();
-  for (const v of filtered) {
+  for (const v of violations) {
     if (!bySkill.has(v.skill)) bySkill.set(v.skill, []);
     bySkill.get(v.skill)!.push(v);
   }
 
   const parts: string[] = [];
   for (const [skill, skillViolations] of bySkill) {
-    const lines = skillViolations.map((v) => {
-      const prefix = v.severity === "error" ? "ERROR" : "WARN";
-      return `- Line ${v.line} [${prefix}]: ${v.message}`;
-    });
-    parts.push(lines.join("\n"));
+    const errorLines = skillViolations
+      .filter((v) => v.severity === "error")
+      .map((v) => `- Line ${v.line} [ERROR]: ${v.message}`);
+    const warnLines = skillViolations
+      .filter((v) => v.severity === "warn")
+      .map((v) => `- Line ${v.line} [SUGGESTION]: ${v.message}`);
+    parts.push([...errorLines, ...warnLines].join("\n"));
   }
 
   const skillList = [...bySkill.keys()].join(", ");
-  const errorCount = filtered.filter((v) => v.severity === "error").length;
-  const warnCount = filtered.filter((v) => v.severity === "warn").length;
 
   const counts = [
-    errorCount > 0 ? `${errorCount} error${errorCount > 1 ? "s" : ""}` : "",
-    warnCount > 0 ? `${warnCount} warning${warnCount > 1 ? "s" : ""}` : "",
+    hasErrors ? `${errors.length} error${errors.length > 1 ? "s" : ""}` : "",
+    hasWarns ? `${warns.length} suggestion${warns.length > 1 ? "s" : ""}` : "",
   ].filter(Boolean).join(", ");
+
+  // Errors demand fixes; warn-only gets a softer call to action
+  const callToAction = hasErrors
+    ? `Please fix these issues before proceeding.`
+    : `Consider applying these suggestions to follow best practices.`;
 
   const context = [
     `<!-- posttooluse-validate: ${skillList} -->`,
     `VALIDATION (${counts}) for \`${filePath}\`:`,
     ...parts,
-    `Please fix these issues before proceeding.`,
+    callToAction,
     `<!-- /posttooluse-validate -->`,
   ].join("\n");
 
@@ -385,8 +390,8 @@ export function formatOutput(
     hook: "posttooluse-validate",
     filePath,
     matchedSkills,
-    errorCount,
-    warnCount,
+    errorCount: errors.length,
+    warnCount: warns.length,
   };
   const metaComment = `<!-- postValidation: ${JSON.stringify(metadata)} -->`;
 
@@ -400,8 +405,8 @@ export function formatOutput(
   l.summary("posttooluse-validate-output", {
     filePath,
     matchedSkills,
-    errorCount,
-    warnCount,
+    errorCount: errors.length,
+    warnCount: warns.length,
   });
 
   return JSON.stringify(output);

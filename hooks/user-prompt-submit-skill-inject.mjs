@@ -6,6 +6,7 @@ import { appendAuditLog, pluginRoot as resolvePluginRoot } from "./hook-env.mjs"
 import { loadSkills, injectSkills } from "./pretooluse-skill-inject.mjs";
 import { parseSeenSkills } from "./patterns.mjs";
 import { normalizePromptText, compilePromptSignals, matchPromptWithReason } from "./prompt-patterns.mjs";
+import { analyzePrompt } from "./prompt-analysis.mjs";
 import { createLogger } from "./logger.mjs";
 const MAX_SKILLS = 2;
 const DEFAULT_INJECTION_BUDGET_BYTES = 8e3;
@@ -162,16 +163,71 @@ function run() {
   const skills = loadSkills(PLUGIN_ROOT, log);
   if (!skills) return "{}";
   if (log.active) timing.skillmap_load = Math.round(log.now() - tSkillmap);
-  const tMatch = log.active ? log.now() : 0;
-  const matches = matchPromptSignals(normalizedPrompt, skills, log);
-  if (log.active) timing.match = Math.round(log.now() - tMatch);
-  if (matches.length === 0) {
+  const tAnalyze = log.active ? log.now() : 0;
+  const seenEnv = getSeenSkillsEnv();
+  const budget = getInjectionBudget();
+  const report = analyzePrompt(prompt, skills.skillMap, seenEnv, budget, MAX_SKILLS);
+  if (log.active) timing.analyze = Math.round(log.now() - tAnalyze);
+  log.trace("prompt-analysis-full", report);
+  for (const [skill, r] of Object.entries(report.perSkillResults)) {
+    log.debug("prompt-signal-eval", {
+      skill,
+      score: r.score,
+      reason: r.reason,
+      matched: r.matched,
+      suppressed: r.suppressed
+    });
+  }
+  log.debug("prompt-selection", {
+    selectedSkills: report.selectedSkills,
+    droppedByCap: report.droppedByCap,
+    droppedByBudget: report.droppedByBudget,
+    dedupStrategy: report.dedupState.strategy,
+    filteredByDedup: report.dedupState.filteredByDedup,
+    budgetBytes: report.budgetBytes,
+    timingMs: report.timingMs
+  });
+  const allMatched = Object.entries(report.perSkillResults).filter(([, r]) => r.matched).map(([skill]) => skill);
+  if (allMatched.length === 0) {
+    log.debug("prompt-analysis-issue", {
+      issue: "no_prompt_matches",
+      evaluatedSkills: Object.keys(report.perSkillResults),
+      suppressedSkills: Object.entries(report.perSkillResults).filter(([, r]) => r.suppressed).map(([skill]) => skill)
+    });
     log.complete("no_prompt_matches", { matchedCount: 0 }, log.active ? timing : null);
     return "{}";
   }
+  if (report.selectedSkills.length === 0) {
+    log.debug("prompt-analysis-issue", {
+      issue: "all_deduped",
+      matchedSkills: allMatched,
+      seenSkills: report.dedupState.seenSkills,
+      dedupStrategy: report.dedupState.strategy
+    });
+    log.complete("all_deduped", {
+      matchedCount: allMatched.length,
+      dedupedCount: allMatched.length
+    }, log.active ? timing : null);
+    return "{}";
+  }
   const tInject = log.active ? log.now() : 0;
-  const { parts, loaded, summaryOnly, droppedByCap, droppedByBudget, matchedSkills } = deduplicateAndInject(matches, skills, log);
+  const dedupOff = process.env.VERCEL_PLUGIN_HOOK_DEDUP === "off";
+  const hasEnvDedup = !dedupOff && typeof process.env.VERCEL_PLUGIN_SEEN_SKILLS === "string";
+  const injectedSkills = hasEnvDedup ? parseSeenSkills(seenEnv) : /* @__PURE__ */ new Set();
+  const injectResult = injectSkills(report.selectedSkills, {
+    pluginRoot: PLUGIN_ROOT,
+    hasEnvDedup,
+    injectedSkills,
+    budgetBytes: budget,
+    maxSkills: MAX_SKILLS,
+    skillMap: skills.skillMap,
+    logger: log
+  });
   if (log.active) timing.inject = Math.round(log.now() - tInject);
+  const { parts, loaded, summaryOnly } = injectResult;
+  const droppedByCap = [...injectResult.droppedByCap, ...report.droppedByCap];
+  const droppedByBudget = [...injectResult.droppedByBudget, ...report.droppedByBudget];
+  const matchedSkills = allMatched;
   if (parts.length === 0) {
     log.complete("all_deduped", {
       matchedCount: matchedSkills.length,

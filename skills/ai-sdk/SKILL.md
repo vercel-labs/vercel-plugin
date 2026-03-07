@@ -72,6 +72,26 @@ validate:
     pattern: ToolLoopAgent
     message: 'ToolLoopAgent is deprecated — use the AI SDK Agent pattern instead'
     severity: error
+  -
+    pattern: toDataStreamResponse
+    message: 'toDataStreamResponse() was renamed in v6 — use toUIMessageStreamResponse() for chat UIs or toTextStreamResponse() for text-only clients'
+    severity: error
+  -
+    pattern: \bmaxSteps\s*:
+    message: 'maxSteps was removed in AI SDK v6 — use stopWhen: stepCountIs(N) instead (import stepCountIs from ai)'
+    severity: error
+  -
+    pattern: \bonResponse\s*[:,]
+    message: 'onResponse was removed from useChat in v6 — configure response handling through transport'
+    severity: warn
+  -
+    pattern: useChat\(\{\s*api\s*:
+    message: 'useChat({ api }) is v5 syntax — use useChat({ transport: new DefaultChatTransport({ api }) }) in v6'
+    severity: error
+  -
+    pattern: \bbody\s*:\s*\{
+    message: 'body option was removed from useChat in v6 — pass data through transport configuration'
+    severity: warn
 ---
 
 # Vercel AI SDK (v6)

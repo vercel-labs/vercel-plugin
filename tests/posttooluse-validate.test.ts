@@ -119,15 +119,14 @@ describe("posttooluse-validate.mjs", () => {
       });
       expect(code).toBe(0);
       const result = JSON.parse(stdout);
-      if (result.hookSpecificOutput) {
-        const ctx = result.hookSpecificOutput.additionalContext;
-        expect(ctx).toContain("@ai-sdk/openai");
-        expect(ctx).toContain("VALIDATION");
-        const meta = extractPostValidation(result.hookSpecificOutput);
-        expect(meta).toBeDefined();
-        expect(meta.errorCount).toBeGreaterThan(0);
-      }
-      // If no hookSpecificOutput, that's OK if no validate rules are defined yet
+      expect(result.hookSpecificOutput).toBeDefined();
+      const ctx = result.hookSpecificOutput.additionalContext;
+      expect(ctx).toContain("@ai-sdk/openai");
+      expect(ctx).toContain("VALIDATION");
+      const meta = extractPostValidation(result.hookSpecificOutput);
+      expect(meta).toBeDefined();
+      expect(meta.errorCount).toBeGreaterThan(0);
+      expect(meta.filePath).toBe(testFile);
     });
 
     test("detects raw Anthropic client usage", async () => {
@@ -138,10 +137,13 @@ describe("posttooluse-validate.mjs", () => {
       });
       expect(code).toBe(0);
       const result = JSON.parse(stdout);
-      if (result.hookSpecificOutput) {
-        const ctx = result.hookSpecificOutput.additionalContext;
-        expect(ctx).toContain("@ai-sdk/anthropic");
-      }
+      expect(result.hookSpecificOutput).toBeDefined();
+      const ctx = result.hookSpecificOutput.additionalContext;
+      expect(ctx).toContain("@ai-sdk/anthropic");
+      expect(ctx).toContain("VALIDATION");
+      const meta = extractPostValidation(result.hookSpecificOutput);
+      expect(meta).toBeDefined();
+      expect(meta.errorCount).toBeGreaterThan(0);
     });
 
     test("detects ToolLoopAgent usage", async () => {
@@ -152,11 +154,13 @@ describe("posttooluse-validate.mjs", () => {
       });
       expect(code).toBe(0);
       const result = JSON.parse(stdout);
-      if (result.hookSpecificOutput) {
-        const ctx = result.hookSpecificOutput.additionalContext;
-        expect(ctx).toContain("Agent");
-        expect(ctx).toContain("ToolLoopAgent");
-      }
+      expect(result.hookSpecificOutput).toBeDefined();
+      const ctx = result.hookSpecificOutput.additionalContext;
+      expect(ctx).toContain("Agent");
+      expect(ctx).toContain("ToolLoopAgent");
+      const meta = extractPostValidation(result.hookSpecificOutput);
+      expect(meta).toBeDefined();
+      expect(meta.errorCount).toBeGreaterThan(0);
     });
 
     test("no violations for correct ai-sdk usage", async () => {
@@ -175,12 +179,36 @@ describe("posttooluse-validate.mjs", () => {
       });
       expect(code).toBe(0);
       const result = JSON.parse(stdout);
-      // Should be empty or no errors
+      // Clean file: either no hookSpecificOutput, or zero errors
       if (result.hookSpecificOutput) {
         const meta = extractPostValidation(result.hookSpecificOutput);
-        // warn-severity might still appear at debug level, but errors should be 0
         expect(meta?.errorCount || 0).toBe(0);
       }
+    });
+
+    test("detects gateway from 'ai' with hyphenated model slug", async () => {
+      writeFileSync(testFile, [
+        `import { generateText, gateway } from 'ai';`,
+        ``,
+        `const result = await generateText({`,
+        `  model: gateway('anthropic/claude-sonnet-4-6'),`,
+        `  prompt: 'Hello!',`,
+        `});`,
+      ].join("\n"));
+      const { code, stdout } = await runHook({
+        tool_name: "Write",
+        tool_input: { file_path: testFile },
+      });
+      expect(code).toBe(0);
+      const result = JSON.parse(stdout);
+      expect(result.hookSpecificOutput).toBeDefined();
+      const ctx = result.hookSpecificOutput.additionalContext;
+      expect(ctx).toContain("VALIDATION");
+      expect(ctx).toContain("dots not hyphens");
+      const meta = extractPostValidation(result.hookSpecificOutput);
+      expect(meta).toBeDefined();
+      expect(meta.errorCount).toBeGreaterThan(0);
+      expect(meta.matchedSkills).toContain("ai-gateway");
     });
 
     test("no output for file that doesn't match any skill", async () => {
@@ -396,7 +424,7 @@ describe("posttooluse-validate.mjs", () => {
       expect(result).toBe("{}");
     });
 
-    test("returns empty JSON for warn-only violations at default log level", () => {
+    test("returns suggestion output for warn-only violations at default log level", () => {
       const violations = [{
         skill: "test",
         line: 1,
@@ -405,7 +433,18 @@ describe("posttooluse-validate.mjs", () => {
         matchedText: "something",
       }];
       const result = formatOutput(violations, ["test"], "/test/file.ts");
-      expect(result).toBe("{}");
+      const parsed = JSON.parse(result);
+      expect(parsed.hookSpecificOutput).toBeDefined();
+      expect(parsed.hookSpecificOutput.hookEventName).toBe("PostToolUse");
+      const ctx = parsed.hookSpecificOutput.additionalContext;
+      expect(ctx).toContain("[SUGGESTION]");
+      expect(ctx).toContain("just a warning");
+      expect(ctx).toContain("Consider applying these suggestions");
+      expect(ctx).not.toContain("[ERROR]");
+      expect(ctx).not.toContain("Please fix these issues");
+      const meta = extractPostValidation(parsed.hookSpecificOutput);
+      expect(meta.errorCount).toBe(0);
+      expect(meta.warnCount).toBe(1);
     });
 
     test("includes error violations in output", () => {
