@@ -960,6 +960,15 @@ Git Push → CI Pipeline → vercel build → vercel deploy --prebuilt
 
 ## Conventions
 
+### UI Design Defaults
+
+- For application UI, default to **shadcn/ui + Geist**. Do not build core controls from raw HTML plus ad-hoc Tailwind when design-system primitives exist.
+- Default to **dark mode** for dashboards, AI products, internal tools, and developer surfaces. Use light mode when the product is clearly content-first or editorial.
+- Favor **zinc/neutral/slate tokens**, one accent color, and clear borders over scattered rainbow accents, heavy gradients, and random glassmorphism.
+- Let **type, spacing, and composition** create hierarchy: Tabs + Card + Form for settings, Card + Table + Filters for dashboards, Sheet for mobile navigation, AlertDialog for destructive confirmation.
+- Use **Geist Sans** for interface text and **Geist Mono** for code, metrics, IDs, timestamps, and commands.
+- Avoid generic UI output: raw buttons, clickable divs, repeated bordered card grids, inconsistent radii, and forgotten empty/loading/error states.
+
 ### Next.js 16
 
 - Default to Server Components. Only add `'use client'` when you need interactivity or browser APIs.
