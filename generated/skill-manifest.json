@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-08T16:38:49.973Z",
+  "generatedAt": "2026-03-08T20:08:34.265Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -981,7 +981,7 @@
       "importRegexSources": []
     },
     "shadcn": {
-      "priority": 5,
+      "priority": 6,
       "summary": "",
       "pathPatterns": [
         "components.json",
@@ -1239,7 +1239,18 @@
     "geist": {
       "priority": 4,
       "summary": "",
-      "pathPatterns": [],
+      "pathPatterns": [
+        "app/layout.*",
+        "src/app/layout.*",
+        "app/globals.css",
+        "src/app/globals.css",
+        "styles/**",
+        "tailwind.config.*",
+        "apps/*/app/layout.*",
+        "apps/*/src/app/layout.*",
+        "apps/*/app/globals.css",
+        "apps/*/src/app/globals.css"
+      ],
       "bashPatterns": [
         "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bgeist\\b",
         "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bgeist\\b",
@@ -1252,7 +1263,18 @@
         "geist/font/*"
       ],
       "bodyPath": "skills/geist/SKILL.md",
-      "pathRegexSources": [],
+      "pathRegexSources": [
+        "^app\\/layout\\.[^/]*$",
+        "^src\\/app\\/layout\\.[^/]*$",
+        "^app\\/globals\\.css$",
+        "^src\\/app\\/globals\\.css$",
+        "^styles\\/.*$",
+        "^tailwind\\.config\\.[^/]*$",
+        "^apps\\/[^/]*\\/app\\/layout\\.[^/]*$",
+        "^apps\\/[^/]*\\/src\\/app\\/layout\\.[^/]*$",
+        "^apps\\/[^/]*\\/app\\/globals\\.css$",
+        "^apps\\/[^/]*\\/src\\/app\\/globals\\.css$"
+      ],
       "bashRegexSources": [
         "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bgeist\\b",
         "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bgeist\\b",

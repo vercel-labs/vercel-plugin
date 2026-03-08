@@ -67,245 +67,424 @@ metadata:
 
 # Vercel Workflow DevKit (WDK)
 
-You are an expert in the Vercel Workflow DevKit. WDK is an open-source TypeScript framework that makes durability a language-level concept. Functions can pause for minutes or months, survive deployments and crashes, and resume exactly where they stopped.
+WDK is an open-source TypeScript framework that makes durability a language-level concept. Functions can pause for minutes or months, survive deployments and crashes, and resume exactly where they stopped.
 
 ## Status
 
-WDK is in **public beta** (since October 2025) and open source. GA is anticipated but not yet announced. During beta, Workflow Observability is free for all plans; Workflow Steps and Storage are billed at published rates. Server-side performance is now 2x faster (54% median improvement — median API response time reduced from 37ms to 17ms).
+WDK is in **public beta** (since October 2025) and open source. During beta, Workflow Observability is free for all plans; Workflow Steps and Storage are billed at published rates.
 
-**Security**: Upgrade to `workflow@>=4.2.0-beta.64` — versions ≤4.1.0-beta.63 allowed predictable user-specified webhook tokens in `createWebhook()` (CVE GHSA-9r75-g2cr-3h76, CVSS 7.5). The fix removes the `token` option so tokens are always randomly generated. Run `npx workflow@latest` to update (current: 4.2.0-beta.67).
-
-## Framework Support
-
-WDK works with **8 frameworks** and more are in development:
-
-| Framework | Status |
-|-----------|--------|
-| Next.js | Supported |
-| Nitro | Supported |
-| SvelteKit | Supported |
-| Astro | Supported |
-| Express | Supported |
-| Hono | Supported |
-| TanStack Start | In development |
-| React Router | In development |
+**Security**: Upgrade to `workflow@>=4.2.0-beta.64` — versions ≤4.1.0-beta.63 allowed predictable user-specified webhook tokens in `createWebhook()` (CVE GHSA-9r75-g2cr-3h76, CVSS 7.5). Run `npx workflow@latest` to update.
 
 ## Installation
 
 ```bash
-# Main package (includes core runtime)
 npm install workflow@latest
 # For AI agent durability:
 npm install @workflow/ai@latest
-# For self-hosted Postgres worlds:
-npm install @workflow/world-postgres
 ```
 
-> **Tip**: Run `npx workflow@latest` to scaffold or update your project. All packages are currently in beta.
+> Run `npx workflow@latest` to scaffold or update your project.
 
-## Core Concepts
+## Essential Imports
 
-### Directives
-
-WDK introduces two directives that turn ordinary async functions into durable workflows:
+**Workflow primitives** (from `"workflow"`):
 
 ```ts
-'use workflow'  // Marks a function as a durable workflow
-'use step'      // Marks a block as an individually retryable, observable step
+import { getWritable, getStepMetadata, getWorkflowMetadata } from "workflow";
+import { sleep, fetch, defineHook, createHook, createWebhook } from "workflow";
+import { FatalError, RetryableError } from "workflow";
 ```
 
-### How It Works
-
-1. Each `'use step'` block compiles into an isolated API Route
-2. Inputs and outputs are recorded for deterministic replay
-3. If a deploy or crash occurs, the system replays execution from the last completed step
-4. While a step executes, the workflow is suspended (zero resource consumption)
-5. When the step completes, the workflow resumes automatically
-
-### Basic Workflow
+**API operations** (from `"workflow/api"`):
 
 ```ts
-'use workflow'
+import { start, getRun, resumeHook, resumeWebhook } from "workflow/api";
+```
 
-export async function processOrder(orderId: string) {
-  'use step'
-  const order = await db.getOrder(orderId)
+**Framework integration** (from `"workflow/next"`):
 
-  'use step'
-  const payment = await processPayment(order)
+```ts
+import { withWorkflow } from "workflow/next";
+```
 
-  'use step'
-  await sendConfirmation(order, payment)
+**AI agent** (from `"@workflow/ai/agent"`):
 
-  'use step'
-  await updateInventory(order)
+```ts
+import { DurableAgent } from "@workflow/ai/agent";
+```
 
-  return { success: true, orderId }
+## Core Directives
+
+Two directives turn ordinary async functions into durable workflows:
+
+```ts
+"use workflow"  // First line of function — marks it as a durable workflow
+"use step"      // First line of function — marks it as a retryable, observable step
+```
+
+**Critical rule**: Step functions have full Node.js access. Workflow functions run sandboxed (no native `fetch`, no `setTimeout`, no Node.js modules). Place all business logic in steps; use the workflow function purely for orchestration.
+
+## Canonical Project Structure (Next.js)
+
+Every WDK project needs three route files plus the workflow definition:
+
+```
+workflows/
+  my-workflow.ts              ← workflow definition ("use workflow" + "use step")
+app/api/
+  my-workflow/route.ts        ← POST handler: start(workflow, args) → { runId }
+  readable/[runId]/route.ts   ← GET handler: SSE stream from run.getReadable()
+  run/[runId]/route.ts        ← GET handler: run status via getRun(runId)
+```
+
+### 1. Workflow Definition (`workflows/my-workflow.ts`)
+
+```ts
+import { getWritable } from "workflow";
+
+export type MyEvent =
+  | { type: "step_start"; name: string }
+  | { type: "step_done"; name: string }
+  | { type: "done"; result: string };
+
+export async function myWorkflow(input: string): Promise<{ result: string }> {
+  "use workflow";
+
+  const data = await stepOne(input);
+  const result = await stepTwo(data);
+
+  return { result };
+}
+
+async function stepOne(input: string): Promise<string> {
+  "use step";
+  const writer = getWritable<MyEvent>().getWriter();
+  try {
+    await writer.write({ type: "step_start", name: "stepOne" });
+    // Full Node.js access here — fetch, db calls, etc.
+    const result = await doWork(input);
+    await writer.write({ type: "step_done", name: "stepOne" });
+    return result;
+  } finally {
+    writer.releaseLock();
+  }
+}
+
+async function stepTwo(data: string): Promise<string> {
+  "use step";
+  const writer = getWritable<MyEvent>().getWriter();
+  try {
+    await writer.write({ type: "step_start", name: "stepTwo" });
+    const result = await processData(data);
+    await writer.write({ type: "step_done", name: "stepTwo" });
+    return result;
+  } finally {
+    writer.releaseLock();
+  }
 }
 ```
 
-Each step is:
-- **Retryable**: Automatically retried on transient failures
-- **Observable**: Step-level visibility at `https://vercel.com/{team}/{project}/logs` → filter by workflow function
-- **Durable**: State persisted between steps
-- **Isolated**: Runs as its own API route
+### 2. Start Route (`app/api/my-workflow/route.ts`)
 
-## Worlds (Execution Environments)
-
-A "World" is where workflow state gets stored. WDK is portable across environments:
-
-### Local World (Development)
 ```ts
-// State stored as JSON files on disk
-// Automatic in local development
+import { NextResponse } from "next/server";
+import { start } from "workflow/api";
+import { myWorkflow } from "@/workflows/my-workflow";
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const run = await start(myWorkflow, [body.input]);
+  return NextResponse.json({ runId: run.runId });
+}
 ```
 
-### Vercel World (Production)
+**IMPORTANT**: Never call the workflow function directly. Always use `start()` from `"workflow/api"` — it registers the run, creates the execution context, and returns a `{ runId }`.
+
+### 3. Readable Stream Route (`app/api/readable/[runId]/route.ts`)
+
 ```ts
-// Fully managed: scalable storage, distributed queuing
-// Zero configuration when deployed to Vercel
-// Automatic authentication
+import { NextRequest } from "next/server";
+import { getRun } from "workflow/api";
+
+type ReadableRouteContext = {
+  params: Promise<{ runId: string }>;
+};
+
+export async function GET(_request: NextRequest, { params }: ReadableRouteContext) {
+  const { runId } = await params;
+
+  let run;
+  try {
+    run = await getRun(runId);
+  } catch {
+    return Response.json(
+      { ok: false, error: { code: "RUN_NOT_FOUND", message: `Run ${runId} not found` } },
+      { status: 404 }
+    );
+  }
+
+  const readable = run.getReadable();
+  const encoder = new TextEncoder();
+  const sseStream = (readable as unknown as ReadableStream).pipeThrough(
+    new TransformStream({
+      transform(chunk, controller) {
+        const data = typeof chunk === "string" ? chunk : JSON.stringify(chunk);
+        controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+      },
+    })
+  );
+
+  return new Response(sseStream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
 ```
 
-### Self-Hosted
-```ts
-// Use Postgres, Redis, or build your own World
-// Full control over state storage
-import { createPostgresWorld } from '@workflow/world-postgres'
+### 4. Run Status Route (`app/api/run/[runId]/route.ts`)
 
-const world = createPostgresWorld({
-  connectionString: process.env.DATABASE_URL,
-})
+```ts
+import { NextResponse } from "next/server";
+import { getRun } from "workflow/api";
+
+type RunRouteContext = {
+  params: Promise<{ runId: string }>;
+};
+
+export async function GET(_request: Request, { params }: RunRouteContext) {
+  const { runId } = await params;
+
+  let run;
+  try {
+    run = await getRun(runId);
+  } catch {
+    return NextResponse.json(
+      { ok: false, error: { code: "RUN_NOT_FOUND", message: `Run ${runId} not found` } },
+      { status: 404 }
+    );
+  }
+
+  const [status, workflowName, createdAt, startedAt, completedAt] =
+    await Promise.all([
+      run.status,
+      run.workflowName,
+      run.createdAt,
+      run.startedAt,
+      run.completedAt,
+    ]);
+
+  return NextResponse.json({
+    runId,
+    status,
+    workflowName,
+    createdAt: createdAt.toISOString(),
+    startedAt: startedAt?.toISOString() ?? null,
+    completedAt: completedAt?.toISOString() ?? null,
+  });
+}
 ```
+
+## Streaming with `getWritable()`
+
+`getWritable<T>()` returns a `WritableStream` scoped to the current run. Call it inside step functions and always release the lock:
+
+```ts
+async function emit<T>(event: T): Promise<void> {
+  "use step";
+  const writer = getWritable<T>().getWriter();
+  try {
+    await writer.write(event);
+  } finally {
+    writer.releaseLock();
+  }
+}
+```
+
+Consumers read via `getRun(runId).getReadable()` in the readable route (see above).
+
+## Hooks — Waiting for External Events
+
+Use `defineHook` for typed, reusable hooks:
+
+```ts
+import { defineHook, getWritable, sleep } from "workflow";
+
+export interface ApprovalPayload {
+  approved: boolean;
+  comment?: string;
+}
+
+export const approvalHook = defineHook<ApprovalPayload>();
+
+export async function approvalGate(orderId: string): Promise<{ status: string }> {
+  "use workflow";
+
+  const hook = approvalHook.create({ token: `approval:${orderId}` });
+
+  // Race between approval and timeout
+  const result = await Promise.race([
+    hook.then((payload) => ({ type: "approval" as const, payload })),
+    sleep("24h").then(() => ({ type: "timeout" as const, payload: null })),
+  ]);
+
+  if (result.type === "timeout") {
+    return { status: "timeout" };
+  }
+  return { status: result.payload!.approved ? "approved" : "rejected" };
+}
+```
+
+Resume hooks from an API route:
+
+```ts
+import { resumeHook } from "workflow/api";
+
+export async function POST(req: Request) {
+  const { token, data } = await req.json();
+  await resumeHook(token, data);
+  return new Response("ok");
+}
+```
+
+## Error Handling
+
+```ts
+import { FatalError, RetryableError } from "workflow";
+
+async function callExternalAPI(url: string) {
+  "use step";
+  const res = await fetch(url);
+
+  if (res.status >= 400 && res.status < 500) {
+    throw new FatalError(`Client error: ${res.status}`);  // No retry
+  }
+  if (res.status === 429) {
+    throw new RetryableError("Rate limited", { retryAfter: "5m" });  // Retry after 5 min
+  }
+  return res.json();
+}
+```
+
+Step retry metadata:
+
+```ts
+import { getStepMetadata } from "workflow";
+
+async function processWithRetry(id: string) {
+  "use step";
+  const { attempt } = getStepMetadata();
+  console.log(`Attempt ${attempt} for ${id}`);
+  // ...
+}
+```
+
+## Sandbox Limitations & Workarounds
+
+| Limitation | Solution |
+|-----------|----------|
+| No native `fetch()` in workflow scope | Import `fetch` from `"workflow"` or move to a step |
+| No `setTimeout`/`setInterval` | Use `sleep()` from `"workflow"` |
+| No Node.js modules in workflow scope | Move all Node.js logic to step functions |
 
 ## DurableAgent (AI SDK Integration)
 
-The killer feature: wrap AI SDK agents with durability.
-
 ```ts
-import { DurableAgent } from '@workflow/ai/agent'
-import { openai } from '@ai-sdk/openai'
+import { DurableAgent } from "@workflow/ai/agent";
+import { getWritable } from "workflow";
+import { z } from "zod";
 
-const agent = new DurableAgent({
-  model: openai('gpt-5.4'),
-  tools: {
-    searchWeb: { /* ... */ },
-    writeFile: { /* ... */ },
-    sendEmail: { /* ... */ },
-  },
-  system: 'You are a research assistant.',
-})
+async function searchDatabase(query: string) {
+  "use step";
+  // Full Node.js access — real DB calls here
+  return `Results for "${query}"`;
+}
 
-// Every LLM call and tool execution becomes a retryable step
-'use workflow'
-export async function researchTask(topic: string) {
-  const result = await agent.generateText({
-    prompt: `Research ${topic} and write a comprehensive report.`,
-  })
-  return result.text
+export async function researchAgent(topic: string) {
+  "use workflow";
+
+  const agent = new DurableAgent({
+    model: "anthropic/claude-sonnet-4-5",
+    system: "You are a research assistant.",
+    tools: {
+      search: {
+        description: "Search the database",
+        inputSchema: z.object({ query: z.string() }),
+        execute: searchDatabase,  // Tool execute uses "use step"
+      },
+    },
+  });
+
+  const result = await agent.stream({
+    messages: [{ role: "user", content: `Research ${topic}` }],
+    writable: getWritable(),
+    maxSteps: 10,
+  });
+
+  return result.messages;
 }
 ```
 
-With `DurableAgent`:
-- Every LLM call is a step (retried on failure)
-- Every tool execution is a step (individually observable)
-- The entire agent loop survives crashes and deployments
-- Results are aggregated within the workflow context
-- Streaming works out of the box
+Every LLM call and tool execution becomes a retryable step. The entire agent loop survives crashes and deployments.
 
-## Patterns
-
-### Long-Running Workflow with Pauses
-
-```ts
-'use workflow'
-
-export async function onboardUser(userId: string) {
-  'use step'
-  await sendWelcomeEmail(userId)
-
-  'use step'
-  // Wait for user to verify email (could be hours/days)
-  await waitForEvent(`email-verified:${userId}`)
-
-  'use step'
-  await setupDefaultWorkspace(userId)
-
-  'use step'
-  await sendOnboardingGuide(userId)
-}
-```
-
-### Workflow with Error Handling
-
-```ts
-'use workflow'
-
-export async function processRefund(orderId: string) {
-  'use step'
-  const order = await getOrder(orderId)
-
-  'use step'
-  try {
-    await issueRefund(order)
-  } catch (error) {
-    // Step will be retried automatically on transient errors
-    // For permanent failures, the error is recorded
-    throw error
-  }
-
-  'use step'
-  await notifyCustomer(order, 'refund_processed')
-}
-```
+## Common Patterns
 
 ### Fan-Out / Parallel Steps
 
 ```ts
-'use workflow'
-
 export async function processImages(imageIds: string[]) {
-  'use step'
-  const images = await getImages(imageIds)
+  "use workflow";
 
-  // Process in parallel — each is its own step
   const results = await Promise.all(
-    images.map(async (img) => {
-      'use step'
-      return await resizeImage(img)
+    imageIds.map(async (id) => {
+      return await resizeImage(id);  // Each is its own step
     })
-  )
+  );
 
-  'use step'
-  await saveResults(results)
+  await saveResults(results);
+}
+
+async function resizeImage(id: string) {
+  "use step";
+  // ...
 }
 ```
 
-## Integration with Next.js
-
-Workflows are exposed as API routes in Next.js:
+### Saga with Compensation
 
 ```ts
-// app/api/workflows/process-order/route.ts
-import { processOrder } from '@/workflows/process-order'
+import { FatalError, getWritable } from "workflow";
 
-export async function POST(req: Request) {
-  const { orderId } = await req.json()
-  const result = await processOrder(orderId)
-  return Response.json(result)
+export async function upgradeSaga(userId: string) {
+  "use workflow";
+
+  await reserveSeats(userId);
+
+  try {
+    await chargePayment(userId);
+  } catch {
+    await releaseSeats(userId);  // Compensate
+    throw new FatalError("Payment failed");
+  }
+
+  await activatePlan(userId);
 }
 ```
 
-## Key Properties
+## Debugging
 
-- **Open source**: No vendor lock-in
-- **TypeScript-native**: async/await, no YAML or state machines
-- **Observable**: Step-level visibility, timing, inputs/outputs
-- **Retryable**: Automatic retry with configurable backoff
-- **Portable**: Local, Vercel, or self-hosted
-- **AI-first**: DurableAgent wraps AI SDK seamlessly
+```bash
+npx workflow health                    # Check endpoints
+npx workflow web                       # Visual dashboard
+npx workflow inspect runs              # List all runs
+npx workflow inspect run <run_id>      # Inspect specific run
+npx workflow cancel <run_id>           # Cancel execution
+```
 
-## When to Use WDK vs. Regular Functions
+## When to Use WDK vs Regular Functions
 
 | Scenario | Use |
 |----------|-----|
@@ -316,20 +495,13 @@ export async function POST(req: Request) {
 | Process spanning multiple services | WDK Workflow |
 | Quick one-shot LLM call | AI SDK directly |
 
-## Workflow Builder (Visual Automation)
+## Framework Support
 
-Vercel open-sourced **Workflow Builder** — a complete visual automation platform powered by WDK. It includes a visual drag-and-drop editor, AI-powered text-to-workflow generation, execution engine, and integrations (Resend, Linear, Slack, PostgreSQL, webhooks).
-
-Every visual workflow compiles into executable TypeScript via WDK. Deploy it to Vercel with one click (auto-provisions Neon Postgres).
-
-- [Workflow Builder Template](https://vercel.com/templates/next.js/workflow-builder)
-- [Workflow Builder Starter](https://github.com/vercel/workflow-builder-starter)
-- [Blog post](https://vercel.com/blog/workflow-builder-build-your-own-workflow-automation-platform)
+Next.js, Nitro, SvelteKit, Astro, Express, Hono (supported). TanStack Start, React Router (in development).
 
 ## Official Documentation
 
 - [Workflow DevKit](https://vercel.com/docs/workflow)
-- [Workflow DevKit Website](https://useworkflow.dev)
-- [Vercel Functions](https://vercel.com/docs/functions) — Workflows compile to Vercel Functions
-- [AI SDK Agents](https://ai-sdk.dev/docs/ai-sdk-core/agents) — DurableAgent wraps AI SDK Agent
-- [GitHub: Workflow DevKit](https://github.com/vercel/workflow)
+- [Website](https://useworkflow.dev)
+- [GitHub](https://github.com/vercel/workflow)
+- [Workflow Builder Template](https://vercel.com/templates/next.js/workflow-builder)
