@@ -141,8 +141,9 @@ Two directives turn ordinary async functions into durable workflows:
 
 ## Canonical Project Structure (Next.js)
 
-Every WDK project needs three route files plus the workflow definition:
+Every WDK project needs three route files plus the workflow definition. **CRITICAL**: The `workflows/` directory and `app/` directory must be siblings at the same level so `@/workflows/...` resolves correctly. Do NOT put `workflows/` outside the `@` alias root.
 
+**Without `src/` (recommended for WDK projects):**
 ```
 workflows/
   my-workflow.ts              ← workflow definition ("use workflow" + "use step")
@@ -151,6 +152,21 @@ app/api/
   readable/[runId]/route.ts   ← GET handler: SSE stream from run.getReadable()
   run/[runId]/route.ts        ← GET handler: run status via getRun(runId)
 ```
+
+tsconfig.json paths: `"@/*": ["./*"]` — `@/workflows/my-workflow` resolves to `./workflows/my-workflow`.
+
+**With `src/` directory:** Put workflows inside `src/`:
+```
+src/
+  workflows/my-workflow.ts
+  app/api/my-workflow/route.ts
+  app/api/readable/[runId]/route.ts
+  app/api/run/[runId]/route.ts
+```
+
+tsconfig.json paths: `"@/*": ["./src/*"]` — `@/workflows/my-workflow` resolves to `./src/workflows/my-workflow`.
+
+**Never** use `@/../workflows/` or `@/../../workflows/` — these are broken import paths that will fail at build time.
 
 ### 1. Workflow Definition (`workflows/my-workflow.ts`)
 

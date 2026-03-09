@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-09T00:33:24.670Z",
+  "generatedAt": "2026-03-09T01:46:35.355Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -1651,6 +1651,8 @@
         "\\byarn\\s+add\\s+[^\\n]*\\b@ai-sdk/react\\b"
       ],
       "importPatterns": [
+        "ai",
+        "@ai-sdk/*",
         "@ai-sdk/react",
         "@/components/ai-elements/*"
       ],
@@ -1677,6 +1679,14 @@
       ],
       "importRegexSources": [
         {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]ai(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        },
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]@ai-sdk\\/[^'\"]*(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        },
+        {
           "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]@ai-sdk\\/react(?:\\/[^'\"]*)?['\"]",
           "flags": "m"
         },
@@ -1690,6 +1700,8 @@
           "ai elements",
           "ai components",
           "chat components",
+          "chat ui",
+          "chat interface",
           "voice elements",
           "code elements",
           "voice agent",
@@ -1698,6 +1710,7 @@
           "code editor component",
           "streaming markdown",
           "streaming ui",
+          "streaming response",
           "markdown formatting"
         ],
         "allOf": [
@@ -1716,6 +1729,22 @@
           [
             "markdown",
             "render"
+          ],
+          [
+            "chat",
+            "ui"
+          ],
+          [
+            "chat",
+            "interface"
+          ],
+          [
+            "stream",
+            "response"
+          ],
+          [
+            "ai",
+            "component"
           ]
         ],
         "anyOf": [
@@ -1735,7 +1764,9 @@
           "test results component",
           "react-markdown",
           "chat ui",
-          "terminal"
+          "terminal",
+          "useChat",
+          "streamText"
         ],
         "noneOf": [
           "vue",
