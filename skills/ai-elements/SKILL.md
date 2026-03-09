@@ -7,9 +7,13 @@ metadata:
     - 'components/ai-elements/**'
     - 'src/components/ai-elements/**'
     - 'components/**/chat*'
+    - 'components/**/*chat*'
     - 'components/**/message*'
+    - 'components/**/*message*'
     - 'src/components/**/chat*'
+    - 'src/components/**/*chat*'
     - 'src/components/**/message*'
+    - 'src/components/**/*message*'
   importPatterns:
     - 'ai'
     - '@ai-sdk/*'
@@ -79,6 +83,22 @@ metadata:
       - "markdown file"
       - "changelog"
     minScore: 6
+validate:
+  -
+    pattern: part\.text\b
+    message: 'You are rendering AI message text as raw strings — use <MessageResponse> from @/components/ai-elements/message to render markdown, code blocks, and rich formatting. Install with: npx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json'
+    severity: warn
+    skipIfFileContains: "ai-elements/message"
+  -
+    pattern: react-markdown
+    message: 'Use <MessageResponse> from @/components/ai-elements/message instead of react-markdown — it handles streaming, code highlighting, and AI SDK message parts out of the box'
+    severity: warn
+    skipIfFileContains: "ai-elements/message"
+  -
+    pattern: dangerouslySetInnerHTML
+    message: 'Do not render AI responses with dangerouslySetInnerHTML — use <MessageResponse> from @/components/ai-elements/message for safe, styled markdown rendering'
+    severity: error
+    skipIfFileContains: "ai-elements/message"
 ---
 
 # AI Elements

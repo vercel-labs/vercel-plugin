@@ -84,6 +84,14 @@ metadata:
       - "retry on error"
       - "reliable and retry"
       - "reliable processing"
+      - "individually reliable"
+      - "each step reliable"
+      - "each step should be reliable"
+      - "steps should be reliable"
+      - "reliable with automatic retry"
+      - "reliable with retry"
+      - "retry on transient"
+      - "transient failures"
       - "session persistence"
       - "session should persist"
       - "session survives"
@@ -163,6 +171,12 @@ metadata:
       - [retry, failure]
       - [retry, error]
       - [retry, automatically]
+      - [retry, transient]
+      - [reliable, retry]
+      - [individually, reliable]
+      - [steps, reliable]
+      - [sandbox, reliable]
+      - [sandbox, retry]
       - [reconnect, network]
       - [reconnect, drop]
       - [reconnect, disconnect]
