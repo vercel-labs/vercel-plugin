@@ -67,6 +67,38 @@ describe("globToRegex", () => {
     });
   });
 
+  describe("brace expansion", () => {
+    test("**/middleware.{ts,js,mjs} matches extension alternatives", () => {
+      const re = globToRegex("**/middleware.{ts,js,mjs}");
+      expect(re.test("middleware.ts")).toBe(true);
+      expect(re.test("src/middleware.js")).toBe(true);
+      expect(re.test("src/lib/middleware.mjs")).toBe(true);
+      expect(re.test("src/lib/middleware.tsx")).toBe(false);
+      expect(re.test("middleware.{ts,js,mjs}")).toBe(false);
+    });
+
+    test("**/*.{ts,tsx} matches ts and tsx files", () => {
+      const re = globToRegex("**/*.{ts,tsx}");
+      expect(re.test("src/index.ts")).toBe(true);
+      expect(re.test("src/app/page.tsx")).toBe(true);
+      expect(re.test("src/app/page.jsx")).toBe(false);
+    });
+
+    test("nested brace alternatives expand recursively", () => {
+      const re = globToRegex("**/*.{js,{ts,tsx}}");
+      expect(re.test("src/index.js")).toBe(true);
+      expect(re.test("src/index.ts")).toBe(true);
+      expect(re.test("src/index.tsx")).toBe(true);
+      expect(re.test("src/index.mjs")).toBe(false);
+    });
+
+    test("braces without alternatives stay literal", () => {
+      const re = globToRegex("file{1}.txt");
+      expect(re.test("file{1}.txt")).toBe(true);
+      expect(re.test("file1.txt")).toBe(false);
+    });
+  });
+
   describe("exact filenames", () => {
     test("matches exact filename", () => {
       const re = globToRegex("vercel.json");

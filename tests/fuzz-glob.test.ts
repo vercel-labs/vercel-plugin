@@ -167,6 +167,24 @@ describe("fuzz: globToRegex edge cases", () => {
       expect(re.test("next.config.js")).toBe(true);
       expect(re.test("next.config.mjs")).toBe(true);
     });
+
+    test("brace expansion matches extension lists", () => {
+      const re = globToRegex("**/middleware.{ts,js,mjs}");
+      expect(re).toBeInstanceOf(RegExp);
+      expect(re.test("middleware.ts")).toBe(true);
+      expect(re.test("src/middleware.js")).toBe(true);
+      expect(re.test("src/middleware.mjs")).toBe(true);
+      expect(re.test("src/middleware.tsx")).toBe(false);
+    });
+
+    test("nested brace expansion compiles and matches", () => {
+      const re = globToRegex("src/**/*.{js,{ts,tsx}}");
+      expect(re).toBeInstanceOf(RegExp);
+      expect(re.test("src/index.js")).toBe(true);
+      expect(re.test("src/index.ts")).toBe(true);
+      expect(re.test("src/index.tsx")).toBe(true);
+      expect(re.test("src/index.mjs")).toBe(false);
+    });
   });
 
   describe("stress: generated random patterns don't crash", () => {

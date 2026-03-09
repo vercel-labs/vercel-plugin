@@ -69,17 +69,66 @@ export interface CompileCallbacks {
  * Supports *, **, and ? wildcards.
  * Double-star-slash requires slash boundaries — matches zero or more path segments.
  */
-export function globToRegex(pattern: string): RegExp {
-  if (typeof pattern !== "string") {
-    throw new TypeError(`globToRegex: expected string, got ${typeof pattern}`);
+const REGEX_META_CHARS = ".()+[]{}|^$\\";
+
+interface BraceExpansion {
+  alternatives: string[];
+  endIndex: number;
+}
+
+function parseBraceExpansion(pattern: string, startIndex: number): BraceExpansion | null {
+  let depth = 0;
+  let current = "";
+  let sawTopLevelComma = false;
+  const alternatives: string[] = [];
+
+  for (let i = startIndex; i < pattern.length; i++) {
+    const c = pattern[i];
+
+    if (i === startIndex) {
+      depth = 1;
+      continue;
+    }
+
+    if (c === "{") {
+      depth++;
+      current += c;
+      continue;
+    }
+
+    if (c === "}") {
+      depth--;
+      if (depth === 0) {
+        if (!sawTopLevelComma) {
+          return null;
+        }
+        alternatives.push(current);
+        return { alternatives, endIndex: i };
+      }
+      current += c;
+      continue;
+    }
+
+    if (c === "," && depth === 1) {
+      sawTopLevelComma = true;
+      alternatives.push(current);
+      current = "";
+      continue;
+    }
+
+    current += c;
   }
-  if (pattern === "") {
-    throw new Error("globToRegex: pattern must not be empty");
-  }
-  let re = "^";
+
+  return null;
+}
+
+function globPatternToRegexSource(pattern: string): string {
+  let re = "";
   let i = 0;
+
   while (i < pattern.length) {
     const c = pattern[i];
+
     if (c === "*") {
       if (pattern[i + 1] === "*") {
         i += 2;
@@ -92,17 +141,44 @@ export function globToRegex(pattern: string): RegExp {
         continue;
       }
       re += "[^/]*";
-    } else if (c === "?") {
+      i++;
+      continue;
+    }
+
+    if (c === "?") {
       re += "[^/]";
-    } else if (".()+[]{}|^$\\".includes(c)) {
+      i++;
+      continue;
+    }
+
+    if (c === "{") {
+      const expansion = parseBraceExpansion(pattern, i);
+      if (expansion) {
+        re += `(?:${expansion.alternatives.map(globPatternToRegexSource).join("|")})`;
+        i = expansion.endIndex + 1;
+        continue;
+      }
+    }
+
+    if (REGEX_META_CHARS.includes(c)) {
       re += "\\" + c;
     } else {
       re += c;
     }
     i++;
   }
-  re += "$";
-  return new RegExp(re);
+
+  return re;
+}
+
+export function globToRegex(pattern: string): RegExp {
+  if (typeof pattern !== "string") {
+    throw new TypeError(`globToRegex: expected string, got ${typeof pattern}`);
+  }
+  if (pattern === "") {
+    throw new Error("globToRegex: pattern must not be empty");
+  }
+  return new RegExp(`^${globPatternToRegexSource(pattern)}$`);
 }
 
 // ---------------------------------------------------------------------------
