@@ -195,13 +195,17 @@ WDK is in **public beta** (since October 2025) and open source. During beta, Wor
 
 ## Installation
 
+**If using `create-next-app`**, always pass `--no-src-dir` so `app/` and `workflows/` are siblings at the project root:
+
 ```bash
+npx create-next-app@latest my-app --no-src-dir --tailwind --eslint --app --ts
+cd my-app
 npm install workflow@latest
-# For AI agent durability:
-npm install @workflow/ai@latest
 ```
 
-> Run `npx workflow@latest` to scaffold or update your project.
+Do NOT use the `src/` directory with WDK projects. The `@` alias must resolve `@/workflows/...` correctly — this only works when `workflows/` and `app/` are at the same level.
+
+> Run `npx workflow@latest` to scaffold or update an existing project.
 
 **Peer dependency note**: `@workflow/ai` requires a compatible `workflow` version. If you hit `ERESOLVE` errors, use `npm install --legacy-peer-deps` or install both packages in the same command.
 

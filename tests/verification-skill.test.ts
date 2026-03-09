@@ -146,6 +146,7 @@ describe("Dev server co-injection of verification skill", () => {
     "yarn dev",
     "vite dev",
     "vercel dev",
+    "astro dev",
   ];
 
   for (const cmd of devCommands) {

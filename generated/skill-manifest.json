@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-09T18:22:36.231Z",
+  "generatedAt": "2026-03-09T18:55:59.664Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -1965,7 +1965,8 @@
         "\\bbun\\s+run\\s+dev\\b",
         "\\byarn\\s+dev\\b",
         "\\bvite\\s*(dev)?\\b",
-        "\\bvercel\\s+dev\\b"
+        "\\bvercel\\s+dev\\b",
+        "\\bastro\\s+dev\\b"
       ],
       "importPatterns": [],
       "bodyPath": "skills/verification/SKILL.md",
@@ -1977,7 +1978,8 @@
         "\\bbun\\s+run\\s+dev\\b",
         "\\byarn\\s+dev\\b",
         "\\bvite\\s*(dev)?\\b",
-        "\\bvercel\\s+dev\\b"
+        "\\bvercel\\s+dev\\b",
+        "\\bastro\\s+dev\\b"
       ],
       "importRegexSources": [],
       "promptSignals": {

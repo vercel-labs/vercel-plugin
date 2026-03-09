@@ -10,7 +10,7 @@
       "toolName": "Bash",
       "toolTarget": "npm install ai @vercel/analytics @vercel/flags @vercel/workflow",
       "matchedSkills": ["ai-sdk", "observability", "vercel-flags", "workflow"],
-      "injectedSkills": ["observability", "workflow", "ai-sdk", "vercel-flags"],
+      "injectedSkills": ["workflow", "ai-sdk", "observability", "vercel-flags"],
       "droppedByCap": [],
       "droppedByBudget": []
     }

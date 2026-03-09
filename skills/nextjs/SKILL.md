@@ -139,7 +139,11 @@ When running `create-next-app`, **always** pass `--yes` to skip interactive prom
 npx create-next-app@latest my-app --yes --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --turbopack --use-npm
 ```
 
-`create-next-app` refuses to run in a non-empty directory. To scaffold into an existing project, create in a temp directory and copy the files over.
+To scaffold into a directory that already contains files (e.g., `.claude/`), add `--force`:
+
+```bash
+npx create-next-app@latest . --yes --force --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --turbopark --use-npm
+```
 
 ### Geist Font Fix (Tailwind v4 + shadcn)
 

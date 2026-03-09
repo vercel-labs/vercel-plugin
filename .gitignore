@@ -149,3 +149,4 @@ hooks/compiled/
 .DS_Store
 .playground
 .vercel-plugin
+evals

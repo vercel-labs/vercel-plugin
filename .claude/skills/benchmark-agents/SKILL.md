@@ -5,85 +5,267 @@ description: Advanced AI agent benchmark scenarios that push Vercel's cutting-ed
 
 # Benchmark Agents — Advanced AI Systems
 
-Benchmark scenarios that go beyond CRUD apps to exercise the full depth of Vercel's AI and platform primitives. Every scenario involves durable agents, streaming, multi-model routing, cross-platform messaging, or event-driven pipelines.
+Launch real Claude Code sessions with the plugin installed, verify skill injection, monitor PostToolUse validation catches, and produce a coverage report. This skill covers the full eval loop: setup → launch → monitor → verify → fix → release → repeat.
 
-## Workflow
+## Setup & Launch (Exact Commands)
 
-Same as `benchmark-testing` — create directories, install the plugin, launch via WezTerm. See that skill for mechanical details. This skill defines the **scenarios only**.
+### Naming convention
 
-## Prompt Guidelines
+**Always append a timestamp** to directory names so reruns don't overwrite old projects:
 
-- **Never name specific technologies** — describe the product and capabilities
-- Describe behaviors that *require* advanced features (durability, fan-out, streaming, webhooks, multi-model)
-- Prompts should be ambitious enough that a naive implementation would miss critical platform features
-- Always append: "Link the project to my vercel-labs team so we can deploy it later."
+```
+<slug>-<YYYYMMDD>T<HHMM>
+```
+
+Example: `tarot-card-deck-20260309T1227`, `interior-designer-20260309T1227`
+
+Generate the timestamp with: `date +%Y%m%dT%H%M`
+
+### 1. Create test directory and install plugin
+
+```bash
+TS=$(date +%Y%m%dT%H%M)
+SLUG="my-app-$TS"
+mkdir -p ~/dev/vercel-plugin-testing/$SLUG
+cd ~/dev/vercel-plugin-testing/$SLUG
+npx add-plugin https://github.com/vercel-labs/vercel-plugin -s project -y
+```
+
+### 2. Launch session via WezTerm
+
+```bash
+wezterm cli spawn --cwd /Users/johnlindquist/dev/vercel-plugin-testing/$SLUG -- /bin/zsh -ic \
+  "unset CLAUDECODE; VERCEL_PLUGIN_LOG_LEVEL=debug x '<PROMPT>' --settings .claude/settings.json; exec zsh"
+```
+
+Key flags:
+- `unset CLAUDECODE` — prevents nested session detection error
+- `VERCEL_PLUGIN_LOG_LEVEL=debug` — enables hook debug output in `~/.claude/debug/`
+- `x` — alias for `claude` CLI
+- `--settings .claude/settings.json` — loads project-level plugin settings
+
+### 3. Find the debug log (wait ~25s for SessionStart hooks)
+
+```bash
+find ~/.claude/debug -name "*.txt" -mmin -2 -exec grep -l "$SLUG" {} +
+```
+
+### 4. Launch multiple sessions in parallel
+
+Create dirs and install plugin in a loop, then spawn each WezTerm pane:
+
+```bash
+TS=$(date +%Y%m%dT%H%M)
+cd ~/dev/vercel-plugin-testing
+for name in tarot-deck interior-designer superhero-origin; do
+  d="${name}-${TS}"
+  mkdir -p "$d" && (cd "$d" && npx add-plugin https://github.com/vercel-labs/vercel-plugin -s project -y)
+done
+
+# Then spawn each (these run in separate terminal panes)
+wezterm cli spawn --cwd .../tarot-deck-$TS -- /bin/zsh -ic "unset CLAUDECODE; VERCEL_PLUGIN_LOG_LEVEL=debug x '...' --settings .claude/settings.json; exec zsh"
+wezterm cli spawn --cwd .../interior-designer-$TS -- /bin/zsh -ic "unset CLAUDECODE; VERCEL_PLUGIN_LOG_LEVEL=debug x '...' --settings .claude/settings.json; exec zsh"
+wezterm cli spawn --cwd .../superhero-origin-$TS -- /bin/zsh -ic "unset CLAUDECODE; VERCEL_PLUGIN_LOG_LEVEL=debug x '...' --settings .claude/settings.json; exec zsh"
+```
+
+## Monitoring
+
+### Skill injection claims (the key metric)
+
+```bash
+TMPDIR=$(node -e "import {tmpdir} from 'os'; console.log(tmpdir())" --input-type=module)
+CLAIMDIR="$TMPDIR/vercel-plugin-<session-id>-seen-skills.d"
+
+# List all injected skills
+ls "$CLAIMDIR"
+
+# Count
+ls "$CLAIMDIR" | wc -l
+
+# Check specific skill
+ls "$CLAIMDIR/workflow" && echo "YES" || echo "NO"
+```
+
+### Hook firing
+
+```bash
+LOG=~/.claude/debug/<session-id>.txt
+
+# SessionStart hooks
+grep -c 'SessionStart.*success' "$LOG"
+
+# PreToolUse calls and injections
+grep -c 'executePreToolHooks' "$LOG"        # total calls
+grep -c 'provided additionalContext' "$LOG"  # actual injections
+
+# PostToolUse validation catches
+grep 'VALIDATION' "$LOG" | head -10
+
+# UserPromptSubmit
+grep -c 'UserPromptSubmit.*success' "$LOG"
+```
+
+### Quick status check for multiple sessions
+
+```bash
+TMPDIR=$(node -e "import {tmpdir} from 'os'; console.log(tmpdir())" --input-type=module 2>/dev/null)
+
+for label_id in "slug1:SESSION_ID_1" "slug2:SESSION_ID_2" "slug3:SESSION_ID_3"; do
+  label="${label_id%%:*}"
+  id="${label_id##*:}"
+  claimdir="$TMPDIR/vercel-plugin-$id-seen-skills.d"
+  echo "=== $label ==="
+  count=$(ls "$claimdir" 2>/dev/null | wc -l | tr -d ' ')
+  claims=$(ls "$claimdir" 2>/dev/null | sort | tr '\n' ', ')
+  echo "Skills ($count): $claims"
+done
+```
+
+## Verification — What to Check in Generated Code
+
+After sessions build, verify these patterns in the generated projects:
+
+### Project structure
+```bash
+echo -n "src/: "; test -d "$base/src" && echo YES || echo NO          # Should be NO for WDK projects
+echo -n "workflows/: "; test -d "$base/workflows" && echo YES || echo NO
+echo -n "withWorkflow: "; grep -q "withWorkflow" "$base"/next.config.* && echo YES || echo NO
+echo -n "components.json: "; test -f "$base/components.json" && echo YES || echo NO
+```
+
+### Image generation model
+```bash
+# Should use gemini-3.1-flash-image-preview, NOT dall-e-3 or older gemini models
+grep -rn "gemini.*image\|dall-e\|experimental_generateImage\|result\.files" "$base/workflows/" "$base/app/" 2>/dev/null | grep "\.ts"
+```
+
+### Gateway vs direct provider
+```bash
+# Should use gateway() or plain "provider/model" strings, NOT openai("gpt-4o") directly
+grep -rn "from.*@ai-sdk/openai\|openai(" "$base" 2>/dev/null | grep "\.ts" | grep -v node_modules
+grep -rn "gateway(\|model:.*\"openai/" "$base" 2>/dev/null | grep "\.ts" | grep -v node_modules
+```
+
+### AI Elements installed
+```bash
+find "$base" -path "*/ai-elements/*.tsx" 2>/dev/null | grep -v node_modules | wc -l
+```
+
+### Workflow API usage
+```bash
+wf=$(find "$base" -name "*.ts" -path "*/workflow*" 2>/dev/null | grep -v node_modules | head -1)
+head -5 "$wf"   # Should show: import { getWritable } from "workflow"
+```
+
+## Prompt Design Rules
+
+**Describe products, not technologies.** Let the plugin infer which skills to inject. This tests whether the plugin's pattern matching and prompt signals work from natural language.
+
+### DO:
+- "runs a multi-step creation pipeline that streams each phase"
+- "generates a portrait image"
+- "users can chat with an AI advisor"
+- "store all designs in a gallery"
+
+### DON'T:
+- "use Vercel Workflow DevKit with getWritable"
+- "use gateway('google/gemini-3.1-flash-image-preview')"
+- "install npx ai-elements"
+- "add withWorkflow to next.config.ts"
+
+### Always end prompts with:
+"Link the project to my vercel-labs team so we can deploy it later. Skip any planning and just build it. Get the dev server running."
+
+### Phrases that trigger key skills (via promptSignals):
+- **workflow**: "multi-step pipeline", "streams progress", "streams each phase", "durable pipeline", "creation pipeline"
+- **ai-sdk**: Triggered by imports/install patterns (very broad)
+- **shadcn**: Triggered by `create-next-app` bash pattern
+- **ai-elements**: Triggered when ai-sdk is active + chat UI patterns
+
+## Common Issues Found in Evals (and Fixes Applied)
+
+| Issue | Cause | Plugin Fix (version) |
+|-------|-------|---------------------|
+| Workflow not triggered from natural language | promptSignals too narrow | Broadened phrases, lowered minScore 6→4 (v0.9.5) |
+| Agent uses `openai("gpt-4o")` instead of gateway | Agent's training data defaults to openai | PostToolUse validate warns "your knowledge is outdated" (v0.9.9) |
+| Agent uses `dall-e-3` for images | Agent doesn't know about gemini image gen | PostToolUse validate warns, capabilities table in ai-sdk (v0.9.7) |
+| Agent uses `experimental_generateImage` | Old API | PostToolUse validate warns, recommend `generateText` + `result.files` (v0.9.9) |
+| Raw markdown rendering (`**bold**` visible) | Agent skips AI Elements | `MessageResponse` documented as universal renderer (v0.9.2) |
+| `@/../../workflows/` broken import | Workflows outside `@` alias root | Canonical structure docs: no `src/` for WDK (v0.8.3) |
+| `withWorkflow` missing from next.config | Agent skipped setup step | Marked as "Required" in workflow skill (v0.8.1) |
+| `defineHook` but no resume route | Agent didn't wire the 3-piece pattern | Documented as 3 required pieces (v0.9.3) |
+| `generateObject()` used (removed in v6) | Agent's training data | PostToolUse validate catches as error (v0.9.3) |
+| `getWritable()` in workflow scope | Sandbox violation | Strengthened warning in skill (v0.8.1) |
+| Missing `vercel link` + `vercel env pull` | No OIDC credentials | Added as "Required" setup step (v0.9.1) |
+| `getStepMetadata().retryCount` undefined on first attempt | WDK quirk | Documented: guard with `?? 0` (v0.9.1) |
+| shadcn not installed | No trigger for scaffolding | Added `create-next-app` bashPattern to shadcn (v0.8.0) |
+| Skill cap too low (3) | Only 3 skills injected per tool call | Raised to 5 with 18KB budget (v0.8.0) |
+
+## Agent-Browser Verification
+
+After dev server starts, verify with agent-browser. Note: agents currently DO NOT self-verify despite the skill being injected. You must launch verification manually:
+
+```bash
+agent-browser open http://localhost:<port>
+agent-browser wait --load networkidle
+agent-browser screenshot
+agent-browser snapshot -i
+```
+
+## Coverage Report
+
+Write results to `.notes/COVERAGE.md` with:
+
+1. **Session index** — slug, session ID, unique skills, dedup status
+2. **Hook coverage matrix** — which hooks fired in which sessions
+3. **Skill injection table** — which of the 43 skills triggered
+4. **Code quality checks** — gateway vs direct, image model, withWorkflow, AI Elements
+5. **PostToolUse validation catches** — outdated models, deprecated APIs
+6. **Issues found** — bugs, pattern gaps, new findings to feed back into skills
+
+## Release → Eval Loop
+
+The standard improvement cycle:
+
+1. **Run evals** — launch 3 sessions with natural language prompts
+2. **Check results** — skill claims, project structure, code quality
+3. **Identify gaps** — what skills didn't trigger, what patterns are wrong
+4. **Read conversation logs** — find user follow-up corrections
+5. **Fix skills** — update SKILL.md content, patterns, validate rules
+6. **Run gates** — `bun run typecheck && bun test && bun run validate`
+7. **Release** — bump version, `bun run build`, commit, push
+8. **Repeat** — launch 3 more evals to verify fixes
 
 ## Scenario Table
 
-| # | Slug | Prompt | Expected Skills |
-|---|------|--------|----------------|
-| 01 | doc-qa-agent | Build an AI document Q&A system where users upload PDFs and ask questions. The system should chunk documents, generate embeddings, store them for retrieval, and use a multi-step reasoning agent that cites specific page numbers. The agent should use tool calls to search the document store, re-rank results, and synthesize answers with streaming output. Include a chat UI with message history, tool invocation display, and source citations. | ai-sdk, nextjs, vercel-storage, ai-elements |
-| 02 | customer-support-agent | Build a customer support agent that connects to a company's help docs via a standardized tool protocol. The agent should handle multi-turn conversations, escalate to humans when confidence is low, and log every interaction for review. It needs a dashboard showing active conversations, resolution rates, and average response time. The agent must survive server restarts mid-conversation without losing context. | ai-sdk, workflow, nextjs, ai-elements |
-| 03 | deploy-monitor | Build a deployment monitoring system with an AI incident responder. It should ping endpoints on a schedule, detect anomalies in response times, and when an incident is detected, spawn an AI agent that investigates build logs, function logs, and recent deploys to suggest a root cause. The investigation must be durable — if the function times out mid-analysis, it picks up where it left off. Show a real-time dashboard with uptime charts and incident timelines. | workflow, cron-jobs, observability, ai-sdk, vercel-api |
-| 04 | multi-model-router | Build an AI playground that lets users compare responses from multiple models side-by-side. Users type a prompt and select 2-4 models to race. Responses stream in parallel with token-per-second metrics. Include cost tracking per query, a history of past comparisons, and the ability to vote on which response was best. Route all model calls through a unified gateway for failover and observability. | ai-gateway, ai-sdk, nextjs, ai-elements |
-| 05 | slack-pr-reviewer | Build a bot that lives in team chat and automatically reviews pull requests. When a PR webhook fires, the bot posts a summary in the relevant channel, runs an AI analysis of the diff for bugs and security issues, and lets team members ask follow-up questions in-thread. The bot should work across at least two chat platforms with a single codebase. Include a web dashboard showing review stats. | chat-sdk, ai-sdk, nextjs |
-| 06 | content-pipeline | Build a content production pipeline where editors submit article briefs through a web form. Each brief triggers a durable multi-step workflow: research agent gathers sources, writer agent drafts the article, editor agent reviews for quality and suggests revisions, and a final step generates social media posts and an OG image. Each step should be independently retryable and observable. Show workflow progress in a dashboard with step-level status. | workflow, ai-sdk, satori, nextjs, vercel-queues |
-| 07 | feature-rollout | Build an internal tool for gradual feature rollouts. Product managers define feature flags with percentage-based rollout rules, user segment targeting, and A/B test variants. The system should read flag state at the edge with near-zero latency. Include an analytics dashboard that tracks conversion rates per variant, and an AI assistant that analyzes experiment results and recommends whether to ship or kill each feature. | vercel-flags, ai-sdk, nextjs, observability |
-| 08 | event-driven-crm | Build an event-driven CRM where customer actions (signup, purchase, support ticket, churn signal) flow into a durable event stream. Consumer functions process events to update customer profiles, trigger re-engagement emails, calculate health scores, and feed an AI agent that predicts churn risk. Events must survive infrastructure failures with at-least-once delivery. Show a customer timeline view and health dashboard. | vercel-queues, workflow, ai-sdk, email, nextjs |
-| 09 | code-sandbox-tutor | Build an interactive coding tutor where students describe what they want to build in natural language, and an AI agent generates code, executes it in an isolated sandbox environment, shows the output, and iterates based on student feedback. The agent should support multi-file projects, detect runtime errors, and auto-fix them. Include a lesson progress tracker and a gallery of completed projects. | vercel-sandbox, ai-sdk, nextjs, ai-elements |
-| 10 | multi-agent-research | Build a research assistant that takes a complex question and spawns multiple specialized sub-agents in parallel — one searches the web, one analyzes uploaded documents, one queries a knowledge base via tool protocol, and an orchestrator agent synthesizes their findings into a structured report with citations. The orchestration must be durable so long-running research survives timeouts. Stream intermediate findings to the UI as each sub-agent reports back. | workflow, ai-sdk, ai-elements, nextjs |
-| 11 | discord-game-master | Build an AI game master bot for tabletop RPGs that runs in a chat platform. It maintains persistent game state (character sheets, inventory, world map) across sessions, rolls dice, narrates combat with streaming text, generates scene illustrations on demand, and tracks initiative order. Players interact via chat commands and the bot responds in-thread. Include a web companion app showing the current game state and maps. | chat-sdk, ai-sdk, vercel-storage, nextjs |
-| 12 | compliance-auditor | Build a compliance auditing system for a SaaS platform. On a schedule, an AI agent reviews recent code deployments, checks infrastructure configuration against security policies, scans for credential exposure, and generates a compliance report. Findings are routed through a durable approval workflow — critical issues block deploys until resolved, warnings go to a review queue. The web dashboard shows audit history, open findings, and compliance score trends. | workflow, cron-jobs, ai-sdk, vercel-firewall, nextjs |
-
-## UI Design References
-
-| # | Slug | Design Mockup |
-|---|------|---------------|
-| 01 | doc-qa-agent | ![doc-qa-agent](img-doc-qa-agent-2026-03-07T15-13-35-1.png) |
-| 02 | customer-support-agent | ![customer-support-agent](img-customer-support-agent-2026-03-07T15-13-35-1.png) |
-| 03 | deploy-monitor | ![deploy-monitor](img-deploy-monitor-2026-03-07T15-13-35-1.png) |
-| 04 | multi-model-router | ![multi-model-router](img-multi-model-router-2026-03-07T15-13-35-1.png) |
-| 05 | slack-pr-reviewer | ![slack-pr-reviewer](img-slack-pr-reviewer-2026-03-07T15-13-35-1.png) |
-| 06 | content-pipeline | ![content-pipeline](img-content-pipeline-2026-03-07T15-13-35-1.png) |
-| 07 | feature-rollout | ![feature-rollout](img-feature-rollout-2026-03-07T15-13-35-1.png) |
-| 08 | event-driven-crm | ![event-driven-crm](img-event-driven-crm-2026-03-07T15-13-35-1.png) |
-| 09 | code-sandbox-tutor | ![code-sandbox-tutor](img-code-sandbox-tutor-2026-03-07T15-13-35-1.png) |
-| 10 | multi-agent-research | ![multi-agent-research](img-multi-agent-research-2026-03-07T15-13-35-1.png) |
-| 11 | discord-game-master | ![discord-game-master](img-discord-game-master-2026-03-07T15-13-35-1.png) |
-| 12 | compliance-auditor | ![compliance-auditor](img-compliance-auditor-2026-03-07T15-13-35-1.png) |
+| # | Slug | Prompt Summary | Expected Skills |
+|---|------|---------------|----------------|
+| 01 | doc-qa-agent | PDF Q&A with embeddings, citations, multi-step reasoning | ai-sdk, nextjs, vercel-storage, ai-elements |
+| 02 | customer-support-agent | Durable support agent, escalation, confidence tracking | ai-sdk, workflow, nextjs, ai-elements |
+| 03 | deploy-monitor | Uptime monitoring, AI incident responder, durable investigation | workflow, cron-jobs, observability, ai-sdk |
+| 04 | multi-model-router | Side-by-side model comparison, parallel streaming, cost tracking | ai-gateway, ai-sdk, nextjs, ai-elements |
+| 05 | slack-pr-reviewer | Multi-platform chat bot, PR review, threaded conversations | chat-sdk, ai-sdk, nextjs |
+| 06 | content-pipeline | Durable multi-step content production with image generation | workflow, ai-sdk, satori, nextjs |
+| 07 | feature-rollout | Feature flags, A/B testing, AI experiment analysis | vercel-flags, ai-sdk, nextjs |
+| 08 | event-driven-crm | Event-driven CRM, churn prediction, re-engagement emails | vercel-queues, workflow, ai-sdk, email |
+| 09 | code-sandbox-tutor | AI coding tutor with sandbox execution, auto-fix | vercel-sandbox, ai-sdk, nextjs, ai-elements |
+| 10 | multi-agent-research | Parallel sub-agents, durable orchestration, streaming synthesis | workflow, ai-sdk, ai-elements, nextjs |
+| 11 | discord-game-master | RPG bot, persistent game state, scene illustration generation | chat-sdk, ai-sdk, vercel-storage, nextjs |
+| 12 | compliance-auditor | Scheduled AI audits, durable approval workflow, deploy blocking | workflow, cron-jobs, ai-sdk, vercel-firewall |
 
 ## Complexity Tiers
 
-Use these tiers to select subsets for quick vs. comprehensive runs.
-
 ### Tier 1 — Core AI (30-45 min, `--quick`)
-Scenarios 01, 04, 09 — exercise AI SDK, Gateway, Sandbox, and AI Elements without durable workflows.
+Scenarios 01, 04, 09 — AI SDK, Gateway, Sandbox, AI Elements without durable workflows.
 
 ### Tier 2 — Durable Agents (45-60 min)
-Scenarios 02, 03, 06, 10 — exercise Workflow DevKit, multi-step durability, and agent orchestration.
+Scenarios 02, 03, 06, 10 — Workflow DevKit, multi-step durability, agent orchestration.
 
 ### Tier 3 — Platform Integration (45-60 min)
-Scenarios 05, 07, 08, 11, 12 — exercise Chat SDK, Queues, Flags, Firewall, and cross-platform messaging.
+Scenarios 05, 07, 08, 11, 12 — Chat SDK, Queues, Flags, Firewall, cross-platform messaging.
 
 ### Full Suite
 All 12 scenarios, ~3-4 hours.
-
-## What This Exercises vs. benchmark-testing
-
-| Capability | benchmark-testing | benchmark-agents |
-|-----------|------------------|-----------------|
-| Basic CRUD + auth | Heavy | Light |
-| AI streaming + chat UI | 1 scenario | 8 scenarios |
-| Workflow DevKit (durability) | None | 5 scenarios |
-| AI Gateway (multi-model) | None | 3 scenarios |
-| Chat SDK (multi-platform bots) | None | 3 scenarios |
-| Vercel Queues (event streams) | None | 2 scenarios |
-| Vercel Flags (feature flags) | None | 1 scenario |
-| Vercel Sandbox (code execution) | None | 1 scenario |
-| MCP integration | None | 2 scenarios |
-| Multi-agent orchestration | None | 3 scenarios |
-| Satori (OG images) | None | 1 scenario |
-| Vercel API (programmatic) | None | 1 scenario |
 
 ## Cleanup
 

@@ -13,6 +13,7 @@ metadata:
     - '\byarn\s+dev\b'
     - '\bvite\s*(dev)?\b'
     - '\bvercel\s+dev\b'
+    - '\bastro\s+dev\b'
   importPatterns: []
   promptSignals:
     phrases:

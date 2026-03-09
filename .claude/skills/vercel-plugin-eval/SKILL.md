@@ -9,18 +9,22 @@ Launch real Claude Code sessions with the plugin installed, monitor debug logs i
 
 ## Quick Start
 
+**Always append a timestamp** to directory names so reruns don't overwrite old projects:
+
 ```bash
-# 1. Create test dir & install plugin
-mkdir -p ~/dev/vercel-plugin-testing/<slug>
-cd ~/dev/vercel-plugin-testing/<slug>
+# 1. Create test dir & install plugin (with timestamp)
+TS=$(date +%Y%m%dT%H%M)
+SLUG="my-eval-$TS"
+mkdir -p ~/dev/vercel-plugin-testing/$SLUG
+cd ~/dev/vercel-plugin-testing/$SLUG
 npx add-plugin https://github.com/vercel-labs/vercel-plugin -s project -y
 
 # 2. Launch session via WezTerm
-wezterm cli spawn --cwd /absolute/path/to/<slug> -- /bin/zsh -ic \
-  "unset CLAUDECODE; x '<PROMPT>' --settings .claude/settings.json; exec zsh"
+wezterm cli spawn --cwd /Users/johnlindquist/dev/vercel-plugin-testing/$SLUG -- /bin/zsh -ic \
+  "unset CLAUDECODE; VERCEL_PLUGIN_LOG_LEVEL=debug x '<PROMPT>' --settings .claude/settings.json; exec zsh"
 
-# 3. Find debug log (wait ~20s for session start)
-find ~/.claude/debug -name "*.txt" -mmin -1 -exec grep -l "<slug>" {} +
+# 3. Find debug log (wait ~25s for session start)
+find ~/.claude/debug -name "*.txt" -mmin -2 -exec grep -l "$SLUG" {} +
 ```
 
 ## What to Monitor
