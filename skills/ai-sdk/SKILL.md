@@ -451,9 +451,8 @@ const { image: edited } = await editImage({
 
 ## UI Hooks (React)
 
-**IMPORTANT — Rendering AI responses**: AI chat responses contain markdown. Do NOT render them as raw text — use one of these:
-1. **AI Elements** (recommended): `npx ai-elements` then use `<Message message={message} />` — handles text, tool calls, code blocks, reasoning automatically
-2. **Streamdown**: `npm install streamdown @streamdown/code` for streaming markdown with syntax highlighting
+**IMPORTANT — Rendering AI responses**: AI chat responses contain markdown. Do NOT render them as raw text.
+Use **AI Elements** `<Message>` component: `npx ai-elements` then use `<Message message={message} />` — handles text, tool calls, code blocks, reasoning, and streaming markdown automatically. AI Elements Message component includes streaming-optimized markdown rendering via `MessageMarkdown`.
 Raw `{message.content}` in JSX will display ugly unformatted markdown with visible `**`, `##`, etc.
 
 ### Transport Options

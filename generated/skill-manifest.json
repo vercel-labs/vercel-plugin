@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-09T00:04:36.648Z",
+  "generatedAt": "2026-03-09T00:33:24.670Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -1632,7 +1632,11 @@
       "summary": "",
       "pathPatterns": [
         "components/ai-elements/**",
-        "src/components/ai-elements/**"
+        "src/components/ai-elements/**",
+        "components/**/chat*",
+        "components/**/message*",
+        "src/components/**/chat*",
+        "src/components/**/message*"
       ],
       "bashPatterns": [
         "\\bnpx\\s+ai-elements\\b",
@@ -1640,13 +1644,24 @@
         "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bai-elements\\b",
         "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bai-elements\\b",
         "\\byarn\\s+add\\s+[^\\n]*\\bai-elements\\b",
-        "\\bnpx\\s+shadcn@latest\\s+add\\s+[^\\n]*elements\\.ai-sdk\\.dev\\b"
+        "\\bnpx\\s+shadcn@latest\\s+add\\s+[^\\n]*elements\\.ai-sdk\\.dev\\b",
+        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\b@ai-sdk/react\\b",
+        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\b@ai-sdk/react\\b",
+        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\b@ai-sdk/react\\b",
+        "\\byarn\\s+add\\s+[^\\n]*\\b@ai-sdk/react\\b"
       ],
-      "importPatterns": [],
+      "importPatterns": [
+        "@ai-sdk/react",
+        "@/components/ai-elements/*"
+      ],
       "bodyPath": "skills/ai-elements/SKILL.md",
       "pathRegexSources": [
         "^components\\/ai-elements\\/.*$",
-        "^src\\/components\\/ai-elements\\/.*$"
+        "^src\\/components\\/ai-elements\\/.*$",
+        "^components\\/(?:[^/]+\\/)*chat[^/]*$",
+        "^components\\/(?:[^/]+\\/)*message[^/]*$",
+        "^src\\/components\\/(?:[^/]+\\/)*chat[^/]*$",
+        "^src\\/components\\/(?:[^/]+\\/)*message[^/]*$"
       ],
       "bashRegexSources": [
         "\\bnpx\\s+ai-elements\\b",
@@ -1654,9 +1669,22 @@
         "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bai-elements\\b",
         "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bai-elements\\b",
         "\\byarn\\s+add\\s+[^\\n]*\\bai-elements\\b",
-        "\\bnpx\\s+shadcn@latest\\s+add\\s+[^\\n]*elements\\.ai-sdk\\.dev\\b"
+        "\\bnpx\\s+shadcn@latest\\s+add\\s+[^\\n]*elements\\.ai-sdk\\.dev\\b",
+        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\b@ai-sdk/react\\b",
+        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\b@ai-sdk/react\\b",
+        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\b@ai-sdk/react\\b",
+        "\\byarn\\s+add\\s+[^\\n]*\\b@ai-sdk/react\\b"
       ],
-      "importRegexSources": [],
+      "importRegexSources": [
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]@ai-sdk\\/react(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        },
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]@\\/components\\/ai-elements\\/[^'\"]*(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        }
+      ],
       "promptSignals": {
         "phrases": [
           "ai elements",
@@ -1667,7 +1695,10 @@
           "voice agent",
           "speech input",
           "transcription component",
-          "code editor component"
+          "code editor component",
+          "streaming markdown",
+          "streaming ui",
+          "markdown formatting"
         ],
         "allOf": [
           [
@@ -1677,6 +1708,14 @@
           [
             "conversation",
             "component"
+          ],
+          [
+            "markdown",
+            "stream"
+          ],
+          [
+            "markdown",
+            "render"
           ]
         ],
         "anyOf": [
@@ -1693,11 +1732,17 @@
           "file tree component",
           "terminal component",
           "stack trace component",
-          "test results component"
+          "test results component",
+          "react-markdown",
+          "chat ui",
+          "terminal"
         ],
         "noneOf": [
           "vue",
-          "svelte"
+          "svelte",
+          "readme",
+          "markdown file",
+          "changelog"
         ],
         "minScore": 6
       }
@@ -2216,78 +2261,6 @@
           "flags": "m"
         }
       ]
-    },
-    "streamdown": {
-      "priority": 4,
-      "summary": "",
-      "pathPatterns": [
-        "components/**/streamdown*",
-        "src/components/**/streamdown*"
-      ],
-      "bashPatterns": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bstreamdown\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bstreamdown\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bstreamdown\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bstreamdown\\b"
-      ],
-      "importPatterns": [
-        "streamdown",
-        "streamdown/*",
-        "@streamdown/*"
-      ],
-      "bodyPath": "skills/streamdown/SKILL.md",
-      "pathRegexSources": [
-        "^components\\/(?:[^/]+\\/)*streamdown[^/]*$",
-        "^src\\/components\\/(?:[^/]+\\/)*streamdown[^/]*$"
-      ],
-      "bashRegexSources": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bstreamdown\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bstreamdown\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bstreamdown\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bstreamdown\\b"
-      ],
-      "importRegexSources": [
-        {
-          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]streamdown(?:\\/[^'\"]*)?['\"]",
-          "flags": "m"
-        },
-        {
-          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]streamdown\\/[^'\"]*(?:\\/[^'\"]*)?['\"]",
-          "flags": "m"
-        },
-        {
-          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]@streamdown\\/[^'\"]*(?:\\/[^'\"]*)?['\"]",
-          "flags": "m"
-        }
-      ],
-      "promptSignals": {
-        "phrases": [
-          "streaming markdown",
-          "streamdown",
-          "markdown formatting"
-        ],
-        "allOf": [
-          [
-            "markdown",
-            "stream"
-          ],
-          [
-            "markdown",
-            "render"
-          ]
-        ],
-        "anyOf": [
-          "terminal",
-          "chat ui",
-          "react-markdown"
-        ],
-        "noneOf": [
-          "readme",
-          "markdown file",
-          "changelog"
-        ],
-        "minScore": 6
-      }
     },
     "env-vars": {
       "priority": 7,
