@@ -132,4 +132,34 @@ describe("subagent fresh env dedup behavior", () => {
     expect(code).toBe(0);
     expect(JSON.parse(stdout)).toEqual({});
   });
+
+  test("subagent with agent_id uses isolated scope so parent dedup does not suppress it", async () => {
+    // Lead agent injects skills first
+    const { code: leadCode, stdout: leadStdout } = await runHookEnv(
+      { tool_name: "Read", tool_input: { file_path: slackRoutePath } },
+      { VERCEL_PLUGIN_SEEN_SKILLS: "" },
+    );
+    expect(leadCode).toBe(0);
+    const leadInjected = parseInjectedSkills(leadStdout);
+    expect(leadInjected).toEqual(EXPECTED_SLACK_ROUTE_SKILLS);
+
+    // Subagent with distinct session and no inherited seen-skills
+    // simulates scope isolation — skills re-inject
+    const subSession = `subagent-scope-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const origSession = testSession;
+    testSession = subSession;
+    try {
+      const { code, stdout } = await runHookEnv(
+        { tool_name: "Read", tool_input: { file_path: slackRoutePath } },
+        { VERCEL_PLUGIN_HOOK_DEBUG: "1" },
+        { omitSeenSkillsEnv: true },
+      );
+      expect(code).toBe(0);
+      const subInjected = parseInjectedSkills(stdout);
+      // Subagent gets the same skills despite parent having injected them
+      expect(subInjected).toEqual(EXPECTED_SLACK_ROUTE_SKILLS);
+    } finally {
+      testSession = origSession;
+    }
+  });
 });

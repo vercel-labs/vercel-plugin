@@ -217,6 +217,29 @@ export function mergeSeenSkillStates(...values: string[]): string {
 }
 
 /**
+ * Scope-aware merge of seen-skill states.
+ *
+ * When `scopeId` is `"main"` (lead agent), all sources are merged — env var,
+ * session file, and claim dir contents.
+ *
+ * When `scopeId` is anything else (subagent), the `envValue` is **excluded**
+ * because it carries the parent agent's seen-skills and would incorrectly
+ * suppress skills that the subagent has never seen.
+ */
+export function mergeScopedSeenSkillStates(
+  scopeId: string,
+  envValue: string,
+  fileValue: string,
+  claimValue: string,
+): string {
+  if (scopeId === "main") {
+    return mergeSeenSkillStates(envValue, fileValue, claimValue);
+  }
+  // Subagent: only merge scope-local file + claim state; ignore inherited env
+  return mergeSeenSkillStates(fileValue, claimValue);
+}
+
+/**
  * Return updated comma-delimited string with a new skill appended.
  */
 export function appendSeenSkill(envValue: string | undefined, skill: string): string {

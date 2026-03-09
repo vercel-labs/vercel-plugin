@@ -165,4 +165,59 @@ describe("session timeline subagent integration", () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  test("subagent with isolated session re-injects skills that the lead already deduped via file claims", async () => {
+    const tempDir2 = mkdtempSync(join(tmpdir(), "session-timeline-scope-"));
+    const leadEnvPath = join(tempDir2, "lead.env");
+    const subagentEnvPath = join(tempDir2, "subagent.env");
+
+    try {
+      writeFileSync(leadEnvPath, "", "utf-8");
+      writeFileSync(subagentEnvPath, "", "utf-8");
+
+      // Lead session start
+      const leadSessionStart = await runSessionStart(leadEnvPath);
+      expect(leadSessionStart.code).toBe(0);
+
+      // Lead injects nextjs via page.tsx read
+      const leadRead = await runHookEnv(
+        { tool_name: "Read", tool_input: { file_path: "/Users/me/notion-clone/app/page.tsx" } },
+        { VERCEL_PLUGIN_SEEN_SKILLS: "", VERCEL_PLUGIN_HOOK_DEBUG: "1" },
+      );
+      expect(leadRead.code).toBe(0);
+      const leadInjected = parseInjectedSkills(leadRead.stdout);
+      expect(leadInjected).toContain("nextjs");
+
+      // Lead second read — deduped
+      const leadSecond = await runHookEnv(
+        { tool_name: "Read", tool_input: { file_path: "/Users/me/notion-clone/app/page.tsx" } },
+        { VERCEL_PLUGIN_SEEN_SKILLS: leadInjected.join(",") },
+      );
+      expect(leadSecond.code).toBe(0);
+      expect(JSON.parse(leadSecond.stdout)).toEqual({});
+
+      // Subagent session start
+      const subagentSessionStart = await runSessionStart(subagentEnvPath);
+      expect(subagentSessionStart.code).toBe(0);
+
+      // Subagent with different session ID — scope isolation means nextjs re-injects
+      const subagentSession = `timeline-scope-sub-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const subagentRead = await runHookEnv(
+        { tool_name: "Read", tool_input: { file_path: "/Users/me/notion-clone/app/page.tsx" } },
+        { VERCEL_PLUGIN_SEEN_SKILLS: "", VERCEL_PLUGIN_HOOK_DEBUG: "1" },
+        { sessionId: subagentSession },
+      );
+      expect(subagentRead.code).toBe(0);
+      const subInjected = parseInjectedSkills(subagentRead.stdout);
+      expect(subInjected).toContain("nextjs");
+
+      // Verify it's a fresh file-based dedup scope
+      const subDebug = parseDebugLines(subagentRead.stderr);
+      const subDedup = subDebug.find((line) => line.event === "dedup-strategy");
+      expect(subDedup).toBeDefined();
+      expect(subDedup?.strategy).toBe("file");
+    } finally {
+      rmSync(tempDir2, { recursive: true, force: true });
+    }
+  });
 });

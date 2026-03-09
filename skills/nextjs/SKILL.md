@@ -74,7 +74,7 @@ validate:
     message: 'Single-arg revalidateTag(tag) is deprecated in Next.js 16 — pass a cacheLife profile: revalidateTag(tag, "max")'
     severity: warn
   -
-    pattern: \bcacheHandler\s*:
+    pattern: '\bcacheHandler\s*:'
     message: 'Singular cacheHandler is deprecated in Next.js 16 — use cacheHandlers (plural) with per-type handlers'
     severity: warn
   -

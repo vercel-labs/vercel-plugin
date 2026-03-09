@@ -94,6 +94,28 @@ export function appendAuditLog(record: Record<string, unknown>, hookInputCwd?: s
 }
 
 // ---------------------------------------------------------------------------
+// Agent-scoped dedup helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract a dedup scope identifier from a hook payload.
+ * Returns the `agent_id` field when present (subagent context),
+ * or `"main"` for the lead agent.
+ */
+export function getDedupScopeId(payload: Record<string, unknown> | null | undefined): string {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "agent_id" in payload &&
+    typeof payload.agent_id === "string" &&
+    payload.agent_id.length > 0
+  ) {
+    return payload.agent_id;
+  }
+  return "main";
+}
+
+// ---------------------------------------------------------------------------
 // Session-scoped dedup persistence
 // ---------------------------------------------------------------------------
 
@@ -107,9 +129,18 @@ function dedupSessionIdSegment(sessionId: string): string {
   return createHash("sha256").update(sessionId).digest("hex");
 }
 
-function resolveDedupTempPath(sessionId: string, basename: string): string {
+function dedupScopeIdSegment(scopeId: string): string {
+  if (SAFE_SESSION_ID_RE.test(scopeId)) {
+    return scopeId;
+  }
+
+  return createHash("sha256").update(scopeId).digest("hex");
+}
+
+function resolveDedupTempPath(sessionId: string, basename: string, scopeId?: string): string {
   const tempRoot = resolve(tmpdir());
-  const candidate = resolve(join(tempRoot, `vercel-plugin-${dedupSessionIdSegment(sessionId)}-${basename}`));
+  const scopeSegment = scopeId ? `-${dedupScopeIdSegment(scopeId)}` : "";
+  const candidate = resolve(join(tempRoot, `vercel-plugin-${dedupSessionIdSegment(sessionId)}${scopeSegment}-${basename}`));
   const tempPrefix = tempRoot.endsWith(sep) ? tempRoot : `${tempRoot}${sep}`;
 
   if (!candidate.startsWith(tempPrefix)) {
@@ -119,34 +150,34 @@ function resolveDedupTempPath(sessionId: string, basename: string): string {
   return candidate;
 }
 
-export function dedupFilePath(sessionId: string, kind: string): string {
-  return resolveDedupTempPath(sessionId, `${kind}.txt`);
+export function dedupFilePath(sessionId: string, kind: string, scopeId?: string): string {
+  return resolveDedupTempPath(sessionId, `${kind}.txt`, scopeId);
 }
 
-export function dedupClaimDirPath(sessionId: string, kind: string): string {
-  return resolveDedupTempPath(sessionId, `${kind}.d`);
+export function dedupClaimDirPath(sessionId: string, kind: string, scopeId?: string): string {
+  return resolveDedupTempPath(sessionId, `${kind}.d`, scopeId);
 }
 
-export function readSessionFile(sessionId: string, kind: string): string {
+export function readSessionFile(sessionId: string, kind: string, scopeId?: string): string {
   try {
-    return readFileSync(dedupFilePath(sessionId, kind), "utf-8");
+    return readFileSync(dedupFilePath(sessionId, kind, scopeId), "utf-8");
   } catch (error) {
-    logCaughtError(log, "hook-env:read-session-file-failed", error, { sessionId, kind });
+    logCaughtError(log, "hook-env:read-session-file-failed", error, { sessionId, kind, scopeId });
     return "";
   }
 }
 
-export function writeSessionFile(sessionId: string, kind: string, value: string): void {
+export function writeSessionFile(sessionId: string, kind: string, value: string, scopeId?: string): void {
   try {
-    writeFileSync(dedupFilePath(sessionId, kind), value, "utf-8");
+    writeFileSync(dedupFilePath(sessionId, kind, scopeId), value, "utf-8");
   } catch (error) {
-    logCaughtError(log, "hook-env:write-session-file-failed", error, { sessionId, kind });
+    logCaughtError(log, "hook-env:write-session-file-failed", error, { sessionId, kind, scopeId });
   }
 }
 
-export function tryClaimSessionKey(sessionId: string, kind: string, key: string): boolean {
+export function tryClaimSessionKey(sessionId: string, kind: string, key: string, scopeId?: string): boolean {
   try {
-    const claimDir = dedupClaimDirPath(sessionId, kind);
+    const claimDir = dedupClaimDirPath(sessionId, kind, scopeId);
     mkdirSync(claimDir, { recursive: true });
     const file = join(claimDir, encodeURIComponent(key));
     const fd = openSync(file, "wx");
@@ -165,30 +196,42 @@ export function tryClaimSessionKey(sessionId: string, kind: string, key: string)
   }
 }
 
-export function listSessionKeys(sessionId: string, kind: string): string[] {
+export function listSessionKeys(sessionId: string, kind: string, scopeId?: string): string[] {
   try {
-    return readdirSync(dedupClaimDirPath(sessionId, kind))
+    return readdirSync(dedupClaimDirPath(sessionId, kind, scopeId))
       .map((entry) => decodeURIComponent(entry))
       .filter((entry) => entry !== "")
       .sort();
   } catch (error) {
-    logCaughtError(log, "hook-env:list-session-keys-failed", error, { sessionId, kind });
+    logCaughtError(log, "hook-env:list-session-keys-failed", error, { sessionId, kind, scopeId });
     return [];
   }
 }
 
-export function syncSessionFileFromClaims(sessionId: string, kind: string): string {
-  const value = listSessionKeys(sessionId, kind).join(",");
-  writeSessionFile(sessionId, kind, value);
+export function syncSessionFileFromClaims(sessionId: string, kind: string, scopeId?: string): string {
+  const value = listSessionKeys(sessionId, kind, scopeId).join(",");
+  writeSessionFile(sessionId, kind, value, scopeId);
   return value;
 }
 
-export function removeSessionClaimDir(sessionId: string, kind: string): void {
+export function removeSessionClaimDir(sessionId: string, kind: string, scopeId?: string): void {
   try {
-    rmSync(dedupClaimDirPath(sessionId, kind), { recursive: true, force: true });
+    rmSync(dedupClaimDirPath(sessionId, kind, scopeId), { recursive: true, force: true });
   } catch (error) {
-    logCaughtError(log, "hook-env:remove-session-claim-dir-failed", error, { sessionId, kind });
+    logCaughtError(log, "hook-env:remove-session-claim-dir-failed", error, { sessionId, kind, scopeId });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Profile cache helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the path for the session profile cache file.
+ * Written by session-start-profiler, read by subagent-start-bootstrap.
+ */
+export function profileCachePath(sessionId: string): string {
+  return resolveDedupTempPath(sessionId, "profile.json");
 }
 
 // ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@ import { pluginRoot as resolvePluginRoot, profileCachePath, safeReadFile, safeRe
 import { createLogger, logCaughtError, type Logger } from "./logger.mjs";
 import { compilePromptSignals, matchPromptWithReason, normalizePromptText } from "./prompt-patterns.mjs";
 import { loadSkills } from "./pretooluse-skill-inject.mjs";
-import { buildSkillMap, extractFrontmatter } from "./skill-map-frontmatter.mjs";
+import { extractFrontmatter } from "./skill-map-frontmatter.mjs";
 import { claimPendingLaunch } from "./subagent-state.mjs";
 
 const PLUGIN_ROOT = resolvePluginRoot();
@@ -113,20 +113,22 @@ function budgetBytesForCategory(category: BudgetCategory): number {
   }
 }
 
-function getPromptMatchedSkills(promptText: string): string[] {
+interface PromptMatchedSkill {
+  skill: string;
+  score: number;
+  priority: number;
+}
+
+function getPromptMatchedSkills(promptText: string): PromptMatchedSkill[] {
   const normalizedPrompt = normalizePromptText(promptText);
   if (!normalizedPrompt) return [];
 
   try {
-    const { skills: skillMap, diagnostics } = buildSkillMap(join(PLUGIN_ROOT, "skills"));
-    if (diagnostics.length > 0) {
-      log.debug("subagent-start-bootstrap:prompt-skill-diagnostics", {
-        diagnosticCount: diagnostics.length,
-      });
-    }
+    const loaded = loadSkills(PLUGIN_ROOT, log);
+    if (!loaded) return [];
 
-    const matches: Array<{ skill: string; score: number; priority: number }> = [];
-    for (const [skill, config] of Object.entries(skillMap)) {
+    const matches: PromptMatchedSkill[] = [];
+    for (const [skill, config] of Object.entries(loaded.skillMap)) {
       if (!config.promptSignals) continue;
 
       const compiled = compilePromptSignals(config.promptSignals);
@@ -146,12 +148,11 @@ function getPromptMatchedSkills(promptText: string): string[] {
       return left.skill.localeCompare(right.skill);
     });
 
-    const matchedSkills = matches.map((entry) => entry.skill);
     log.debug("subagent-start-bootstrap:prompt-skill-match", {
       promptLength: promptText.length,
-      matchedSkills,
+      matchedSkills: matches.map(({ skill, score }) => ({ skill, score })),
     });
-    return matchedSkills;
+    return matches;
   } catch (error) {
     logCaughtError(log, "subagent-start-bootstrap:prompt-skill-match-failed", error, {
       promptLength: promptText.length,
@@ -160,9 +161,52 @@ function getPromptMatchedSkills(promptText: string): string[] {
   }
 }
 
-function mergeLikelySkills(likelySkills: string[], promptMatchedSkills: string[]): string[] {
+function mergeLikelySkills(likelySkills: string[], promptMatchedSkills: PromptMatchedSkill[]): string[] {
   if (promptMatchedSkills.length === 0) return likelySkills;
-  return [...new Set([...promptMatchedSkills, ...likelySkills])];
+  const promptSkillNames = promptMatchedSkills.map((entry) => entry.skill);
+  return [...new Set([...promptSkillNames, ...likelySkills])];
+}
+
+function resolveLikelySkillsFromPendingLaunch(
+  sessionId: string | undefined,
+  agentType: string,
+  likelySkills: string[],
+): string[] {
+  if (!sessionId) return likelySkills;
+
+  try {
+    const pendingLaunch = claimPendingLaunch(sessionId, agentType);
+    if (!pendingLaunch) {
+      log.debug("subagent-start-bootstrap:pending-launch", {
+        sessionId,
+        agentType,
+        claimedLaunch: false,
+        likelySkills,
+      });
+      return likelySkills;
+    }
+
+    const promptText = `${pendingLaunch.description} ${pendingLaunch.prompt}`.trim();
+    const promptMatchedSkills = getPromptMatchedSkills(promptText);
+    const effectiveLikelySkills = mergeLikelySkills(likelySkills, promptMatchedSkills);
+
+    log.debug("subagent-start-bootstrap:pending-launch", {
+      sessionId,
+      agentType,
+      claimedLaunch: true,
+      promptMatchedSkills: promptMatchedSkills.map(({ skill, score }) => ({ skill, score })),
+      likelySkills: effectiveLikelySkills,
+    });
+
+    return effectiveLikelySkills;
+  } catch (error) {
+    logCaughtError(log, "subagent-start-bootstrap:pending-launch-route-failed", error, {
+      sessionId,
+      agentType,
+      likelySkills,
+    });
+    return likelySkills;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -292,22 +336,12 @@ function main(): void {
 
   log.debug("subagent-start-bootstrap", { agentId, agentType, sessionId });
 
-  const pendingLaunch = sessionId ? claimPendingLaunch(sessionId, agentType) : null;
-  const likelySkills = getLikelySkills(sessionId);
-  const launchPromptSkills = pendingLaunch
-    ? getPromptMatchedSkills(`${pendingLaunch.description} ${pendingLaunch.prompt}`.trim())
-    : [];
-  const effectiveLikelySkills = pendingLaunch
-    ? mergeLikelySkills(likelySkills, launchPromptSkills)
-    : likelySkills;
-
-  log.debug("subagent-start-bootstrap:pending-launch", {
+  const profilerLikelySkills = getLikelySkills(sessionId);
+  const likelySkills = resolveLikelySkillsFromPendingLaunch(
     sessionId,
     agentType,
-    claimedLaunch: pendingLaunch !== null,
-    launchPromptSkills,
-    likelySkills: effectiveLikelySkills,
-  });
+    profilerLikelySkills,
+  );
 
   const category = resolveBudgetCategory(agentType);
   const maxBytes = budgetBytesForCategory(category);
@@ -315,13 +349,13 @@ function main(): void {
   let context: string;
   switch (category) {
     case "minimal":
-      context = buildMinimalContext(agentType, effectiveLikelySkills);
+      context = buildMinimalContext(agentType, likelySkills);
       break;
     case "light":
-      context = buildLightContext(agentType, effectiveLikelySkills, maxBytes);
+      context = buildLightContext(agentType, likelySkills, maxBytes);
       break;
     case "standard":
-      context = buildStandardContext(agentType, effectiveLikelySkills, maxBytes);
+      context = buildStandardContext(agentType, likelySkills, maxBytes);
       break;
   }
 
@@ -351,5 +385,12 @@ if (isEntrypoint) {
 }
 
 // Exports for testing
-export { parseInput, buildMinimalContext, buildLightContext, buildStandardContext, getLikelySkills, getPromptMatchedSkills, mergeLikelySkills, main };
+export {
+  parseInput,
+  buildMinimalContext,
+  buildLightContext,
+  buildStandardContext,
+  getLikelySkills,
+  main,
+};
 export type { SubagentStartInput, ProfileCache, BudgetCategory };

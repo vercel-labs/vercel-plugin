@@ -16,12 +16,13 @@ import {
   constants as fsConstants,
   existsSync,
   readdirSync,
+  writeFileSync,
   type Dirent,
 } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { requireEnvFile, safeReadJson } from "./hook-env.mjs";
+import { profileCachePath, requireEnvFile, safeReadJson } from "./hook-env.mjs";
 import { createLogger, logCaughtError, type Logger } from "./logger.mjs";
 
 // ---------------------------------------------------------------------------
@@ -479,8 +480,27 @@ export function checkAgentBrowser(): boolean {
 // Main entry point — profile the project and write env vars.
 // ---------------------------------------------------------------------------
 
+interface SessionStartInput {
+  session_id?: string;
+  [key: string]: unknown;
+}
+
+function parseSessionStartInput(): SessionStartInput | null {
+  try {
+    const raw = require("node:fs").readFileSync(0, "utf8");
+    if (!raw.trim()) return null;
+    return JSON.parse(raw) as SessionStartInput;
+  } catch {
+    return null;
+  }
+}
+
 function main(): void {
   const envFile: string = requireEnvFile();
+
+  // Parse stdin for session_id (used for profile cache path)
+  const hookInput = parseSessionStartInput();
+  const sessionId = hookInput?.session_id ?? null;
 
   // Use CLAUDE_PROJECT_ROOT if available, otherwise cwd
   const projectRoot: string = process.env.CLAUDE_PROJECT_ROOT || process.cwd();
@@ -557,6 +577,28 @@ function main(): void {
       resourceHintCount: setupSignals.resourceHints.length,
       setupMode: setupSignals.setupMode,
     });
+  }
+
+  // Write profile cache so SubagentStart hooks can read it without re-profiling
+  if (sessionId) {
+    try {
+      const cache = {
+        projectRoot,
+        likelySkills,
+        greenfield: greenfield !== null,
+        bootstrapHints: setupSignals.bootstrapHints,
+        resourceHints: setupSignals.resourceHints,
+        setupMode: setupSignals.setupMode,
+        agentBrowserAvailable,
+        timestamp: new Date().toISOString(),
+      };
+      writeFileSync(profileCachePath(sessionId), JSON.stringify(cache), "utf-8");
+    } catch (error) {
+      logCaughtError(log, "session-start-profiler:write-profile-cache-failed", error, {
+        sessionId,
+        projectRoot,
+      });
+    }
   }
 
   process.exit(0);
