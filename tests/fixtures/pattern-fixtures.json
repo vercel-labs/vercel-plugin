@@ -14,10 +14,10 @@
       "expectedSkills": ["nextjs", "turbopack"]
     },
     {
-      "description": "middleware.ts triggers routing-middleware and auth",
+      "description": "middleware.ts triggers routing-middleware, auth, and investigation-mode",
       "type": "path",
       "input": "middleware.ts",
-      "expectedSkills": ["routing-middleware", "auth"]
+      "expectedSkills": ["routing-middleware", "auth", "investigation-mode"]
     },
     {
       "description": ".env.local triggers env-vars",
@@ -38,10 +38,10 @@
       "expectedSkills": ["turborepo"]
     },
     {
-      "description": "instrumentation.ts triggers observability",
+      "description": "instrumentation.ts triggers observability and investigation-mode",
       "type": "path",
       "input": "instrumentation.ts",
-      "expectedSkills": ["observability"]
+      "expectedSkills": ["observability", "investigation-mode"]
     },
     {
       "description": "components.json triggers shadcn",

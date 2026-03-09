@@ -35,8 +35,8 @@ import { loadSkills, injectSkills } from "./pretooluse-skill-inject.mjs";
 import type { LoadedSkills } from "./pretooluse-skill-inject.mjs";
 import { parseSeenSkills, appendSeenSkill, mergeSeenSkillStates, rankEntries } from "./patterns.mjs";
 import type { CompiledSkillEntry } from "./patterns.mjs";
-import { normalizePromptText, compilePromptSignals, matchPromptWithReason } from "./prompt-patterns.mjs";
-import type { CompiledPromptSignals } from "./prompt-patterns.mjs";
+import { normalizePromptText, compilePromptSignals, matchPromptWithReason, classifyTroubleshootingIntent } from "./prompt-patterns.mjs";
+import type { CompiledPromptSignals, TroubleshootingIntentResult } from "./prompt-patterns.mjs";
 import { analyzePrompt } from "./prompt-analysis.mjs";
 import type { PromptAnalysisReport } from "./prompt-analysis.mjs";
 import { createLogger, logDecision } from "./logger.mjs";
@@ -483,6 +483,41 @@ export function run(): string {
     budgetBytes: report.budgetBytes,
     timingMs: report.timingMs,
   });
+
+  // Stage 3b: troubleshooting intent routing
+  const intentResult = classifyTroubleshootingIntent(normalizedPrompt);
+  if (intentResult.intent) {
+    // Ensure intent-routed skills appear in selectedSkills
+    for (const skill of intentResult.skills) {
+      if (
+        !report.selectedSkills.includes(skill) &&
+        report.selectedSkills.length < MAX_SKILLS
+      ) {
+        report.selectedSkills.push(skill);
+      }
+    }
+    logDecision(log, {
+      hook: "UserPromptSubmit",
+      event: "troubleshooting_intent_routed",
+      intent: intentResult.intent,
+      skills: intentResult.skills,
+      reason: intentResult.reason,
+      durationMs: log.active ? log.elapsed() : undefined,
+    });
+  } else if (intentResult.reason === "suppressed by test framework mention") {
+    // Suppress all verification-family skills
+    const suppressSet = new Set(["verification", "investigation-mode", "agent-browser-verify"]);
+    const before = report.selectedSkills.length;
+    report.selectedSkills = report.selectedSkills.filter((s: string) => !suppressSet.has(s));
+    if (report.selectedSkills.length < before) {
+      logDecision(log, {
+        hook: "UserPromptSubmit",
+        event: "verification_family_suppressed",
+        reason: intentResult.reason,
+        durationMs: log.active ? log.elapsed() : undefined,
+      });
+    }
+  }
 
   // Detect investigation/debugging intent from matched skills
   const investigationSkills = ["investigation-mode", "observability", "workflow"];

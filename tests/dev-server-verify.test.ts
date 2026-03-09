@@ -285,6 +285,68 @@ describe("Dedup bypass integration", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Companion skill (verification) injection behavior
+// ---------------------------------------------------------------------------
+
+describe("Verification companion injection", () => {
+  test("dev server start co-injects verification skill alongside agent-browser-verify", async () => {
+    const { parsed } = await runHook({
+      tool_name: "Bash",
+      tool_input: { command: "npm run dev" },
+    });
+
+    expect(parsed).not.toBeNull();
+    expect(parsed.hookSpecificOutput).toBeDefined();
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    expect(ctx).toContain("skill:agent-browser-verify");
+    expect(ctx).toContain("skill:verification");
+  });
+
+  test("verification injects as summary-only on second dev server start (dedup bypass)", async () => {
+    const { parsed } = await runHook(
+      {
+        tool_name: "Bash",
+        tool_input: { command: "npm run dev" },
+      },
+      {
+        VERCEL_PLUGIN_SEEN_SKILLS: "verification",
+        VERCEL_PLUGIN_DEV_VERIFY_COUNT: "0",
+      },
+    );
+
+    expect(parsed).not.toBeNull();
+    expect(parsed.hookSpecificOutput).toBeDefined();
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    // Verification should still appear but in summary mode
+    expect(ctx).toContain("skill:verification");
+    expect(ctx).toContain("mode:summary");
+  });
+
+  test("skillInjection metadata includes reasons map and verificationId", async () => {
+    const { parsed } = await runHook({
+      tool_name: "Bash",
+      tool_input: { command: "npm run dev" },
+    });
+
+    expect(parsed).not.toBeNull();
+    const injection = extractSkillInjection(parsed.hookSpecificOutput);
+    expect(injection).toBeDefined();
+    // verificationId should be a UUID
+    expect(injection.verificationId).toBeDefined();
+    expect(injection.verificationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    // reasons map should have entries for injected skills
+    expect(injection.reasons).toBeDefined();
+    expect(injection.reasons["agent-browser-verify"]).toBeDefined();
+    expect(injection.reasons["agent-browser-verify"].trigger).toBe("dev-server-start");
+    expect(injection.reasons["agent-browser-verify"].reasonCode).toBe("bash-dev-server-pattern");
+    expect(injection.reasons["verification"]).toBeDefined();
+    expect(injection.reasons["verification"].trigger).toBe("dev-server-companion");
+  });
+});
+
 describe("SessionStart profiler - agent-browser check", () => {
   test("checkAgentBrowser function is exported from profiler", async () => {
     // Import the source module to test the function directly

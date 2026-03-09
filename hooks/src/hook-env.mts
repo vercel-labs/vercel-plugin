@@ -6,7 +6,7 @@
  * try/catch boilerplate.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   appendFileSync,
   closeSync,
@@ -189,6 +189,18 @@ export function removeSessionClaimDir(sessionId: string, kind: string): void {
   } catch (error) {
     logCaughtError(log, "hook-env:remove-session-claim-dir-failed", error, { sessionId, kind });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Verification ID
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a unique verification ID (UUIDv4) for traceability across
+ * dev-server verification injection events.
+ */
+export function generateVerificationId(): string {
+  return randomUUID();
 }
 
 // ---------------------------------------------------------------------------

@@ -156,9 +156,11 @@
           "toolTarget": "/Users/me/project/middleware.ts",
           "matchedSkills": [
             "routing-middleware",
-            "auth"
+            "auth",
+            "investigation-mode"
           ],
           "injectedSkills": [
+            "investigation-mode",
             "auth",
             "routing-middleware"
           ],

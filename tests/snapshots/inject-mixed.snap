@@ -17,5 +17,27 @@
   ],
   "summaryOnly": [],
   "droppedByCap": [],
-  "droppedByBudget": []
+  "droppedByBudget": [],
+  "reasons": {
+    "vercel-functions": {
+      "trigger": "basename",
+      "reasonCode": "pattern-match"
+    },
+    "cron-jobs": {
+      "trigger": "basename",
+      "reasonCode": "pattern-match"
+    },
+    "deployments-cicd": {
+      "trigger": "basename",
+      "reasonCode": "pattern-match"
+    },
+    "routing-middleware": {
+      "trigger": "basename",
+      "reasonCode": "pattern-match"
+    },
+    "vercel-cli": {
+      "trigger": "basename",
+      "reasonCode": "pattern-match"
+    }
+  }
 }

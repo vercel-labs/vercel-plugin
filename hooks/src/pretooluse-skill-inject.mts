@@ -23,6 +23,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   appendAuditLog,
+  generateVerificationId,
   listSessionKeys,
   pluginRoot as resolvePluginRoot,
   readSessionFile,
@@ -808,6 +809,8 @@ export interface InjectOptions {
   maxSkills?: number;
   skillMap?: Record<string, SkillConfig>;
   logger?: Logger;
+  /** Skills that must be injected as summary-only (e.g. companion skills on dedup bypass). */
+  forceSummarySkills?: Set<string>;
 }
 
 export interface InjectResult {
@@ -825,7 +828,7 @@ export interface InjectResult {
  * When a full body would exceed the budget but a summary exists, the summary is injected instead.
  */
 export function injectSkills(rankedSkills: string[], options?: InjectOptions): InjectResult {
-  const { pluginRoot, hasEnvDedup, sessionId, injectedSkills, budgetBytes, maxSkills, skillMap, logger } = options || {};
+  const { pluginRoot, hasEnvDedup, sessionId, injectedSkills, budgetBytes, maxSkills, skillMap, logger, forceSummarySkills } = options || {};
   const root = pluginRoot || PLUGIN_ROOT;
   const l = logger || log;
   const budget = budgetBytes ?? getInjectionBudget();
@@ -906,6 +909,33 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
       continue;
     }
 
+    // Force summary-only for dedup-bypassed companion skills
+    if (forceSummarySkills?.has(skill)) {
+      const summary = skillMap?.[skill]?.summary;
+      if (summary) {
+        const summaryWrapped = `<!-- skill:${skill} mode:summary -->\n${summary}\n<!-- /skill:${skill} -->`;
+        const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
+        if (usedBytes + summaryByteLen <= budget || loaded.length === 0) {
+          if (!canInjectSkill(skill)) {
+            continue;
+          }
+          parts.push(summaryWrapped);
+          loaded.push(skill);
+          summaryOnly.push(skill);
+          usedBytes += summaryByteLen;
+          if (injectedSkills) injectedSkills.add(skill);
+          if (hasEnvDedup && !sessionId) {
+            process.env.VERCEL_PLUGIN_SEEN_SKILLS = appendSeenSkill(
+              process.env.VERCEL_PLUGIN_SEEN_SKILLS, skill
+            );
+          }
+          l.debug("force-summary-companion", { skill, fullBytes: byteLen, summaryBytes: summaryByteLen });
+          continue;
+        }
+      }
+      // No summary available — fall through to full body
+    }
+
     if (!canInjectSkill(skill)) {
       continue;
     }
@@ -943,6 +973,11 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
 // Pipeline stage 6: formatOutput
 // ---------------------------------------------------------------------------
 
+export interface SkillInjectionReason {
+  trigger: string;
+  reasonCode: string;
+}
+
 export interface FormatOutputParams {
   parts: string[];
   matched: Set<string>;
@@ -953,6 +988,8 @@ export interface FormatOutputParams {
   toolName: string;
   toolTarget: string;
   matchReasons?: Record<string, { pattern: string; matchType: string }>;
+  reasons?: Record<string, SkillInjectionReason>;
+  verificationId?: string;
 }
 
 /**
@@ -986,12 +1023,12 @@ function encodeJsonForHtmlComment(value: unknown): string {
   return JSON.stringify(value).replace(/-->/g, "--\\u003E");
 }
 
-export function formatOutput({ parts, matched, injectedSkills, summaryOnly, droppedByCap, droppedByBudget, toolName, toolTarget, matchReasons }: FormatOutputParams): string {
+export function formatOutput({ parts, matched, injectedSkills, summaryOnly, droppedByCap, droppedByBudget, toolName, toolTarget, matchReasons, reasons, verificationId }: FormatOutputParams): string {
   if (parts.length === 0) {
     return "{}";
   }
 
-  const skillInjection = {
+  const skillInjection: Record<string, unknown> = {
     version: SKILL_INJECTION_VERSION,
     toolName,
     toolTarget: toolName === "Bash" ? redactCommand(toolTarget) : toolTarget,
@@ -1001,6 +1038,12 @@ export function formatOutput({ parts, matched, injectedSkills, summaryOnly, drop
     droppedByCap,
     droppedByBudget: droppedByBudget || [],
   };
+  if (reasons && Object.keys(reasons).length > 0) {
+    skillInjection.reasons = reasons;
+  }
+  if (verificationId) {
+    skillInjection.verificationId = verificationId;
+  }
 
   // Embed injection metadata as an HTML comment inside additionalContext
   // (Claude Code validates hookSpecificOutput with a strict schema —
@@ -1146,6 +1189,7 @@ function run(): string {
   }
 
   // Stage 4.6: Dev-server verification — synthetic inject or graceful degradation
+  const forceSummarySkills = new Set<string>();
   let devServerVerifyInjected = false;
   let devServerUnavailableWarning = false;
   if (devServerVerify.unavailable) {
@@ -1203,21 +1247,13 @@ function run(): string {
   if (devServerVerify.triggered && !devServerVerify.unavailable) {
     for (const companion of DEV_SERVER_COMPANION_SKILLS) {
       if (rankedSkills.includes(companion)) continue; // already present via pattern match
-      if (!dedupOff && injectedSkills.has(companion)) {
+      const companionAlreadySeen = !dedupOff && injectedSkills.has(companion);
+      if (companionAlreadySeen) {
         // Bypass dedup for companions — same as agent-browser-verify iteration-based bypass
-        log.debug("dev-server-companion-dedup-bypass", { skill: companion });
+        // But inject as summary-only on subsequent injections
+        forceSummarySkills.add(companion);
+        log.debug("dev-server-companion-dedup-bypass", { skill: companion, mode: "summary" });
       }
-      const companionTemplate = compiledSkills.find((e) => e.skill === companion);
-      const _companionEntry: CompiledSkillEntry = companionTemplate
-        ? { ...companionTemplate, effectivePriority: DEV_SERVER_VERIFY_PRIORITY_BOOST }
-        : {
-            skill: companion,
-            priority: 0,
-            compiledPaths: [],
-            compiledBash: [],
-            compiledImports: [],
-            effectivePriority: DEV_SERVER_VERIFY_PRIORITY_BOOST,
-          };
       // Insert after agent-browser-verify (or at front if verify not present)
       const verifyIdx = rankedSkills.indexOf(DEV_SERVER_VERIFY_SKILL);
       if (verifyIdx !== -1) {
@@ -1242,20 +1278,11 @@ function run(): string {
     }
     for (const companion of DEV_SERVER_COMPANION_SKILLS) {
       if (rankedSkills.includes(companion)) continue; // already present via pattern match
-      if (!dedupOff && injectedSkills.has(companion)) {
-        log.debug("dev-server-companion-loop-guard-dedup-bypass", { skill: companion });
+      const companionAlreadySeen = !dedupOff && injectedSkills.has(companion);
+      if (companionAlreadySeen) {
+        forceSummarySkills.add(companion);
+        log.debug("dev-server-companion-loop-guard-dedup-bypass", { skill: companion, mode: "summary" });
       }
-      const companionTemplate = compiledSkills.find((e) => e.skill === companion);
-      const _companionEntry: CompiledSkillEntry = companionTemplate
-        ? { ...companionTemplate, effectivePriority: DEV_SERVER_VERIFY_PRIORITY_BOOST }
-        : {
-            skill: companion,
-            priority: 0,
-            compiledPaths: [],
-            compiledBash: [],
-            compiledImports: [],
-            effectivePriority: DEV_SERVER_VERIFY_PRIORITY_BOOST,
-          };
       rankedSkills.unshift(companion);
       matched.add(companion);
       log.debug("dev-server-companion-inject-past-guard", { skill: companion, iterationCount: devServerVerify.iterationCount, max: DEV_SERVER_VERIFY_MAX_ITERATIONS });
@@ -1311,6 +1338,7 @@ function run(): string {
     injectedSkills,
     skillMap: skills.skillMap,
     logger: log,
+    forceSummarySkills: forceSummarySkills.size > 0 ? forceSummarySkills : undefined,
   });
   if (log.active) timing.skill_read = Math.round(log.now() - tSkillRead);
 
@@ -1376,8 +1404,44 @@ function run(): string {
     boostsApplied: profilerBoosted,
   }, log.active ? timing : null);
 
+  // Stage 5.5: Build reasons map and verificationId for metadata traceability
+  const reasons: Record<string, SkillInjectionReason> = {};
+  let verificationId: string | undefined;
+  if (devServerVerify.triggered || devServerVerify.loopGuardHit) {
+    verificationId = generateVerificationId();
+    if (loaded.includes(DEV_SERVER_VERIFY_SKILL)) {
+      reasons[DEV_SERVER_VERIFY_SKILL] = {
+        trigger: "dev-server-start",
+        reasonCode: "bash-dev-server-pattern",
+      };
+    }
+    for (const companion of DEV_SERVER_COMPANION_SKILLS) {
+      if (loaded.includes(companion) || (summaryOnly && summaryOnly.includes(companion))) {
+        reasons[companion] = {
+          trigger: "dev-server-companion",
+          reasonCode: devServerVerify.loopGuardHit ? "loop-guard-companion" : "dev-server-co-inject",
+        };
+      }
+    }
+  }
+  if (tsxReview.triggered && loaded.includes(TSX_REVIEW_SKILL)) {
+    reasons[TSX_REVIEW_SKILL] = {
+      trigger: "tsx-edit-threshold",
+      reasonCode: "tsx-review-trigger",
+    };
+  }
+  // Add pattern-match reasons for remaining skills
+  for (const skill of loaded) {
+    if (!reasons[skill] && matchReasons?.[skill]) {
+      reasons[skill] = {
+        trigger: matchReasons[skill].matchType,
+        reasonCode: "pattern-match",
+      };
+    }
+  }
+
   // Stage 6: formatOutput
-  const result = formatOutput({ parts, matched, injectedSkills: loaded, summaryOnly, droppedByCap, droppedByBudget, toolName, toolTarget, matchReasons });
+  const result = formatOutput({ parts, matched, injectedSkills: loaded, summaryOnly, droppedByCap, droppedByBudget, toolName, toolTarget, matchReasons, reasons, verificationId });
 
   if (loaded.length > 0) {
     appendAuditLog({
