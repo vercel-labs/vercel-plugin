@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-09T19:15:49.995Z",
+  "generatedAt": "2026-03-09T19:41:08.509Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -696,14 +696,14 @@
       "importPatterns": [],
       "bodyPath": "skills/investigation-mode/SKILL.md",
       "pathRegexSources": [
-        "^(?:[^/]+\\/)*middleware\\.\\{ts,js,mjs\\}$",
-        "^(?:[^/]+\\/)*lib\\/logger\\.\\{ts,js\\}$",
-        "^(?:[^/]+\\/)*utils\\/logger\\.\\{ts,js\\}$",
-        "^(?:[^/]+\\/)*instrumentation\\.\\{ts,js\\}$",
+        "^(?:[^/]+\\/)*middleware\\.(?:ts|js|mjs)$",
+        "^(?:[^/]+\\/)*lib\\/logger\\.(?:ts|js)$",
+        "^(?:[^/]+\\/)*utils\\/logger\\.(?:ts|js)$",
+        "^(?:[^/]+\\/)*instrumentation\\.(?:ts|js)$",
         "^(?:[^/]+\\/)*[^/]*\\.log$",
-        "^(?:[^/]+\\/)*error\\.\\{tsx,ts,js,jsx\\}$",
-        "^(?:[^/]+\\/)*global-error\\.\\{tsx,ts,js,jsx\\}$",
-        "^(?:[^/]+\\/)*not-found\\.\\{tsx,ts,js,jsx\\}$"
+        "^(?:[^/]+\\/)*error\\.(?:tsx|ts|js|jsx)$",
+        "^(?:[^/]+\\/)*global-error\\.(?:tsx|ts|js|jsx)$",
+        "^(?:[^/]+\\/)*not-found\\.(?:tsx|ts|js|jsx)$"
       ],
       "bashRegexSources": [
         "\\bvercel\\s+logs?\\b",
