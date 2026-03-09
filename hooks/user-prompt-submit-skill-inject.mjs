@@ -13,7 +13,7 @@ import {
 } from "./hook-env.mjs";
 import { loadSkills, injectSkills } from "./pretooluse-skill-inject.mjs";
 import { parseSeenSkills, mergeSeenSkillStates } from "./patterns.mjs";
-import { normalizePromptText, compilePromptSignals, matchPromptWithReason } from "./prompt-patterns.mjs";
+import { normalizePromptText, compilePromptSignals, matchPromptWithReason, classifyTroubleshootingIntent } from "./prompt-patterns.mjs";
 import { analyzePrompt } from "./prompt-analysis.mjs";
 import { createLogger, logDecision } from "./logger.mjs";
 const MAX_SKILLS = 2;
@@ -277,6 +277,34 @@ function run() {
     budgetBytes: report.budgetBytes,
     timingMs: report.timingMs
   });
+  const intentResult = classifyTroubleshootingIntent(normalizedPrompt);
+  if (intentResult.intent) {
+    for (const skill of intentResult.skills) {
+      if (!report.selectedSkills.includes(skill) && report.selectedSkills.length < MAX_SKILLS) {
+        report.selectedSkills.push(skill);
+      }
+    }
+    logDecision(log, {
+      hook: "UserPromptSubmit",
+      event: "troubleshooting_intent_routed",
+      intent: intentResult.intent,
+      skills: intentResult.skills,
+      reason: intentResult.reason,
+      durationMs: log.active ? log.elapsed() : void 0
+    });
+  } else if (intentResult.reason === "suppressed by test framework mention") {
+    const suppressSet = /* @__PURE__ */ new Set(["verification", "investigation-mode", "agent-browser-verify"]);
+    const before = report.selectedSkills.length;
+    report.selectedSkills = report.selectedSkills.filter((s) => !suppressSet.has(s));
+    if (report.selectedSkills.length < before) {
+      logDecision(log, {
+        hook: "UserPromptSubmit",
+        event: "verification_family_suppressed",
+        reason: intentResult.reason,
+        durationMs: log.active ? log.elapsed() : void 0
+      });
+    }
+  }
   const investigationSkills = ["investigation-mode", "observability", "workflow"];
   const matchedInvestigation = Object.entries(report.perSkillResults).filter(([skill, r]) => r.matched && investigationSkills.includes(skill));
   if (matchedInvestigation.length > 0) {

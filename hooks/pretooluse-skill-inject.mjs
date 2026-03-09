@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   appendAuditLog,
+  generateVerificationId,
   listSessionKeys,
   pluginRoot as resolvePluginRoot,
   readSessionFile,
@@ -496,7 +497,7 @@ function deduplicateSkills({ matchedEntries, matched, toolName, toolInput, injec
   return { newEntries, rankedSkills, vercelJsonRouting, profilerBoosted, setupModeRouting };
 }
 function injectSkills(rankedSkills, options) {
-  const { pluginRoot, hasEnvDedup, sessionId, injectedSkills, budgetBytes, maxSkills, skillMap, logger } = options || {};
+  const { pluginRoot, hasEnvDedup, sessionId, injectedSkills, budgetBytes, maxSkills, skillMap, logger, forceSummarySkills } = options || {};
   const root = pluginRoot || PLUGIN_ROOT;
   const l = logger || log;
   const budget = budgetBytes ?? getInjectionBudget();
@@ -569,6 +570,33 @@ ${summary}
       logDecision(l, { hook: "PreToolUse", event: "budget_exhausted", skill, reason: "over_budget", budgetBytes: budget, usedBytes, skillBytes: byteLen });
       continue;
     }
+    if (forceSummarySkills?.has(skill)) {
+      const summary = skillMap?.[skill]?.summary;
+      if (summary) {
+        const summaryWrapped = `<!-- skill:${skill} mode:summary -->
+${summary}
+<!-- /skill:${skill} -->`;
+        const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
+        if (usedBytes + summaryByteLen <= budget || loaded.length === 0) {
+          if (!canInjectSkill(skill)) {
+            continue;
+          }
+          parts.push(summaryWrapped);
+          loaded.push(skill);
+          summaryOnly.push(skill);
+          usedBytes += summaryByteLen;
+          if (injectedSkills) injectedSkills.add(skill);
+          if (hasEnvDedup && !sessionId) {
+            process.env.VERCEL_PLUGIN_SEEN_SKILLS = appendSeenSkill(
+              process.env.VERCEL_PLUGIN_SEEN_SKILLS,
+              skill
+            );
+          }
+          l.debug("force-summary-companion", { skill, fullBytes: byteLen, summaryBytes: summaryByteLen });
+          continue;
+        }
+      }
+    }
     if (!canInjectSkill(skill)) {
       continue;
     }
@@ -615,7 +643,7 @@ function buildBanner(injectedSkills, toolName, toolTarget, matchReasons) {
 function encodeJsonForHtmlComment(value) {
   return JSON.stringify(value).replace(/-->/g, "--\\u003E");
 }
-function formatOutput({ parts, matched, injectedSkills, summaryOnly, droppedByCap, droppedByBudget, toolName, toolTarget, matchReasons }) {
+function formatOutput({ parts, matched, injectedSkills, summaryOnly, droppedByCap, droppedByBudget, toolName, toolTarget, matchReasons, reasons, verificationId }) {
   if (parts.length === 0) {
     return "{}";
   }
@@ -629,6 +657,12 @@ function formatOutput({ parts, matched, injectedSkills, summaryOnly, droppedByCa
     droppedByCap,
     droppedByBudget: droppedByBudget || []
   };
+  if (reasons && Object.keys(reasons).length > 0) {
+    skillInjection.reasons = reasons;
+  }
+  if (verificationId) {
+    skillInjection.verificationId = verificationId;
+  }
   const metaComment = `<!-- skillInjection: ${encodeJsonForHtmlComment(skillInjection)} -->`;
   const banner = buildBanner(injectedSkills, toolName, toolTarget, matchReasons);
   const output = {
@@ -726,6 +760,7 @@ function run() {
   } else if (tsxReview.triggered && rankedSkills.includes(TSX_REVIEW_SKILL)) {
     tsxReviewInjected = true;
   }
+  const forceSummarySkills = /* @__PURE__ */ new Set();
   let devServerVerifyInjected = false;
   let devServerUnavailableWarning = false;
   if (devServerVerify.unavailable) {
@@ -775,18 +810,11 @@ function run() {
   if (devServerVerify.triggered && !devServerVerify.unavailable) {
     for (const companion of DEV_SERVER_COMPANION_SKILLS) {
       if (rankedSkills.includes(companion)) continue;
-      if (!dedupOff && injectedSkills.has(companion)) {
-        log.debug("dev-server-companion-dedup-bypass", { skill: companion });
+      const companionAlreadySeen = !dedupOff && injectedSkills.has(companion);
+      if (companionAlreadySeen) {
+        forceSummarySkills.add(companion);
+        log.debug("dev-server-companion-dedup-bypass", { skill: companion, mode: "summary" });
       }
-      const companionTemplate = compiledSkills.find((e) => e.skill === companion);
-      const _companionEntry = companionTemplate ? { ...companionTemplate, effectivePriority: DEV_SERVER_VERIFY_PRIORITY_BOOST } : {
-        skill: companion,
-        priority: 0,
-        compiledPaths: [],
-        compiledBash: [],
-        compiledImports: [],
-        effectivePriority: DEV_SERVER_VERIFY_PRIORITY_BOOST
-      };
       const verifyIdx = rankedSkills.indexOf(DEV_SERVER_VERIFY_SKILL);
       if (verifyIdx !== -1) {
         rankedSkills.splice(verifyIdx + 1, 0, companion);
@@ -805,18 +833,11 @@ function run() {
     }
     for (const companion of DEV_SERVER_COMPANION_SKILLS) {
       if (rankedSkills.includes(companion)) continue;
-      if (!dedupOff && injectedSkills.has(companion)) {
-        log.debug("dev-server-companion-loop-guard-dedup-bypass", { skill: companion });
+      const companionAlreadySeen = !dedupOff && injectedSkills.has(companion);
+      if (companionAlreadySeen) {
+        forceSummarySkills.add(companion);
+        log.debug("dev-server-companion-loop-guard-dedup-bypass", { skill: companion, mode: "summary" });
       }
-      const companionTemplate = compiledSkills.find((e) => e.skill === companion);
-      const _companionEntry = companionTemplate ? { ...companionTemplate, effectivePriority: DEV_SERVER_VERIFY_PRIORITY_BOOST } : {
-        skill: companion,
-        priority: 0,
-        compiledPaths: [],
-        compiledBash: [],
-        compiledImports: [],
-        effectivePriority: DEV_SERVER_VERIFY_PRIORITY_BOOST
-      };
       rankedSkills.unshift(companion);
       matched.add(companion);
       log.debug("dev-server-companion-inject-past-guard", { skill: companion, iterationCount: devServerVerify.iterationCount, max: DEV_SERVER_VERIFY_MAX_ITERATIONS });
@@ -867,7 +888,8 @@ function run() {
     sessionId,
     injectedSkills,
     skillMap: skills.skillMap,
-    logger: log
+    logger: log,
+    forceSummarySkills: forceSummarySkills.size > 0 ? forceSummarySkills : void 0
   });
   if (log.active) timing.skill_read = Math.round(log.now() - tSkillRead);
   if (tsxReviewInjected && loaded.includes(TSX_REVIEW_SKILL)) {
@@ -923,7 +945,40 @@ function run() {
     droppedByBudget,
     boostsApplied: profilerBoosted
   }, log.active ? timing : null);
-  const result = formatOutput({ parts, matched, injectedSkills: loaded, summaryOnly, droppedByCap, droppedByBudget, toolName, toolTarget, matchReasons });
+  const reasons = {};
+  let verificationId;
+  if (devServerVerify.triggered || devServerVerify.loopGuardHit) {
+    verificationId = generateVerificationId();
+    if (loaded.includes(DEV_SERVER_VERIFY_SKILL)) {
+      reasons[DEV_SERVER_VERIFY_SKILL] = {
+        trigger: "dev-server-start",
+        reasonCode: "bash-dev-server-pattern"
+      };
+    }
+    for (const companion of DEV_SERVER_COMPANION_SKILLS) {
+      if (loaded.includes(companion) || summaryOnly && summaryOnly.includes(companion)) {
+        reasons[companion] = {
+          trigger: "dev-server-companion",
+          reasonCode: devServerVerify.loopGuardHit ? "loop-guard-companion" : "dev-server-co-inject"
+        };
+      }
+    }
+  }
+  if (tsxReview.triggered && loaded.includes(TSX_REVIEW_SKILL)) {
+    reasons[TSX_REVIEW_SKILL] = {
+      trigger: "tsx-edit-threshold",
+      reasonCode: "tsx-review-trigger"
+    };
+  }
+  for (const skill of loaded) {
+    if (!reasons[skill] && matchReasons?.[skill]) {
+      reasons[skill] = {
+        trigger: matchReasons[skill].matchType,
+        reasonCode: "pattern-match"
+      };
+    }
+  }
+  const result = formatOutput({ parts, matched, injectedSkills: loaded, summaryOnly, droppedByCap, droppedByBudget, toolName, toolTarget, matchReasons, reasons, verificationId });
   if (loaded.length > 0) {
     appendAuditLog({
       event: "skill-injection",

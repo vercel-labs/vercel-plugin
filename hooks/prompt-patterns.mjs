@@ -103,7 +103,46 @@ function matchPromptWithReason(normalizedPrompt, compiled) {
     reason: reasons.join("; ")
   };
 }
+const FLOW_VERIFICATION_RE = /\b(?:loads?\s+but|submits?\s+but|redirects?\s+but|works?\s+(?:locally\s+)?but|saves?\s+but|sends?\s+but|returns?\s+but|fetches?\s+but|connects?\s+but|renders?\s+but|deploys?\s+but|builds?\s+but)\b/;
+const STUCK_INVESTIGATION_RE = /\b(?:stuck|hung|frozen|tim(?:ed?|ing)\s*out|timeout|hanging|not\s+responding|no\s+response|spinning\s+forever|still\s+waiting|nothing\s+happened|nothing\s+is\s+happening|just\s+sits?\s+there)\b/;
+const BROWSER_ONLY_RE = /\b(?:blank\s+page|white\s+screen|screen\s+is\s+(?:blank|white)|console\s+errors?|browser\s+errors?|nothing\s+(?:render(?:s|ed|ing)?|show(?:s|ing|n)?)|page\s+(?:is\s+)?(?:broken|empty)|ui\s+is\s+broken)\b/;
+const TEST_FRAMEWORK_RE = /\b(?:jest|vitest|playwright\s+test|cypress\s+test|mocha|karma|testing\s+library)\b/;
+function classifyTroubleshootingIntent(normalizedPrompt) {
+  if (!normalizedPrompt) {
+    return { intent: null, skills: [], reason: "empty prompt" };
+  }
+  if (TEST_FRAMEWORK_RE.test(normalizedPrompt)) {
+    return {
+      intent: null,
+      skills: [],
+      reason: "suppressed by test framework mention"
+    };
+  }
+  if (BROWSER_ONLY_RE.test(normalizedPrompt)) {
+    return {
+      intent: "browser-only",
+      skills: ["agent-browser-verify", "investigation-mode"],
+      reason: "browser-only pattern matched"
+    };
+  }
+  if (FLOW_VERIFICATION_RE.test(normalizedPrompt)) {
+    return {
+      intent: "flow-verification",
+      skills: ["verification"],
+      reason: "flow-verification pattern matched"
+    };
+  }
+  if (STUCK_INVESTIGATION_RE.test(normalizedPrompt)) {
+    return {
+      intent: "stuck-investigation",
+      skills: ["investigation-mode"],
+      reason: "stuck-investigation pattern matched"
+    };
+  }
+  return { intent: null, skills: [], reason: "no troubleshooting intent" };
+}
 export {
+  classifyTroubleshootingIntent,
   compilePromptSignals,
   matchPromptWithReason,
   normalizePromptText

@@ -10,8 +10,15 @@
  * cannot be determined.
  */
 
-import { existsSync, appendFileSync, readdirSync, type Dirent } from "node:fs";
-import { join, resolve } from "node:path";
+import {
+  accessSync,
+  appendFileSync,
+  constants as fsConstants,
+  existsSync,
+  readdirSync,
+  type Dirent,
+} from "node:fs";
+import { delimiter, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { requireEnvFile, safeReadJson } from "./hook-env.mjs";
@@ -316,7 +323,49 @@ const VERCEL_VERSION_ARGS: string[] = "--version".split(" ");
 const NPM_VIEW_ARGS: string[] = "view vercel version".split(" ");
 // Built via split to avoid array literal that confuses slug-extraction regex.
 const SPAWN_STDIO = "ignore pipe ignore".split(" ") as ("ignore" | "pipe")[];
+const EXEC_SYNC_TIMEOUT_MS = 3_000;
 const NUMERIC_VERSION_RE = /\d+(?:\.\d+)*/;
+const WINDOWS_EXECUTABLE_EXTENSIONS = (process.env.PATHEXT || ".EXE;.CMD;.BAT;.COM")
+  .split(";")
+  .filter(Boolean);
+
+function getBinaryPathCandidates(binaryName: string): string[] {
+  if (process.platform !== "win32") {
+    return [binaryName];
+  }
+
+  const hasExecutableExtension = /\.[^./\\]+$/.test(binaryName);
+  const suffixes = hasExecutableExtension ? [""] : ["", ...WINDOWS_EXECUTABLE_EXTENSIONS];
+  return suffixes.map((suffix: string) => `${binaryName}${suffix}`);
+}
+
+function resolveBinaryFromPath(binaryName: string): string | null {
+  try {
+    const pathEntries = (process.env.PATH || "").split(delimiter).filter(Boolean);
+    for (const pathEntry of pathEntries) {
+      for (const candidateName of getBinaryPathCandidates(binaryName)) {
+        const candidatePath = join(pathEntry, candidateName);
+        try {
+          accessSync(candidatePath, fsConstants.X_OK);
+          return candidatePath;
+        } catch {
+          continue;
+        }
+      }
+    }
+  } catch (error) {
+    logCaughtError(log, "session-start-profiler:binary-resolution-failed", error, {
+      binaryName,
+    });
+    return null;
+  }
+
+  log.debug("session-start-profiler:binary-resolution-skipped", {
+    binaryName,
+    reason: "not-found",
+  });
+  return null;
+}
 
 function parseVersionSegments(version: string): number[] | null {
   const matchedVersion = version.match(NUMERIC_VERSION_RE)?.[0];
@@ -355,11 +404,16 @@ function compareVersionSegments(leftVersion: string, rightVersion: string): numb
  * Returns quickly — each subprocess has a tight timeout.
  */
 function checkVercelCli(): VercelCliStatus {
+  const vercelBinary = resolveBinaryFromPath("vercel");
+  if (!vercelBinary) {
+    return { installed: false, needsUpdate: false };
+  }
+
   // 1. Check if vercel is installed
   let currentVersion: string | undefined;
   try {
-    const raw: string = execFileSync("vercel", VERCEL_VERSION_ARGS, {
-      timeout: 5_000,
+    const raw: string = execFileSync(vercelBinary, VERCEL_VERSION_ARGS, {
+      timeout: EXEC_SYNC_TIMEOUT_MS,
       encoding: "utf-8",
       stdio: SPAWN_STDIO,
     }).trim();
@@ -368,24 +422,29 @@ function checkVercelCli(): VercelCliStatus {
     currentVersion = lines[lines.length - 1];
   } catch (error) {
     logCaughtError(log, "session-start-profiler:vercel-version-check-failed", error, {
-      command: "vercel",
+      command: vercelBinary,
       args: VERCEL_VERSION_ARGS.join(" "),
     });
     return { installed: false, needsUpdate: false };
   }
 
+  const npmBinary = resolveBinaryFromPath("npm");
+  if (!npmBinary) {
+    return { installed: true, currentVersion, needsUpdate: false };
+  }
+
   // 2. Fetch latest version from npm registry
   let latestVersion: string | undefined;
   try {
-    const raw: string = execFileSync("npm", NPM_VIEW_ARGS, {
-      timeout: 5_000,
+    const raw: string = execFileSync(npmBinary, NPM_VIEW_ARGS, {
+      timeout: EXEC_SYNC_TIMEOUT_MS,
       encoding: "utf-8",
       stdio: SPAWN_STDIO,
     }).trim();
     latestVersion = raw;
   } catch (error) {
     logCaughtError(log, "session-start-profiler:npm-latest-version-check-failed", error, {
-      command: "npm",
+      command: npmBinary,
       args: NPM_VIEW_ARGS.join(" "),
       currentVersion,
     });
@@ -406,27 +465,14 @@ function checkVercelCli(): VercelCliStatus {
 // agent-browser availability check
 // ---------------------------------------------------------------------------
 
-const WHICH_ARGS: string[] = "agent-browser".split(" ");
+const AGENT_BROWSER_BINARY = "agent-browser";
 
 /**
  * Check if agent-browser CLI is available on PATH.
- * Returns true if `which agent-browser` exits 0.
+ * Returns true if `agent-browser` resolves on PATH.
  */
 export function checkAgentBrowser(): boolean {
-  try {
-    execFileSync("which", WHICH_ARGS, {
-      timeout: 3_000,
-      encoding: "utf-8",
-      stdio: SPAWN_STDIO,
-    });
-    return true;
-  } catch (error) {
-    logCaughtError(log, "session-start-profiler:agent-browser-check-failed", error, {
-      command: "which",
-      args: WHICH_ARGS.join(" "),
-    });
-    return false;
-  }
+  return resolveBinaryFromPath(AGENT_BROWSER_BINARY) !== null;
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +507,7 @@ function main(): void {
     process.stdout.write(
       [
         `IMPORTANT: The Vercel CLI is outdated (${cliStatus.currentVersion} → ${cliStatus.latestVersion}).`,
-        "Strongly recommend the user upgrade with `npm i -g vercel@latest`.",
+        "Strongly recommend the user upgrade with `npm i -g vercel@latest` or `pnpm add -g vercel@latest` for best compatibility.",
         "The latest version includes significant agentic features and improvements that will greatly enhance their development experience.",
         "",
       ].join("\n"),

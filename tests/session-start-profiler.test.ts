@@ -13,6 +13,7 @@ import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const PROFILER = join(ROOT, "hooks", "session-start-profiler.mjs");
+const NODE_BIN = Bun.which("node") || "node";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,7 +36,7 @@ async function runProfiler(env: Record<string, string | undefined>): Promise<{
     mergedEnv[key] = value;
   }
 
-  const proc = Bun.spawn(["node", PROFILER], {
+  const proc = Bun.spawn([NODE_BIN, PROFILER], {
     stdout: "pipe",
     stderr: "pipe",
     env: mergedEnv,
@@ -612,7 +613,6 @@ describe("session-start-profiler", () => {
     mkdirSync(binDir);
     makeMockCommand(binDir, "vercel", "printf 'Vercel CLI 1.9.0\\n'");
     makeMockCommand(binDir, "npm", "printf '1.10.0\\n'");
-    makeMockCommand(binDir, "which", "exit 1");
 
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
@@ -624,18 +624,60 @@ describe("session-start-profiler", () => {
     expect(result.stdout).toContain("The Vercel CLI is outdated");
     expect(result.stdout).toContain("Vercel CLI 1.9.0");
     expect(result.stdout).toContain("1.10.0");
+    expect(result.stdout).toContain("npm i -g vercel@latest");
+    expect(result.stdout).toContain("pnpm add -g vercel@latest");
+  });
+
+  test("skips npm registry lookup when npm binary cannot be resolved", async () => {
+    const projectDir = join(tempDir, "missing-npm-project");
+    const binDir = join(tempDir, "missing-npm-bin");
+    mkdirSync(projectDir);
+    mkdirSync(binDir);
+    makeMockCommand(binDir, "vercel", "printf 'Vercel CLI 44.0.0\\n'");
+
+    const result = await runProfiler({
+      CLAUDE_ENV_FILE: envFile,
+      CLAUDE_PROJECT_ROOT: projectDir,
+      PATH: binDir,
+      VERCEL_PLUGIN_LOG_LEVEL: "debug",
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).not.toContain("The Vercel CLI is outdated");
+    expect(result.stderr).toContain("session-start-profiler:binary-resolution-skipped");
+    expect(result.stderr).toContain('"binaryName":"npm"');
+  });
+
+  test("times out slow vercel version checks after three seconds", async () => {
+    const projectDir = join(tempDir, "slow-vercel-project");
+    const binDir = join(tempDir, "slow-vercel-bin");
+    mkdirSync(projectDir);
+    mkdirSync(binDir);
+    makeMockCommand(binDir, "vercel", "sleep 5");
+
+    const startedAt = Date.now();
+    const result = await runProfiler({
+      CLAUDE_ENV_FILE: envFile,
+      CLAUDE_PROJECT_ROOT: projectDir,
+      PATH: `${binDir}:${process.env.PATH || ""}`,
+      VERCEL_PLUGIN_LOG_LEVEL: "debug",
+    });
+    const durationMs = Date.now() - startedAt;
+
+    expect(result.code).toBe(0);
+    expect(durationMs).toBeLessThan(4_700);
+    expect(result.stderr).toContain("session-start-profiler:vercel-version-check-failed");
   });
 
   test("emits debug logs when swallowed profiler errors occur", async () => {
     const binDir = join(tempDir, "debug-bin");
     mkdirSync(binDir);
     makeMockCommand(binDir, "vercel", "exit 1");
-    makeMockCommand(binDir, "which", "exit 1");
 
     const result = await runProfiler({
       CLAUDE_ENV_FILE: join(tempDir, "missing-dir", "claude.env"),
       CLAUDE_PROJECT_ROOT: join(tempDir, "missing-project-root"),
-      PATH: `${binDir}:${process.env.PATH || ""}`,
+      PATH: binDir,
       VERCEL_PLUGIN_LOG_LEVEL: "debug",
     });
 
@@ -643,7 +685,8 @@ describe("session-start-profiler", () => {
     expect(result.stderr).toContain("session-start-profiler:check-greenfield-readdir-failed");
     expect(result.stderr).toContain("session-start-profiler:profile-bootstrap-signals-readdir-failed");
     expect(result.stderr).toContain("session-start-profiler:vercel-version-check-failed");
-    expect(result.stderr).toContain("session-start-profiler:agent-browser-check-failed");
+    expect(result.stderr).toContain("session-start-profiler:binary-resolution-skipped");
+    expect(result.stderr).toContain('"binaryName":"agent-browser"');
     expect(result.stderr).toContain("session-start-profiler:append-env-export-failed");
     expect(result.stderr).toContain("hook-env:safe-read-file-failed");
   });

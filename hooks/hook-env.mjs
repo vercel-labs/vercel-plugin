@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   appendFileSync,
   closeSync,
@@ -122,6 +122,9 @@ function removeSessionClaimDir(sessionId, kind) {
     logCaughtError(log, "hook-env:remove-session-claim-dir-failed", error, { sessionId, kind });
   }
 }
+function generateVerificationId() {
+  return randomUUID();
+}
 function safeReadFile(path) {
   try {
     return readFileSync(path, "utf-8");
@@ -144,6 +147,7 @@ export {
   appendAuditLog,
   dedupClaimDirPath,
   dedupFilePath,
+  generateVerificationId,
   listSessionKeys,
   pluginRoot,
   readSessionFile,
