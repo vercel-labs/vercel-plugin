@@ -53,53 +53,99 @@ interface Scenario {
 
 const SCENARIOS: Scenario[] = [
   {
-    slug: "pomodoro-timer",
-    prompt: `Build a Next.js Pomodoro productivity timer app with shadcn/ui. Features: a circular timer display that counts down from 25 minutes (work) then 5 minutes (break), start/pause/reset buttons, a session counter showing completed pomodoros, and a settings panel to customize work/break durations. Use a dark theme. After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
-    expectedSkills: ["nextjs", "shadcn"],
+    slug: "ai-chatbot-rag",
+    prompt: `Build a Next.js AI chatbot with RAG (retrieval-augmented generation) using the full Vercel stack. Requirements:
+- Use AI SDK (\`ai\` package) with \`streamText\` for streaming chat responses
+- Use Vercel Blob (\`@vercel/blob\`) to store uploaded knowledge documents
+- Create an /api/chat route that uses AI SDK's \`streamText\` with system context from stored docs
+- Use SWR for client-side message fetching with optimistic updates
+- Use shadcn/ui Chat components (Input, Button, ScrollArea, Card)
+- Add middleware.ts that checks for an auth cookie and redirects unauthenticated users to /login
+- Create a mock /api/auth/login route that sets a cookie
+- Use Geist font via next/font/google
+After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
+    expectedSkills: ["ai-sdk", "vercel-storage", "swr", "shadcn", "routing-middleware", "geist", "nextjs"],
     userStories: [
-      "As a user, I can see a timer display and click a Start button to begin a countdown",
-      "As a user, I can click Pause to stop the timer and Reset to return it to the initial duration",
-      "As a user, I can see how many pomodoro sessions I have completed",
+      "As a user, I can see a chat interface with a message input and send button",
+      "As a user, I can type a message and see it appear in the chat history",
+      "As a user, I can see the AI response stream in token-by-token in the chat",
     ],
   },
   {
-    slug: "color-palette-gen",
-    prompt: `Build a Next.js color palette generator app with shadcn/ui. Features: a text input where users type a mood or theme (e.g. "sunset beach"), a Generate button that creates a 5-color palette using AI SDK, each color shown as a large swatch with its hex code, and a Copy button on each swatch to copy the hex value. After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
-    expectedSkills: ["ai-sdk", "nextjs", "shadcn"],
+    slug: "feature-flagged-dashboard",
+    prompt: `Build a Next.js analytics dashboard that uses Vercel feature flags to control which widgets are visible. Requirements:
+- Use Vercel Flags SDK (\`@vercel/flags/next\`) to define 3 feature flags: showRevenueChart, showUserTable, showActivityFeed
+- Create a flags.ts file using \`flag()\` from @vercel/flags/next with default values
+- Use edge runtime (\`export const runtime = 'edge'\`) for the main dashboard API route
+- Create /api/analytics route returning mock analytics JSON data
+- Use shadcn/ui for the dashboard layout (Card, Table, Tabs components)
+- Add a cron job route at /api/cron/daily-report that would email a daily summary (mock implementation)
+- Use Vercel KV / runtime cache (\`@vercel/kv\`) to cache analytics data with a 60s TTL (mock KV with in-memory Map if needed)
+- Add observability with structured console.log JSON in API routes
+After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
+    expectedSkills: ["vercel-flags", "edge-runtime", "shadcn", "cron-jobs", "runtime-cache", "observability", "nextjs", "vercel-functions"],
     userStories: [
-      "As a user, I can see a text input and a Generate button on the page",
-      "As a user, I can type a theme like 'ocean sunset' and click Generate to see color swatches appear",
-      "As a user, I can see hex color codes displayed next to each color swatch",
+      "As a user, I can see a dashboard page with card-based widgets displaying analytics data",
+      "As a user, I can see a table or list of data on the dashboard",
+      "As a user, I can navigate between different tabs or sections of the dashboard",
     ],
   },
   {
-    slug: "markdown-previewer",
-    prompt: `Build a Next.js live markdown editor with shadcn/ui. Features: a split-pane layout with a textarea editor on the left and a rendered HTML preview on the right, real-time preview updates as the user types, a toolbar with Bold/Italic/Heading buttons that insert markdown syntax, and a character count below the editor. Use a monospace font for the editor. After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
-    expectedSkills: ["nextjs", "shadcn"],
+    slug: "ai-image-gallery",
+    prompt: `Build a Next.js AI-powered image gallery using Vercel platform features. Requirements:
+- Use AI SDK (\`ai\` package) with \`generateText\` to create image descriptions/alt-text from prompts
+- Use Vercel Blob (\`@vercel/blob\`) for image upload and storage — create an /api/upload route using \`put()\` from @vercel/blob
+- Use Satori (\`satori\`) to generate OG image cards for each gallery item at /api/og route
+- Create a dynamic [id] route for individual image pages with generated OG metadata
+- Use shadcn/ui components (Dialog for lightbox, Card for thumbnails, Input for upload)
+- Use SWR (\`swr\`) on the client for fetching and revalidating the gallery
+- Use Vercel Functions with streaming for the AI description generation
+After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
+    expectedSkills: ["ai-sdk", "vercel-storage", "satori", "swr", "shadcn", "nextjs", "vercel-functions"],
     userStories: [
-      "As a user, I can see a split layout with an editor on the left and preview on the right",
-      "As a user, I can type markdown like '# Hello' in the editor and see it rendered as a heading in the preview",
-      "As a user, I can see a character count that updates as I type",
+      "As a user, I can see a gallery page with image cards or thumbnails displayed",
+      "As a user, I can see an upload area or button to add new images",
+      "As a user, I can click on an image to see a larger view or detail page",
     ],
   },
   {
-    slug: "weather-dashboard",
-    prompt: `Build a Next.js weather dashboard with shadcn/ui. Features: a search input to look up cities, display current temperature and weather condition with an icon, a 5-day forecast section with cards for each day, and a loading spinner while fetching. Use mock data (hardcoded weather JSON) instead of a real API — create a /api/weather route that returns mock data for any city. After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
-    expectedSkills: ["nextjs", "shadcn", "vercel-functions"],
+    slug: "realtime-collab-notes",
+    prompt: `Build a Next.js collaborative notes app using Vercel platform features. Requirements:
+- Use AI SDK (\`ai\` package) with \`streamText\` in an /api/ai/summarize route that summarizes note content
+- Use Vercel KV (\`@vercel/kv\`) or runtime cache to store notes as JSON (mock with in-memory Map if KV unavailable)
+- Create CRUD API routes: /api/notes (GET, POST), /api/notes/[id] (GET, PUT, DELETE)
+- Use shadcn/ui components (Textarea, Card, Dialog, Button, Sidebar)
+- Add routing middleware (middleware.ts) that adds request timing headers and logs request paths
+- Use edge runtime for the middleware
+- Create a /api/cron/cleanup route that would delete old notes (mock implementation)
+- Use Vercel Functions for all API routes
+- Use Geist font
+After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
+    expectedSkills: ["ai-sdk", "runtime-cache", "shadcn", "routing-middleware", "edge-runtime", "cron-jobs", "vercel-functions", "geist", "nextjs"],
     userStories: [
-      "As a user, I can see a search input where I can type a city name",
-      "As a user, after searching for a city I can see the current temperature displayed",
-      "As a user, I can see a forecast section with multiple day cards showing future weather",
+      "As a user, I can see a list of notes or a notes sidebar on the page",
+      "As a user, I can create a new note by typing in a text area and clicking Save",
+      "As a user, I can see an AI summarize button or feature for note content",
     ],
   },
   {
-    slug: "quiz-builder",
-    prompt: `Build a Next.js interactive quiz app with shadcn/ui. Features: a quiz with at least 3 multiple-choice questions displayed one at a time, Next/Previous buttons to navigate between questions, radio buttons for answer selection that persist when navigating, and a Submit button on the last question that shows the score (e.g. "You got 2/3 correct!"). Hardcode the quiz data. After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
-    expectedSkills: ["nextjs", "shadcn"],
+    slug: "deploy-monitor-ai",
+    prompt: `Build a Next.js deployment monitoring tool with AI analysis using Vercel platform features. Requirements:
+- Create /api/deployments route using Vercel REST API client patterns (mock the actual API calls with hardcoded deployment JSON data)
+- Use AI SDK (\`ai\` package) with \`generateText\` in /api/ai/analyze route that analyzes deployment health from mock data
+- Use Vercel Flags (\`@vercel/flags/next\`) to toggle between "simple view" and "detailed view" of deployments
+- Use shadcn/ui for the dashboard (Table, Badge, Card, Tabs, Alert components)
+- Add /api/cron/check-health route that would periodically check deployment status
+- Use edge runtime for the deployment listing API route
+- Add structured observability logging (JSON logs with timestamp, level, message) in all API routes
+- Use Vercel Functions with proper error handling and status codes
+- Add a vercel.json with cron configuration for the health check
+After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
+    expectedSkills: ["ai-sdk", "vercel-api", "vercel-flags", "shadcn", "cron-jobs", "edge-runtime", "observability", "vercel-functions", "nextjs"],
     userStories: [
-      "As a user, I can see a question with multiple choice answers displayed as radio buttons",
-      "As a user, I can click Next to go to the next question and Previous to go back",
-      "As a user, after answering all questions and clicking Submit I can see my score",
+      "As a user, I can see a table or list of deployments with status badges",
+      "As a user, I can see deployment details like URL, status, and timestamps",
+      "As a user, I can see an AI analysis section or button that provides deployment health insights",
     ],
   },
 ];
