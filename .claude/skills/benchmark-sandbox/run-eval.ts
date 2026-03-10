@@ -53,99 +53,103 @@ interface Scenario {
 
 const SCENARIOS: Scenario[] = [
   {
-    slug: "ai-chatbot-rag",
-    prompt: `Build a Next.js AI chatbot with RAG (retrieval-augmented generation) using the full Vercel stack. Requirements:
-- Use AI SDK (\`ai\` package) with \`streamText\` for streaming chat responses
-- Use Vercel Blob (\`@vercel/blob\`) to store uploaded knowledge documents
-- Create an /api/chat route that uses AI SDK's \`streamText\` with system context from stored docs
-- Use SWR for client-side message fetching with optimistic updates
-- Use shadcn/ui Chat components (Input, Button, ScrollArea, Card)
-- Add middleware.ts that checks for an auth cookie and redirects unauthenticated users to /login
-- Create a mock /api/auth/login route that sets a cookie
-- Use Geist font via next/font/google
+    slug: "ai-writing-assistant",
+    prompt: `Build a Next.js AI writing assistant app. Requirements:
+- Use AI SDK (\`ai\` package) with \`streamText\` and the anthropic provider (\`@ai-sdk/anthropic\`) for real AI responses
+- Create /api/chat route handler using AI SDK's \`streamText\` that streams a writing assistant response
+- The assistant should help rewrite, expand, or summarize text the user provides
+- Use shadcn/ui (Textarea for input, Button, Card for output, Tabs for mode: rewrite/expand/summarize)
+- Use SWR (\`swr\`) for client-side state management
+- Use Geist font via next/font
+- Add middleware.ts that logs request paths with timestamps
+- Link the project to my vercel-labs team so we can deploy it later
 After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
-    expectedSkills: ["ai-sdk", "vercel-storage", "swr", "shadcn", "routing-middleware", "geist", "nextjs"],
+    expectedSkills: ["ai-sdk", "swr", "shadcn", "routing-middleware", "geist", "nextjs"],
     userStories: [
-      "As a user, I can see a chat interface with a message input and send button",
-      "As a user, I can type a message and see it appear in the chat history",
-      "As a user, I can see the AI response stream in token-by-token in the chat",
+      "As a user, I can see a text area where I can paste or type content to be processed by AI",
+      "As a user, I can select a mode (rewrite, expand, or summarize) and click a button to get an AI response",
+      "As a user, I can see the AI-generated response appear with streaming text output",
     ],
   },
   {
-    slug: "feature-flagged-dashboard",
-    prompt: `Build a Next.js analytics dashboard that uses Vercel feature flags to control which widgets are visible. Requirements:
-- Use Vercel Flags SDK (\`@vercel/flags/next\`) to define 3 feature flags: showRevenueChart, showUserTable, showActivityFeed
-- Create a flags.ts file using \`flag()\` from @vercel/flags/next with default values
-- Use edge runtime (\`export const runtime = 'edge'\`) for the main dashboard API route
-- Create /api/analytics route returning mock analytics JSON data
-- Use shadcn/ui for the dashboard layout (Card, Table, Tabs components)
-- Add a cron job route at /api/cron/daily-report that would email a daily summary (mock implementation)
-- Use Vercel KV / runtime cache (\`@vercel/kv\`) to cache analytics data with a 60s TTL (mock KV with in-memory Map if needed)
-- Add observability with structured console.log JSON in API routes
+    slug: "ai-code-reviewer",
+    prompt: `Build a Next.js AI code review tool. Requirements:
+- Use AI SDK (\`ai\` package) with \`streamText\` and the anthropic provider (\`@ai-sdk/anthropic\`) for real AI code analysis
+- Create /api/review route that accepts code and returns AI review comments with streaming
+- Use shadcn/ui (Textarea with monospace font for code input, Card for review results, Badge for severity, Button)
+- Use Vercel Flags (\`@vercel/flags/next\`) with a flag to toggle between "quick review" and "deep review" modes
+- Create a flags.ts with the review mode flag using \`flag()\`
+- Add /api/cron/stats route for tracking review statistics (mock implementation)
+- Add structured observability logging in all API routes (JSON with timestamp, level, message, duration)
+- Use edge runtime for a /api/health route
+- Link the project to my vercel-labs team
 After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
-    expectedSkills: ["vercel-flags", "edge-runtime", "shadcn", "cron-jobs", "runtime-cache", "observability", "nextjs", "vercel-functions"],
+    expectedSkills: ["ai-sdk", "vercel-flags", "shadcn", "cron-jobs", "observability", "edge-runtime", "nextjs", "vercel-functions"],
     userStories: [
-      "As a user, I can see a dashboard page with card-based widgets displaying analytics data",
-      "As a user, I can see a table or list of data on the dashboard",
-      "As a user, I can navigate between different tabs or sections of the dashboard",
+      "As a user, I can see a code input area where I can paste code for review",
+      "As a user, I can click a Review button and see AI-generated code review comments appear",
+      "As a user, I can see severity indicators (like badges) on the review feedback",
     ],
   },
   {
-    slug: "ai-image-gallery",
-    prompt: `Build a Next.js AI-powered image gallery using Vercel platform features. Requirements:
-- Use AI SDK (\`ai\` package) with \`generateText\` to create image descriptions/alt-text from prompts
-- Use Vercel Blob (\`@vercel/blob\`) for image upload and storage — create an /api/upload route using \`put()\` from @vercel/blob
-- Use Satori (\`satori\`) to generate OG image cards for each gallery item at /api/og route
-- Create a dynamic [id] route for individual image pages with generated OG metadata
-- Use shadcn/ui components (Dialog for lightbox, Card for thumbnails, Input for upload)
-- Use SWR (\`swr\`) on the client for fetching and revalidating the gallery
-- Use Vercel Functions with streaming for the AI description generation
-After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
-    expectedSkills: ["ai-sdk", "vercel-storage", "satori", "swr", "shadcn", "nextjs", "vercel-functions"],
-    userStories: [
-      "As a user, I can see a gallery page with image cards or thumbnails displayed",
-      "As a user, I can see an upload area or button to add new images",
-      "As a user, I can click on an image to see a larger view or detail page",
-    ],
-  },
-  {
-    slug: "realtime-collab-notes",
-    prompt: `Build a Next.js collaborative notes app using Vercel platform features. Requirements:
-- Use AI SDK (\`ai\` package) with \`streamText\` in an /api/ai/summarize route that summarizes note content
-- Use Vercel KV (\`@vercel/kv\`) or runtime cache to store notes as JSON (mock with in-memory Map if KV unavailable)
-- Create CRUD API routes: /api/notes (GET, POST), /api/notes/[id] (GET, PUT, DELETE)
-- Use shadcn/ui components (Textarea, Card, Dialog, Button, Sidebar)
-- Add routing middleware (middleware.ts) that adds request timing headers and logs request paths
-- Use edge runtime for the middleware
-- Create a /api/cron/cleanup route that would delete old notes (mock implementation)
-- Use Vercel Functions for all API routes
+    slug: "ai-flashcard-trainer",
+    prompt: `Build a Next.js AI flashcard study app. Requirements:
+- Use AI SDK (\`ai\` package) with \`generateText\` and the anthropic provider (\`@ai-sdk/anthropic\`) to generate flashcard content from a topic
+- Create /api/generate route that takes a topic and returns 5 flashcards (question + answer) as JSON using AI
+- Create /api/quiz route that uses AI to evaluate user answers and provide feedback
+- Store flashcard decks in-memory via a /api/decks CRUD route (GET returns all decks, POST creates new)
+- Use shadcn/ui (Card for flashcards with flip animation via CSS, Button, Input, Progress bar for score)
+- Use SWR for fetching decks on the client
+- Use Vercel KV / runtime cache pattern (mock with in-memory Map) for caching generated decks
 - Use Geist font
+- Link the project to my vercel-labs team
 After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
-    expectedSkills: ["ai-sdk", "runtime-cache", "shadcn", "routing-middleware", "edge-runtime", "cron-jobs", "vercel-functions", "geist", "nextjs"],
+    expectedSkills: ["ai-sdk", "swr", "shadcn", "runtime-cache", "geist", "nextjs", "vercel-functions"],
     userStories: [
-      "As a user, I can see a list of notes or a notes sidebar on the page",
-      "As a user, I can create a new note by typing in a text area and clicking Save",
-      "As a user, I can see an AI summarize button or feature for note content",
+      "As a user, I can enter a topic and click Generate to have AI create flashcards",
+      "As a user, I can see flashcards displayed and flip them to reveal the answer",
+      "As a user, I can see a score or progress indicator showing how many cards I got right",
     ],
   },
   {
-    slug: "deploy-monitor-ai",
-    prompt: `Build a Next.js deployment monitoring tool with AI analysis using Vercel platform features. Requirements:
-- Create /api/deployments route using Vercel REST API client patterns (mock the actual API calls with hardcoded deployment JSON data)
-- Use AI SDK (\`ai\` package) with \`generateText\` in /api/ai/analyze route that analyzes deployment health from mock data
-- Use Vercel Flags (\`@vercel/flags/next\`) to toggle between "simple view" and "detailed view" of deployments
-- Use shadcn/ui for the dashboard (Table, Badge, Card, Tabs, Alert components)
-- Add /api/cron/check-health route that would periodically check deployment status
-- Use edge runtime for the deployment listing API route
-- Add structured observability logging (JSON logs with timestamp, level, message) in all API routes
-- Use Vercel Functions with proper error handling and status codes
-- Add a vercel.json with cron configuration for the health check
+    slug: "ai-meeting-summarizer",
+    prompt: `Build a Next.js AI meeting notes summarizer. Requirements:
+- Use AI SDK (\`ai\` package) with \`streamText\` and the anthropic provider (\`@ai-sdk/anthropic\`) for streaming summaries
+- Create /api/summarize route that takes meeting notes text and streams an AI summary with action items
+- Create /api/meetings CRUD routes (GET, POST) storing meetings in-memory
+- Use shadcn/ui (Textarea for notes input, Card for summary output, Table for action items, Button, Dialog)
+- Use Satori (\`satori\`) in an /api/og/[id] route to generate OG image cards showing meeting title and date
+- Add middleware.ts with request timing and path logging
+- Use edge runtime for the /api/og route
+- Use Vercel Functions for all other API routes
+- Link the project to my vercel-labs team
 After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
-    expectedSkills: ["ai-sdk", "vercel-api", "vercel-flags", "shadcn", "cron-jobs", "edge-runtime", "observability", "vercel-functions", "nextjs"],
+    expectedSkills: ["ai-sdk", "satori", "shadcn", "routing-middleware", "edge-runtime", "nextjs", "vercel-functions"],
     userStories: [
-      "As a user, I can see a table or list of deployments with status badges",
-      "As a user, I can see deployment details like URL, status, and timestamps",
-      "As a user, I can see an AI analysis section or button that provides deployment health insights",
+      "As a user, I can paste meeting notes into a text area and click Summarize",
+      "As a user, I can see an AI-generated summary with key points streamed to the page",
+      "As a user, I can see extracted action items displayed in a list or table",
+    ],
+  },
+  {
+    slug: "ai-deploy-analyzer",
+    prompt: `Build a Next.js deployment health analyzer with AI insights. Requirements:
+- Create /api/deployments route returning mock deployment data (10 deployments with status, url, timestamp, duration)
+- Use AI SDK (\`ai\` package) with \`generateText\` and the anthropic provider (\`@ai-sdk/anthropic\`) in /api/analyze route that takes deployment data and returns AI health analysis
+- Use Vercel Flags (\`@vercel/flags/next\`) to toggle "show AI insights" with a \`flag()\` definition
+- Create flags.ts with the feature flag
+- Use shadcn/ui (Table for deployments, Badge for status, Card for AI insights, Tabs, Alert)
+- Add /api/cron/health-check route that returns a health status JSON
+- Add vercel.json with crons config for the health check
+- Add structured observability logging (JSON with timestamp, level, message) in every API route
+- Use edge runtime for the health-check cron route
+- Link the project to my vercel-labs team
+After building all files, start the dev server on port 3000 with \`npx next dev --port 3000\`.`,
+    expectedSkills: ["ai-sdk", "vercel-flags", "shadcn", "cron-jobs", "observability", "edge-runtime", "nextjs", "vercel-functions"],
+    userStories: [
+      "As a user, I can see a table of deployments with status badges showing health",
+      "As a user, I can click an Analyze button and see AI-generated health insights appear",
+      "As a user, I can see alert or warning cards highlighting any deployment issues the AI found",
     ],
   },
 ];
@@ -251,6 +255,7 @@ interface ScenarioResult {
   expectedSkills: string[];
   projectFiles: string[];
   appUrl?: string;
+  deployUrl?: string;
   error?: string;
   pollHistory: Array<{ elapsed: string; skills: string[]; files: number }>;
   verification?: VerificationResult;
@@ -418,7 +423,24 @@ async function runScenario(
       console.log(`  [${scenario.slug}] Verification skipped (no dev server or too few files)`);
     }
 
-    console.log(`  [${scenario.slug}] DONE (${elapsed(t0)}) | skills=${claimedSkills.length} | files=${projectFilesList.length}${appUrl ? ` | ${appUrl}` : ""}`);
+    // 9. Deploy to Vercel for permanent URL
+    let deployUrl: string | undefined;
+    if (vercelToken && projectFilesList.length > 3) {
+      console.log(`  [${scenario.slug}] Deploying to Vercel... (${elapsed(t0)})`);
+      const ts = new Date().toISOString().replace(/[:.]/g, "").slice(0, 15);
+      const projectName = `${scenario.slug}-${ts}`.toLowerCase();
+      const deployOut = await sh(sandbox, `cd ${projectDir} && vercel deploy --yes --scope vercel-labs --name ${projectName} 2>&1 | tail -5`);
+      // Extract URL from vercel deploy output (usually last line starting with https://)
+      const urlMatch = deployOut.match(/(https:\/\/[^\s]+\.vercel\.app)/);
+      if (urlMatch) {
+        deployUrl = urlMatch[1];
+        console.log(`  [${scenario.slug}] Deployed: ${deployUrl} (${elapsed(t0)})`);
+      } else {
+        console.log(`  [${scenario.slug}] Deploy output: ${deployOut.slice(-150)}`);
+      }
+    }
+
+    console.log(`  [${scenario.slug}] DONE (${elapsed(t0)}) | skills=${claimedSkills.length} | files=${projectFilesList.length}${deployUrl ? ` | ${deployUrl}` : appUrl ? ` | ${appUrl}` : ""}`);
 
     return {
       slug: scenario.slug,
@@ -429,6 +451,7 @@ async function runScenario(
       expectedSkills: scenario.expectedSkills,
       projectFiles: projectFilesList,
       appUrl,
+      deployUrl,
       pollHistory,
       verification,
     };
@@ -450,6 +473,148 @@ async function runScenario(
       try { await sandbox.stop(); } catch {}
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Report generation
+// ---------------------------------------------------------------------------
+
+async function generateReport(
+  runId: string,
+  results: ScenarioResult[],
+  totalMs: number,
+  resultsPath: string,
+): Promise<string> {
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const reportsDir = join(LOCAL_PLUGIN_DIR, ".reports");
+  await mkdir(reportsDir, { recursive: true });
+  const reportPath = join(reportsDir, `${ts}.md`);
+
+  const scenarioMap = Object.fromEntries(SCENARIOS.map(s => [s.slug, s]));
+  const totalSkills = new Set(results.flatMap(r => r.claimedSkills));
+  const verified = results.filter(r => r.verification?.ran);
+  const totalStories = verified.reduce((a, r) => a + r.verification!.stories.length, 0);
+  const passedStories = verified.reduce((a, r) => a + r.verification!.stories.filter(s => s.status === "pass").length, 0);
+
+  let md = `# Sandbox Eval Report — ${ts}\n\n`;
+  md += `| Metric | Value |\n|--------|-------|\n`;
+  md += `| Run ID | \`${runId}\` |\n`;
+  md += `| Date | ${new Date().toISOString()} |\n`;
+  md += `| Duration | ${(totalMs / 1000).toFixed(0)}s |\n`;
+  md += `| Scenarios | ${results.length} |\n`;
+  md += `| Builds succeeded | ${results.filter(r => r.success).length}/${results.length} |\n`;
+  md += `| Unique skills injected | ${totalSkills.size} |\n`;
+  md += `| User stories verified | ${passedStories}/${totalStories} |\n`;
+  md += `| Results JSON | \`${resultsPath}/results.json\` |\n\n`;
+
+  // Summary table
+  md += `## Summary\n\n`;
+  md += `| Scenario | Build | Skills | Files | Verify | Duration | Deploy URL |\n`;
+  md += `|----------|-------|--------|-------|--------|----------|------------|\n`;
+  for (const r of results) {
+    const build = r.success ? "OK" : "FAIL";
+    const verify = r.verification
+      ? `${r.verification.stories.filter(s => s.status === "pass").length}/${r.verification.stories.length}`
+      : "skip";
+    const url = r.deployUrl ? `[${r.slug}](${r.deployUrl})` : r.appUrl ? `[sandbox](${r.appUrl})` : "—";
+    md += `| ${r.slug} | ${build} | ${r.claimedSkills.length} | ${r.projectFiles.length} | ${verify} | ${(r.durationMs / 1000).toFixed(0)}s | ${url} |\n`;
+  }
+
+  // Deployed + Live URLs
+  const deployed = results.filter(r => r.deployUrl);
+  const liveApps = results.filter(r => r.appUrl);
+  if (deployed.length > 0) {
+    md += `\n## Deployed URLs (permanent)\n\n`;
+    for (const r of deployed) md += `- **${r.slug}**: ${r.deployUrl}\n`;
+  }
+  if (liveApps.length > 0) {
+    md += `\n## Sandbox URLs (temporary)\n\n`;
+    for (const r of liveApps) md += `- **${r.slug}**: ${r.appUrl}\n`;
+  }
+
+  // Per-scenario details
+  md += `\n## Scenario Details\n`;
+  for (const r of results) {
+    const scenario = scenarioMap[r.slug];
+    md += `\n### ${r.slug}\n\n`;
+    md += `**Sandbox ID**: \`${r.sandboxId}\`\n`;
+    if (r.deployUrl) md += `**Deploy URL**: ${r.deployUrl}\n`;
+    if (r.appUrl) md += `**Sandbox URL**: ${r.appUrl}\n`;
+    md += `**Duration**: ${(r.durationMs / 1000).toFixed(0)}s\n`;
+    md += `**Build**: ${r.success ? "OK" : "FAIL"}`;
+    if (r.error) md += ` — \`${r.error.slice(0, 100)}\``;
+    md += `\n\n`;
+
+    // Prompt
+    if (scenario) {
+      md += `<details><summary>Build Prompt</summary>\n\n${scenario.prompt}\n\n</details>\n\n`;
+    }
+
+    // Skills
+    md += `**Skills injected (${r.claimedSkills.length})**:`;
+    if (r.claimedSkills.length > 0) {
+      md += ` ${r.claimedSkills.join(", ")}\n`;
+    } else {
+      md += ` (none)\n`;
+    }
+
+    // Expected vs actual
+    if (scenario) {
+      const expected = new Set(scenario.expectedSkills);
+      const actual = new Set(r.claimedSkills);
+      const hit = [...expected].filter(s => actual.has(s));
+      const miss = [...expected].filter(s => !actual.has(s));
+      const extra = [...actual].filter(s => !expected.has(s));
+      md += `**Expected**: ${scenario.expectedSkills.join(", ")}\n`;
+      md += `**Match**: ${hit.length}/${expected.size}`;
+      if (miss.length) md += ` | Missing: ${miss.join(", ")}`;
+      if (extra.length) md += ` | Bonus: ${extra.join(", ")}`;
+      md += `\n`;
+    }
+
+    // Project files
+    if (r.projectFiles.length > 0) {
+      md += `\n**Project files (${r.projectFiles.length})**:\n`;
+      md += `\`\`\`\n${r.projectFiles.map(f => f.split("/").slice(-2).join("/")).join("\n")}\n\`\`\`\n`;
+    }
+
+    // Skill injection timeline (from polls)
+    if (r.pollHistory.length > 0) {
+      md += `\n**Skill injection timeline**:\n`;
+      let prevSkills = new Set<string>();
+      for (const p of r.pollHistory) {
+        const curr = new Set(p.skills);
+        const newSkills = [...curr].filter(s => !prevSkills.has(s));
+        if (newSkills.length > 0) {
+          md += `- ${p.elapsed}: +${newSkills.join(", ")} (total: ${curr.size}, files: ${p.files})\n`;
+        }
+        prevSkills = curr;
+      }
+    }
+
+    // Verification
+    if (r.verification?.ran) {
+      md += `\n**Verification** (exit=${r.verification.exitCode}):\n`;
+      for (let i = 0; i < r.verification.stories.length; i++) {
+        const s = r.verification.stories[i];
+        const story = scenario?.userStories[i] ?? `Story ${s.index}`;
+        const icon = s.status === "pass" ? "PASS" : s.status === "fail" ? "FAIL" : "???";
+        md += `- **${icon}**: ${story}\n`;
+      }
+      if (r.verification.output) {
+        md += `\n<details><summary>Verification output (last 500 chars)</summary>\n\n\`\`\`\n${r.verification.output}\n\`\`\`\n\n</details>\n`;
+      }
+    }
+  }
+
+  // Aggregate skill coverage
+  md += `\n## Aggregate Skill Coverage\n\n`;
+  md += `**${totalSkills.size} unique skills** injected across ${results.length} scenarios:\n`;
+  md += [...totalSkills].sort().map(s => `\`${s}\``).join(", ") + "\n";
+
+  await writeFile(reportPath, md);
+  console.log(`\nReport: ${reportPath}`);
+  return reportPath;
 }
 
 // ---------------------------------------------------------------------------
@@ -493,7 +658,11 @@ async function main() {
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, SCENARIOS.length) }, () => worker()));
 
   // Save results
-  await writeFile(join(resultsPath, "results.json"), JSON.stringify({ runId, results, totalMs: performance.now() - t0 }, null, 2));
+  const totalMs = performance.now() - t0;
+  await writeFile(join(resultsPath, "results.json"), JSON.stringify({ runId, results, totalMs }, null, 2));
+
+  // Generate markdown report
+  await generateReport(runId, results, totalMs, resultsPath);
 
   // Print summary
   console.log("\n\n=== SUMMARY ===");
