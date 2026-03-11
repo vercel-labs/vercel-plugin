@@ -203,6 +203,27 @@ validate:
     message: 'message.content is deprecated in AI SDK v6 — use message.parts to iterate UIMessage parts instead'
     severity: recommended
     skipIfFileContains: message\.parts
+  -
+    pattern: 'process\.env\.(OPENAI_API_KEY|ANTHROPIC_API_KEY)|openai\([''"]|anthropic\([''"]|\bgpt-4o\b'
+    message: 'Direct provider API key or stale model usage detected. Route AI calls through the Vercel AI Gateway for auth, routing, failover, and cost visibility.'
+    severity: recommended
+    upgradeToSkill: ai-gateway
+    upgradeWhy: 'Move model calls behind the Vercel AI Gateway for OIDC auth, provider routing, failover, and cost tracking.'
+    skipIfFileContains: 'gateway\(|@vercel/ai-gateway|ai-gateway'
+  -
+    pattern: 'react-markdown|dangerouslySetInnerHTML|ReactMarkdown'
+    message: 'Manual markdown/HTML rendering of AI content detected. Use AI Elements for safe, streaming-aware AI message rendering.'
+    severity: recommended
+    upgradeToSkill: ai-elements
+    upgradeWhy: 'Replace fragile markdown rendering with AI Elements MessageResponse for streaming-aware, safe AI content display.'
+    skipIfFileContains: '@vercel/ai-elements|MessageResponse|ai-elements'
+  -
+    pattern: 'message\.content\b|tool-invocation'
+    message: 'Deprecated AI SDK UIMessage rendering pattern. Use message.parts with part-aware rendering.'
+    severity: recommended
+    upgradeToSkill: json-render
+    upgradeWhy: 'Migrate from deprecated message.content to message.parts with type-safe rendering for text, tool calls, and streaming states.'
+    skipIfFileContains: 'message\.parts|part\.type'
 ---
 
 # Vercel AI SDK (v6)
