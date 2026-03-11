@@ -61,6 +61,9 @@ export interface ValidationViolation {
   message: string;
   severity: "error" | "recommended" | "warn";
   matchedText: string;
+  upgradeToSkill?: string;
+  upgradeWhy?: string;
+  upgradeMode?: "hard" | "soft";
 }
 
 export interface ValidateResult {
@@ -270,6 +273,9 @@ export function runValidation(
             message: rule.message,
             severity: rule.severity,
             matchedText: match[0].slice(0, 80),
+            upgradeToSkill: rule.upgradeToSkill,
+            upgradeWhy: rule.upgradeWhy,
+            upgradeMode: rule.upgradeMode ?? (rule.upgradeToSkill ? "soft" : undefined),
           });
         }
       }
@@ -389,17 +395,35 @@ export function formatOutput(
     bySkill.get(v.skill)!.push(v);
   }
 
+  const formatViolationLine = (
+    violation: ValidationViolation,
+    label: "ERROR" | "RECOMMENDED" | "SUGGESTION",
+  ): string => {
+    const lines = [`- Line ${violation.line} [${label}]: ${violation.message}`];
+    if (violation.upgradeToSkill) {
+      lines.push(`Use the Skill tool now to load ${violation.upgradeToSkill}.`);
+      lines.push(
+        `<!-- skillUpgrade: ${JSON.stringify({
+          from: violation.skill,
+          to: violation.upgradeToSkill,
+          line: violation.line,
+        })} -->`,
+      );
+    }
+    return lines.join("\n");
+  };
+
   const parts: string[] = [];
   for (const [skill, skillViolations] of bySkill) {
     const errorLines = skillViolations
       .filter((v) => v.severity === "error")
-      .map((v) => `- Line ${v.line} [ERROR]: ${v.message}`);
+      .map((v) => formatViolationLine(v, "ERROR"));
     const recommendedLines = skillViolations
       .filter((v) => v.severity === "recommended")
-      .map((v) => `- Line ${v.line} [RECOMMENDED]: ${v.message}`);
+      .map((v) => formatViolationLine(v, "RECOMMENDED"));
     const warnLines = skillViolations
       .filter((v) => v.severity === "warn")
-      .map((v) => `- Line ${v.line} [SUGGESTION]: ${v.message}`);
+      .map((v) => formatViolationLine(v, "SUGGESTION"));
     parts.push([...errorLines, ...recommendedLines, ...warnLines].join("\n"));
   }
 

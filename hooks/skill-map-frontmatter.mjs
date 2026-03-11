@@ -268,6 +268,17 @@ function parseValidateRules(raw) {
     if (typeof obj.skipIfFileContains === "string" && obj.skipIfFileContains !== "") {
       rule.skipIfFileContains = obj.skipIfFileContains;
     }
+    if (typeof obj.upgradeToSkill === "string" && obj.upgradeToSkill !== "") {
+      rule.upgradeToSkill = obj.upgradeToSkill;
+    }
+    if (typeof obj.upgradeWhy === "string" && obj.upgradeWhy !== "") {
+      rule.upgradeWhy = obj.upgradeWhy;
+    }
+    if (obj.upgradeMode === "hard" || obj.upgradeMode === "soft") {
+      rule.upgradeMode = obj.upgradeMode;
+    } else if (rule.upgradeToSkill) {
+      rule.upgradeMode = "soft";
+    }
     rules.push(rule);
   }
   return rules;

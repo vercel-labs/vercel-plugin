@@ -44,6 +44,8 @@ const DEV_SERVER_VERIFY_PRIORITY_BOOST = 45;
 const DEV_SERVER_VERIFY_MAX_ITERATIONS = 2;
 const DEV_SERVER_VERIFY_MARKER = "<!-- marker:dev-server-verify -->";
 const DEV_SERVER_COMPANION_SKILLS = ["verification"];
+const AI_SDK_SKILL = "ai-sdk";
+const AI_SDK_COMPANION_SKILLS = ["ai-elements"];
 const DEV_SERVER_UNAVAILABLE_WARNING = `<!-- agent-browser-unavailable -->
 **Recommendation: Install agent-browser for automatic verification**
 
@@ -119,6 +121,12 @@ function isTsxEditTool(toolName, toolInput) {
   if (toolName !== "Edit" && toolName !== "Write") return false;
   const filePath = toolInput.file_path || "";
   return /\.tsx$/.test(filePath);
+}
+function isClientReactFile(toolName, toolInput) {
+  if (toolName !== "Write" && toolName !== "Edit") return false;
+  const filePath = toolInput.file_path || "";
+  if (!/\.[jt]sx$/.test(filePath)) return false;
+  return !/\/(api|actions)\//.test(filePath) && !/\broute\.[jt]sx?$/.test(filePath);
 }
 function checkTsxReviewTrigger(toolName, toolInput, _injectedSkills, dedupOff, logger) {
   const l = logger || log;
@@ -849,6 +857,26 @@ function run() {
       log.debug("dev-server-companion-inject-past-guard", { skill: companion, iterationCount: devServerVerify.iterationCount, max: DEV_SERVER_VERIFY_MAX_ITERATIONS });
     }
   }
+  let aiSdkCompanionInjected = false;
+  if (rankedSkills.includes(AI_SDK_SKILL) && isClientReactFile(toolName, toolInput)) {
+    for (const companion of AI_SDK_COMPANION_SKILLS) {
+      if (rankedSkills.includes(companion)) continue;
+      const companionAlreadySeen = !dedupOff && injectedSkills.has(companion);
+      if (companionAlreadySeen) {
+        forceSummarySkills.add(companion);
+        log.debug("ai-sdk-companion-dedup-bypass", { skill: companion, mode: "summary" });
+      }
+      const sdkIdx = rankedSkills.indexOf(AI_SDK_SKILL);
+      if (sdkIdx !== -1) {
+        rankedSkills.splice(sdkIdx + 1, 0, companion);
+      } else {
+        rankedSkills.unshift(companion);
+      }
+      matched.add(companion);
+      aiSdkCompanionInjected = true;
+      log.debug("ai-sdk-companion-inject", { skill: companion });
+    }
+  }
   let vercelEnvHelpInjected = false;
   if (vercelEnvHelp.triggered) {
     let helpClaimed = true;
@@ -976,6 +1004,16 @@ function run() {
       trigger: "tsx-edit-threshold",
       reasonCode: "tsx-review-trigger"
     };
+  }
+  if (aiSdkCompanionInjected) {
+    for (const companion of AI_SDK_COMPANION_SKILLS) {
+      if (loaded.includes(companion) || summaryOnly && summaryOnly.includes(companion)) {
+        reasons[companion] = {
+          trigger: "ai-sdk-companion",
+          reasonCode: "ai-sdk-client-component"
+        };
+      }
+    }
   }
   for (const skill of loaded) {
     if (!reasons[skill] && matchReasons?.[skill]) {
@@ -1105,6 +1143,8 @@ if (isMainModule()) {
   }
 }
 export {
+  AI_SDK_COMPANION_SKILLS,
+  AI_SDK_SKILL,
   DEFAULT_REVIEW_THRESHOLD,
   DEV_SERVER_COMPANION_SKILLS,
   DEV_SERVER_UNAVAILABLE_WARNING,
@@ -1123,6 +1163,7 @@ export {
   getTsxEditCount,
   incrementDevServerVerifyCount,
   injectSkills,
+  isClientReactFile,
   isDevServerCommand,
   isTsxEditTool,
   loadSkills,

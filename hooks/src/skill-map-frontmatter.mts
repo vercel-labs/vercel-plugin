@@ -22,6 +22,12 @@ export interface ValidationRule {
   severity: "error" | "recommended" | "warn";
   /** If set, skip this rule when the file content matches this regex. */
   skipIfFileContains?: string;
+  /** If set, direct the agent to load a more specific skill for this violation. */
+  upgradeToSkill?: string;
+  /** Optional rationale for why the skill upgrade is needed. */
+  upgradeWhy?: string;
+  /** Upgrade instruction mode. Defaults to "soft" when upgradeToSkill is set. */
+  upgradeMode?: "hard" | "soft";
 }
 
 export interface RetrievalMetadata {
@@ -484,6 +490,17 @@ function parseValidateRules(raw: unknown): ValidationRule[] {
     };
     if (typeof obj.skipIfFileContains === "string" && obj.skipIfFileContains !== "") {
       rule.skipIfFileContains = obj.skipIfFileContains;
+    }
+    if (typeof obj.upgradeToSkill === "string" && obj.upgradeToSkill !== "") {
+      rule.upgradeToSkill = obj.upgradeToSkill;
+    }
+    if (typeof obj.upgradeWhy === "string" && obj.upgradeWhy !== "") {
+      rule.upgradeWhy = obj.upgradeWhy;
+    }
+    if (obj.upgradeMode === "hard" || obj.upgradeMode === "soft") {
+      rule.upgradeMode = obj.upgradeMode;
+    } else if (rule.upgradeToSkill) {
+      rule.upgradeMode = "soft";
     }
     rules.push(rule);
   }
