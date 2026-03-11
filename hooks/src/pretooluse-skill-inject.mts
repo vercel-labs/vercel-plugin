@@ -52,6 +52,7 @@ import { resolveVercelJsonSkills, isVercelJsonPath, VERCEL_JSON_SKILLS } from ".
 import type { VercelJsonRouting } from "./vercel-config.mjs";
 import { createLogger, logDecision } from "./logger.mjs";
 import type { Logger } from "./logger.mjs";
+import { isTelemetryEnabled, trackEvents } from "./telemetry.mjs";
 
 const MAX_SKILLS = 3;
 const DEFAULT_INJECTION_BUDGET_BYTES = 18_000;
