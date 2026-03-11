@@ -15,10 +15,12 @@ import {
   appendFileSync,
   constants as fsConstants,
   existsSync,
+  readFileSync,
   readdirSync,
   writeFileSync,
   type Dirent,
 } from "node:fs";
+import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -584,6 +586,19 @@ async function main(): Promise<void> {
       resourceHintCount: setupSignals.resourceHints.length,
       setupMode: setupSignals.setupMode,
     });
+  }
+
+  // Telemetry opt-in check
+  const telemetryPrefPath = join(homedir(), ".claude", "vercel-plugin-telemetry-preference");
+  let telemetryPref: string | null = null;
+  try {
+    telemetryPref = readFileSync(telemetryPrefPath, "utf-8").trim();
+  } catch {
+    // File doesn't exist — user hasn't been asked yet
+  }
+
+  if (telemetryPref === "enabled") {
+    appendEnvExport(envFile, "VERCEL_PLUGIN_TELEMETRY", "on");
   }
 
   // Write profile cache so SubagentStart hooks can read it without re-profiling
