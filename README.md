@@ -1,15 +1,42 @@
 # vercel-plugin
 
-## Add Globally
-```
-npx add-plugin https://github.com/vercel-labs/vercel-plugin
-```
-## Add to Your Project
-```
-npx add-plugin https://github.com/vercel-labs/vercel-plugin -s project
+A comprehensive [Open Plugin](https://github.com/vercel-labs/open-plugin) that turns any AI agent into a Vercel expert.
+
+## Getting Started
+
+### Prerequisites
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
+- Node.js 18+
+- [Bun](https://bun.sh)
+
+### 1. Clone and build
+
+```bash
+git clone https://github.com/vercel-labs/vercel-plugin.git
+cd vercel-plugin
+bun install
+bun run build
 ```
 
-A comprehensive [Open Plugin](https://github.com/vercel-labs/open-plugin) that turns any AI agent into a Vercel expert.
+### 2. Run Claude Code with the plugin
+
+Navigate to any project you want to work on, then:
+
+```bash
+claude --plugin-dir /path/to/vercel-plugin
+```
+
+That's it. The plugin activates automatically — no setup, no commands to learn.
+
+### Updating
+
+```bash
+cd /path/to/vercel-plugin
+git pull
+bun install
+bun run build
+```
 
 ## What It Does
 
@@ -187,3 +214,11 @@ vercel-plugin/
 - Vercel Observability (Analytics, Speed Insights, Drains)
 - Vercel Marketplace (one-click integrations, unified billing)
 - Agent Browser (browser automation for dev server verification and testing)
+
+## Reporting Issues
+
+If something doesn't work right, a skill gives bad advice, or injection doesn't fire when it should — file an issue on [GitHub](https://github.com/vercel-labs/vercel-plugin/issues). Include:
+
+- What you were building
+- What the plugin injected (or didn't) — enable debug logs with `VERCEL_PLUGIN_LOG_LEVEL=debug`
+- What was wrong about it
