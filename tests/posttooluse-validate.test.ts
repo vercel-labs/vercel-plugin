@@ -507,6 +507,49 @@ describe("posttooluse-validate.mjs", () => {
       expect(meta.warnCount).toBe(0);
     });
 
+    test("emits hard skill upgrade instructions once per target skill", () => {
+      const violations = [
+        {
+          skill: "legacy-sdk",
+          line: 3,
+          message: "Use the ai-sdk skill",
+          severity: "error" as const,
+          matchedText: "legacy",
+          upgradeToSkill: "ai-sdk",
+          upgradeWhy: "legacy provider rules are outdated",
+          upgradeMode: "hard" as const,
+        },
+        {
+          skill: "legacy-sdk",
+          line: 7,
+          message: "Repeated upgrade should dedupe",
+          severity: "recommended" as const,
+          matchedText: "legacy-again",
+          upgradeToSkill: "ai-sdk",
+          upgradeWhy: "this should not be repeated",
+          upgradeMode: "soft" as const,
+        },
+        {
+          skill: "legacy-router",
+          line: 11,
+          message: "Use the nextjs skill",
+          severity: "warn" as const,
+          matchedText: "router",
+          upgradeToSkill: "nextjs",
+        },
+      ];
+      const result = formatOutput(violations, ["legacy-sdk", "legacy-router"], "/test/file.ts");
+      const parsed = JSON.parse(result);
+      const ctx = parsed.hookSpecificOutput.additionalContext;
+
+      expect(ctx).toContain("\n\nREQUIRED: Use the Skill tool now to load ai-sdk. Reason: legacy provider rules are outdated");
+      expect(ctx).toContain('<!-- skillUpgrade: {"from":"legacy-sdk","to":"ai-sdk","line":3} -->');
+      expect((ctx.match(/Use the Skill tool now to load ai-sdk\./g) ?? []).length).toBe(1);
+      expect((ctx.match(/<!-- skillUpgrade: \{\"from\":\"legacy-sdk\",\"to\":\"ai-sdk\",\"line\":3\} -->/g) ?? []).length).toBe(1);
+      expect(ctx).toContain("\n\nUse the Skill tool now to load nextjs.");
+      expect(ctx).toContain('<!-- skillUpgrade: {"from":"legacy-router","to":"nextjs","line":11} -->');
+    });
+
     test("output conforms to SyncHookJSONOutput schema", () => {
       const violations = [{
         skill: "ai-sdk",

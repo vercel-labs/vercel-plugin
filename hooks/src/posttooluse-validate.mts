@@ -395,13 +395,19 @@ export function formatOutput(
     bySkill.get(v.skill)!.push(v);
   }
 
+  const emittedUpgradeSkills = new Set<string>();
+
   const formatViolationLine = (
     violation: ValidationViolation,
     label: "ERROR" | "RECOMMENDED" | "SUGGESTION",
   ): string => {
     const lines = [`- Line ${violation.line} [${label}]: ${violation.message}`];
-    if (violation.upgradeToSkill) {
-      lines.push(`Use the Skill tool now to load ${violation.upgradeToSkill}.`);
+    if (violation.upgradeToSkill && !emittedUpgradeSkills.has(violation.upgradeToSkill)) {
+      emittedUpgradeSkills.add(violation.upgradeToSkill);
+      const reason = violation.upgradeWhy ? ` Reason: ${violation.upgradeWhy}` : "";
+      const prefix = violation.upgradeMode === "hard" ? "REQUIRED: " : "";
+      lines.push("");
+      lines.push(`${prefix}Use the Skill tool now to load ${violation.upgradeToSkill}.${reason}`);
       lines.push(
         `<!-- skillUpgrade: ${JSON.stringify({
           from: violation.skill,
