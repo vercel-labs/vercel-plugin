@@ -11,13 +11,7 @@
 ### Option 1: Install with `npx add-plugin` (recommended)
 
 ```bash
-npx add-plugin https://github.com/vercel-labs/vercel-plugin -s project
-```
-
-Or using the shorthand:
-
-```bash
-npx add-plugin vercel-labs/vercel-plugin
+npx plugins add vercel-labs/vercel-plugin
 ```
 
 That's it. The plugin activates automatically — no setup, no commands to learn.
