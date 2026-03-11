@@ -14,7 +14,10 @@ const ROOT = resolve(import.meta.dirname, "..");
 const HOOKS_JSON = join(ROOT, "hooks", "hooks.json");
 const SCRIPT = join(ROOT, "hooks", "session-start-seen-skills.mjs");
 
-async function runSessionStart(env: Record<string, string | undefined>): Promise<{ code: number; stdout: string; stderr: string }> {
+async function runSessionStart(
+  env: Record<string, string | undefined>,
+  stdin?: string,
+): Promise<{ code: number; stdout: string; stderr: string }> {
   const mergedEnv: Record<string, string> = { ...(process.env as Record<string, string>) };
 
   for (const [key, value] of Object.entries(env)) {
@@ -26,10 +29,16 @@ async function runSessionStart(env: Record<string, string | undefined>): Promise
   }
 
   const proc = Bun.spawn(["node", SCRIPT], {
+    stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
     env: mergedEnv,
   });
+
+  if (typeof stdin === "string") {
+    proc.stdin.write(stdin);
+  }
+  proc.stdin.end();
 
   const code = await proc.exited;
   const stdout = await new Response(proc.stdout).text();
@@ -111,6 +120,21 @@ describe("session-start-seen-skills hook", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toBe("");
     expect(result.stderr).toBe("");
+  });
+
+  test("test_session_start_returns_cursor_env_json_when_cursor_payload_is_present", async () => {
+    const result = await runSessionStart(
+      { CLAUDE_ENV_FILE: undefined },
+      JSON.stringify({ conversation_id: "cursor-conversation" }),
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      env: {
+        VERCEL_PLUGIN_SEEN_SKILLS: "",
+      },
+    });
   });
 });
 

@@ -8,10 +8,14 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 type SessionEndHookInput = {
   session_id?: string;
+  conversation_id?: string;
+  cursor_version?: string;
+  [key: string]: unknown;
 };
 
 const SAFE_SESSION_ID_RE = /^[a-zA-Z0-9_-]+$/;
@@ -40,33 +44,43 @@ function removeDirIfPresent(path: string): void {
   }
 }
 
-function parseSessionIdFromStdin(): string | null {
+export function parseSessionEndHookInput(raw: string): SessionEndHookInput | null {
   try {
-    const raw = readFileSync(0, "utf8");
     if (!raw.trim()) return null;
-
-    const data = JSON.parse(raw) as SessionEndHookInput;
-    return typeof data.session_id === "string" && data.session_id.length > 0
-      ? data.session_id
-      : null;
+    return JSON.parse(raw) as SessionEndHookInput;
   } catch {
     return null;
   }
 }
 
-// Convert "asked" telemetry preference to "disabled" (opt-out by default)
-try {
-  const prefPath = join(homedir(), ".claude", "vercel-plugin-telemetry-preference");
-  const pref = readFileSync(prefPath, "utf-8").trim();
-  if (pref === "asked") {
-    writeFileSync(prefPath, "disabled");
-  }
-} catch {
-  // File doesn't exist or can't be read — nothing to do
+export function normalizeSessionEndSessionId(input: SessionEndHookInput | null): string | null {
+  if (!input) return null;
+
+  const sessionId = input.session_id ?? input.conversation_id ?? "";
+
+  return typeof sessionId === "string" && sessionId.length > 0 ? sessionId : null;
 }
 
-const sessionId = parseSessionIdFromStdin();
-if (sessionId !== null) {
+function parseSessionIdFromStdin(): string | null {
+  return normalizeSessionEndSessionId(parseSessionEndHookInput(readFileSync(0, "utf8")));
+}
+
+function main(): void {
+  // Convert "asked" telemetry preference to "disabled" (opt-out by default)
+  try {
+    const prefPath = join(homedir(), ".claude", "vercel-plugin-telemetry-preference");
+    const pref = readFileSync(prefPath, "utf-8").trim();
+    if (pref === "asked") {
+      writeFileSync(prefPath, "disabled");
+    }
+  } catch {
+    // File doesn't exist or can't be read — nothing to do
+  }
+
+  const sessionId = parseSessionIdFromStdin();
+  if (sessionId === null) {
+    process.exit(0);
+  }
   const tempRoot = tmpdir();
   const prefix = `vercel-plugin-${tempSessionIdSegment(sessionId)}-`;
 
@@ -86,6 +100,15 @@ if (sessionId !== null) {
       removeFileIfPresent(fullPath);
     }
   }
+
+  process.exit(0);
 }
 
-process.exit(0);
+const SESSION_END_CLEANUP_ENTRYPOINT = fileURLToPath(import.meta.url);
+const isSessionEndCleanupEntrypoint = process.argv[1]
+  ? resolve(process.argv[1]) === SESSION_END_CLEANUP_ENTRYPOINT
+  : false;
+
+if (isSessionEndCleanupEntrypoint) {
+  main();
+}

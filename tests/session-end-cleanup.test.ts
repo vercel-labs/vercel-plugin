@@ -8,7 +8,9 @@ const ROOT = resolve(import.meta.dirname, "..");
 const HOOK_SCRIPT = join(ROOT, "hooks", "session-end-cleanup.mjs");
 const HOOKS_CONFIG_PATH = join(ROOT, "hooks", "hooks.json");
 
-async function runSessionEnd(sessionId: string): Promise<{ code: number; stdout: string; stderr: string }> {
+async function runSessionEnd(
+  payload: Record<string, string>,
+): Promise<{ code: number; stdout: string; stderr: string }> {
   const proc = Bun.spawn(["node", HOOK_SCRIPT], {
     stdin: "pipe",
     stdout: "pipe",
@@ -19,7 +21,7 @@ async function runSessionEnd(sessionId: string): Promise<{ code: number; stdout:
     },
   });
 
-  proc.stdin.write(JSON.stringify({ session_id: sessionId }));
+  proc.stdin.write(JSON.stringify(payload));
   proc.stdin.end();
 
   const code = await proc.exited;
@@ -40,7 +42,29 @@ describe("session-end-cleanup", () => {
     try {
       expect(existsSync(pendingLaunchDir)).toBe(true);
 
-      const { code, stdout, stderr } = await runSessionEnd(sessionId);
+      const { code, stdout, stderr } = await runSessionEnd({ session_id: sessionId });
+
+      expect(code).toBe(0);
+      expect(stdout).toBe("");
+      expect(stderr).toBe("");
+      expect(existsSync(pendingLaunchDir)).toBe(false);
+    } finally {
+      rmSync(pendingLaunchDir, { recursive: true, force: true });
+    }
+  });
+
+  test("removes hashed pending-launch directories when only conversation_id is provided", async () => {
+    const conversationId = "cursor/conversation:id";
+    const hashedSessionId = createHash("sha256").update(conversationId).digest("hex");
+    const pendingLaunchDir = join(resolve(tmpdir()), `vercel-plugin-${hashedSessionId}-pending-launches`);
+
+    mkdirSync(pendingLaunchDir, { recursive: true });
+    writeFileSync(join(pendingLaunchDir, "launch.json"), "{\"ok\":true}\n", "utf-8");
+
+    try {
+      expect(existsSync(pendingLaunchDir)).toBe(true);
+
+      const { code, stdout, stderr } = await runSessionEnd({ conversation_id: conversationId });
 
       expect(code).toBe(0);
       expect(stdout).toBe("");
