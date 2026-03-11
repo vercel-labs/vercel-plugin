@@ -13,56 +13,8 @@ import {
 import { createLogger } from "./logger.mjs";
 const PLUGIN_ROOT = resolvePluginRoot();
 const SUPPORTED_TOOLS = ["Write", "Edit"];
-function detectHookPlatform(input) {
-  if ("conversation_id" in input || "cursor_version" in input) {
-    return "cursor";
-  }
-  return "claude-code";
-}
-function resolveWorkspaceRoot(input) {
-  if (!Array.isArray(input.workspace_roots)) {
-    return null;
-  }
-  for (const root of input.workspace_roots) {
-    if (typeof root === "string" && root.trim() !== "") {
-      return root;
-    }
-  }
-  return null;
-}
-function resolveSessionId(input, env) {
-  if (typeof input.session_id === "string" && input.session_id.trim() !== "") {
-    return input.session_id;
-  }
-  if (typeof input.conversation_id === "string" && input.conversation_id.trim() !== "") {
-    return input.conversation_id;
-  }
-  if (typeof env.SESSION_ID === "string" && env.SESSION_ID.trim() !== "") {
-    return env.SESSION_ID;
-  }
-  return null;
-}
-function resolveHookCwd(input, env) {
-  const candidate = input.cwd ?? input.working_directory ?? resolveWorkspaceRoot(input) ?? env.CURSOR_PROJECT_DIR ?? env.CLAUDE_PROJECT_ROOT ?? process.cwd();
-  return typeof candidate === "string" && candidate.trim() !== "" ? candidate : process.cwd();
-}
-function formatPlatformOutput(platform, additionalContext) {
-  if (!additionalContext) {
-    return "{}";
-  }
-  if (platform === "cursor") {
-    return JSON.stringify({ additional_context: additionalContext });
-  }
-  const output = {
-    hookSpecificOutput: {
-      hookEventName: "PostToolUse",
-      additionalContext
-    }
-  };
-  return JSON.stringify(output);
-}
 const log = createLogger();
-function parseInput(raw, logger, env = process.env) {
+function parseInput(raw, logger) {
   const l = logger || log;
   const trimmed = (raw || "").trim();
   if (!trimmed) {
@@ -87,17 +39,11 @@ function parseInput(raw, logger, env = process.env) {
     l.debug("posttooluse-validate-skip", { reason: "no_file_path", toolName });
     return null;
   }
-  const sessionId = resolveSessionId(input, env);
-  const cwd = resolveHookCwd(input, env);
-  const platform = detectHookPlatform(input);
-  l.debug("posttooluse-validate-input", {
-    toolName,
-    filePath,
-    sessionId,
-    cwd,
-    platform
-  });
-  return { toolName, filePath, sessionId, cwd, platform };
+  const sessionId = input.session_id || null;
+  const cwdCandidate = input.cwd ?? input.working_directory;
+  const cwd = typeof cwdCandidate === "string" && cwdCandidate.trim() !== "" ? cwdCandidate : null;
+  l.debug("posttooluse-validate-input", { toolName, filePath, sessionId });
+  return { toolName, filePath, sessionId, cwd };
 }
 function loadValidateRules(pluginRoot, logger) {
   const l = logger || log;
@@ -245,7 +191,7 @@ function markValidated(filePath, hash, sessionId) {
     writeSessionFile(sessionId, "validated-files", next);
   }
 }
-function formatOutput(violations, matchedSkills, filePath, logger, platform = "claude-code") {
+function formatOutput(violations, matchedSkills, filePath, logger) {
   const l = logger || log;
   if (violations.length === 0) {
     l.debug("posttooluse-validate-no-output", { reason: "no_actionable_violations" });
@@ -312,6 +258,12 @@ function formatOutput(violations, matchedSkills, filePath, logger, platform = "c
     warnCount: warns.length
   };
   const metaComment = `<!-- postValidation: ${JSON.stringify(metadata)} -->`;
+  const output = {
+    hookSpecificOutput: {
+      hookEventName: "PostToolUse",
+      additionalContext: context + "\n" + metaComment
+    }
+  };
   l.summary("posttooluse-validate-output", {
     filePath,
     matchedSkills,
@@ -319,7 +271,7 @@ function formatOutput(violations, matchedSkills, filePath, logger, platform = "c
     recommendedCount: recommended.length,
     warnCount: warns.length
   });
-  return formatPlatformOutput(platform, context + "\n" + metaComment);
+  return JSON.stringify(output);
 }
 function run() {
   const timing = {};
@@ -333,7 +285,7 @@ function run() {
   const parsed = parseInput(raw, log);
   if (!parsed) return "{}";
   if (log.active) timing.parse = Math.round(log.now() - tStart);
-  const { toolName, filePath, sessionId, cwd, platform } = parsed;
+  const { toolName, filePath, sessionId, cwd } = parsed;
   const resolvedPath = cwd ? resolve(cwd, filePath) : filePath;
   const fileContent = safeReadFile(resolvedPath);
   if (!fileContent) {
@@ -362,7 +314,7 @@ function run() {
   const violations = runValidation(fileContent, matchedSkills, rulesMap, log);
   if (log.active) timing.validate = Math.round(log.now() - tValidate);
   markValidated(filePath, hash, sessionId);
-  const result = formatOutput(violations, matchedSkills, filePath, log, platform);
+  const result = formatOutput(violations, matchedSkills, filePath, log);
   log.complete("posttooluse-validate-done", {
     matchedCount: matchedSkills.length,
     injectedCount: violations.filter((v) => v.severity === "error").length
