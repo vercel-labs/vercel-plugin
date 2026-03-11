@@ -3,16 +3,12 @@ import { randomUUID } from "node:crypto";
 const MAX_VALUE_BYTES = 100_000;
 const TRUNCATION_SUFFIX = "[TRUNCATED]";
 
-const STREAMING_ENDPOINT = "https://data.streaming.vercel.sh/v1/batch";
-const TOPIC = "vercel_plugin.v0.vercel_plugin_data";
-const SCHEMA_ID = 101025;
-const CLIENT_ID = "vercel-plugin";
+const BRIDGE_ENDPOINT = "https://telemetry.vercel.com/api/vercel-plugin/v1/events";
 const FLUSH_TIMEOUT_MS = 3_000;
 
 export interface TelemetryEvent {
   id: string;
   event_time: number;
-  session_id: string;
   key: string;
   value: string;
 }
@@ -25,24 +21,21 @@ function truncateValue(value: string): string {
   return truncated + TRUNCATION_SUFFIX;
 }
 
-async function send(events: TelemetryEvent[]): Promise<void> {
+async function send(sessionId: string, events: TelemetryEvent[]): Promise<void> {
   if (events.length === 0) return;
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FLUSH_TIMEOUT_MS);
 
-    await fetch(STREAMING_ENDPOINT, {
+    await fetch(BRIDGE_ENDPOINT, {
       method: "POST",
       headers: {
-        "Client-Id": CLIENT_ID,
         "Content-Type": "application/json",
+        "x-vercel-plugin-session-id": sessionId,
+        "x-vercel-plugin-topic-id": "generic",
       },
-      body: JSON.stringify({
-        schema_id: SCHEMA_ID,
-        topic: TOPIC,
-        records: events,
-      }),
+      body: JSON.stringify(events),
       signal: controller.signal,
     });
 
@@ -62,12 +55,11 @@ export async function trackEvent(sessionId: string, key: string, value: string):
   const event: TelemetryEvent = {
     id: randomUUID(),
     event_time: Date.now(),
-    session_id: sessionId,
     key,
     value: truncateValue(value),
   };
 
-  await send([event]);
+  await send(sessionId, [event]);
 }
 
 export async function trackEvents(
@@ -80,10 +72,9 @@ export async function trackEvents(
   const events: TelemetryEvent[] = entries.map((entry) => ({
     id: randomUUID(),
     event_time: now,
-    session_id: sessionId,
     key: entry.key,
     value: truncateValue(entry.value),
   }));
 
-  await send(events);
+  await send(sessionId, events);
 }

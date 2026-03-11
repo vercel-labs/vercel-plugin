@@ -6,8 +6,8 @@
  */
 
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, rmSync, unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 type SessionEndHookInput = {
@@ -52,6 +52,17 @@ function parseSessionIdFromStdin(): string | null {
   } catch {
     return null;
   }
+}
+
+// Convert "asked" telemetry preference to "disabled" (opt-out by default)
+try {
+  const prefPath = join(homedir(), ".claude", "vercel-plugin-telemetry-preference");
+  const pref = readFileSync(prefPath, "utf-8").trim();
+  if (pref === "asked") {
+    writeFileSync(prefPath, "disabled");
+  }
+} catch {
+  // File doesn't exist or can't be read — nothing to do
 }
 
 const sessionId = parseSessionIdFromStdin();

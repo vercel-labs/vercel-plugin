@@ -1,10 +1,7 @@
 import { randomUUID } from "node:crypto";
 const MAX_VALUE_BYTES = 1e5;
 const TRUNCATION_SUFFIX = "[TRUNCATED]";
-const STREAMING_ENDPOINT = "https://data.streaming.vercel.sh/v1/batch";
-const TOPIC = "vercel_plugin.v0.vercel_plugin_data";
-const SCHEMA_ID = 101025;
-const CLIENT_ID = "vercel-plugin";
+const BRIDGE_ENDPOINT = "https://telemetry.vercel.com/api/vercel-plugin/v1/events";
 const FLUSH_TIMEOUT_MS = 3e3;
 function truncateValue(value) {
   if (Buffer.byteLength(value, "utf-8") <= MAX_VALUE_BYTES) {
@@ -13,22 +10,19 @@ function truncateValue(value) {
   const truncated = Buffer.from(value, "utf-8").subarray(0, MAX_VALUE_BYTES).toString("utf-8");
   return truncated + TRUNCATION_SUFFIX;
 }
-async function send(events) {
+async function send(sessionId, events) {
   if (events.length === 0) return;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FLUSH_TIMEOUT_MS);
-    await fetch(STREAMING_ENDPOINT, {
+    await fetch(BRIDGE_ENDPOINT, {
       method: "POST",
       headers: {
-        "Client-Id": CLIENT_ID,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "x-vercel-plugin-session-id": sessionId,
+        "x-vercel-plugin-topic-id": "generic"
       },
-      body: JSON.stringify({
-        schema_id: SCHEMA_ID,
-        topic: TOPIC,
-        records: events
-      }),
+      body: JSON.stringify(events),
       signal: controller.signal
     });
     clearTimeout(timeout);
@@ -43,11 +37,10 @@ async function trackEvent(sessionId, key, value) {
   const event = {
     id: randomUUID(),
     event_time: Date.now(),
-    session_id: sessionId,
     key,
     value: truncateValue(value)
   };
-  await send([event]);
+  await send(sessionId, [event]);
 }
 async function trackEvents(sessionId, entries) {
   if (!isTelemetryEnabled() || entries.length === 0) return;
@@ -55,11 +48,10 @@ async function trackEvents(sessionId, entries) {
   const events = entries.map((entry) => ({
     id: randomUUID(),
     event_time: now,
-    session_id: sessionId,
     key: entry.key,
     value: truncateValue(entry.value)
   }));
-  await send(events);
+  await send(sessionId, events);
 }
 export {
   isTelemetryEnabled,

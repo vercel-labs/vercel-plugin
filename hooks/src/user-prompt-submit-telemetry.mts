@@ -7,6 +7,10 @@
  * asking the model to prompt the user — isolated from skill injection
  * so it doesn't get buried.
  *
+ * Writes "asked" to the preference file immediately so the user is never
+ * re-prompted even if the model fails to persist the final answer.
+ * session-end-cleanup converts "asked" → "disabled" (opt-out by default).
+ *
  * Input:  JSON on stdin with { session_id }
  * Output: JSON on stdout with { hookSpecificOutput: { hookEventName, additionalContext } } or {}
  */
@@ -29,10 +33,10 @@ function parseStdin(): Record<string, unknown> | null {
 }
 
 function main(): void {
-  // Already opted in or out — nothing to do
+  // Already opted in, out, or asked — nothing to do
   try {
     const pref = readFileSync(PREF_PATH, "utf-8").trim();
-    if (pref === "enabled" || pref === "disabled") {
+    if (pref === "enabled" || pref === "disabled" || pref === "asked") {
       process.stdout.write("{}");
       process.exit(0);
     }
@@ -60,16 +64,20 @@ function main(): void {
     }
   }
 
+  // Write "asked" immediately so we never re-prompt across sessions
+  try {
+    mkdirSync(dirname(PREF_PATH), { recursive: true });
+    writeFileSync(PREF_PATH, "asked");
+  } catch {
+    // If we can't write, fall through — tmpdir flag still guards this session
+  }
+
   const message = [
-    "BLOCKING REQUIREMENT: Before responding to the user's message, you MUST first ask the user the following question.",
-    "",
     "The Vercel plugin can collect anonymous telemetry data to help improve the plugin experience.",
-    "Ask the user: \"Would you like to enable anonymous telemetry for the Vercel plugin?\"",
+    "After responding to the user's message, ask if they would like to enable anonymous telemetry for the Vercel plugin.",
     "",
     "- If they agree, run: `echo 'enabled' > ~/.claude/vercel-plugin-telemetry-preference`",
     "- If they decline, run: `echo 'disabled' > ~/.claude/vercel-plugin-telemetry-preference`",
-    "",
-    "This question MUST be asked before you do anything else. Do not skip it.",
   ].join("\n");
 
   const output: SyncHookJSONOutput = {

@@ -15,7 +15,7 @@ function parseStdin() {
 function main() {
   try {
     const pref = readFileSync(PREF_PATH, "utf-8").trim();
-    if (pref === "enabled" || pref === "disabled") {
+    if (pref === "enabled" || pref === "disabled" || pref === "asked") {
       process.stdout.write("{}");
       process.exit(0);
     }
@@ -37,16 +37,17 @@ function main() {
       process.exit(0);
     }
   }
+  try {
+    mkdirSync(dirname(PREF_PATH), { recursive: true });
+    writeFileSync(PREF_PATH, "asked");
+  } catch {
+  }
   const message = [
-    "BLOCKING REQUIREMENT: Before responding to the user's message, you MUST first ask the user the following question.",
-    "",
     "The Vercel plugin can collect anonymous telemetry data to help improve the plugin experience.",
-    'Ask the user: "Would you like to enable anonymous telemetry for the Vercel plugin?"',
+    "After responding to the user's message, ask if they would like to enable anonymous telemetry for the Vercel plugin.",
     "",
     "- If they agree, run: `echo 'enabled' > ~/.claude/vercel-plugin-telemetry-preference`",
-    "- If they decline, run: `echo 'disabled' > ~/.claude/vercel-plugin-telemetry-preference`",
-    "",
-    "This question MUST be asked before you do anything else. Do not skip it."
+    "- If they decline, run: `echo 'disabled' > ~/.claude/vercel-plugin-telemetry-preference`"
   ].join("\n");
   const output = {
     hookSpecificOutput: {

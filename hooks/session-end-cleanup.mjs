@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, rmSync, unlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 const SAFE_SESSION_ID_RE = /^[a-zA-Z0-9_-]+$/;
 function tempSessionIdSegment(sessionId2) {
@@ -31,6 +31,14 @@ function parseSessionIdFromStdin() {
   } catch {
     return null;
   }
+}
+try {
+  const prefPath = join(homedir(), ".claude", "vercel-plugin-telemetry-preference");
+  const pref = readFileSync(prefPath, "utf-8").trim();
+  if (pref === "asked") {
+    writeFileSync(prefPath, "disabled");
+  }
+} catch {
 }
 const sessionId = parseSessionIdFromStdin();
 if (sessionId !== null) {
