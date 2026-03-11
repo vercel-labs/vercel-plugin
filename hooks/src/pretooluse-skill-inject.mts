@@ -5,7 +5,8 @@
  * skill-map patterns.
  *
  * Input: JSON on stdin with tool_name, tool_input, session_id, cwd
- * Output: JSON on stdout with { hookSpecificOutput: { additionalContext: "..." } } or {}
+ * Output: Claude Code emits { hookSpecificOutput: { additionalContext: "..." } } or {},
+ * while Cursor emits { additional_context: "..." } or {}.
  *
  * Injects skills in priority order until byte budget (default 18KB) is exhausted,
  * with a hard ceiling of 3 skills. Deduplicates per session.
@@ -21,6 +22,11 @@ import type { SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import { readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  detectPlatform,
+  type HookPlatform,
+  setSessionEnv,
+} from "./compat.mjs";
 import {
   appendAuditLog,
   generateVerificationId,
@@ -76,6 +82,10 @@ const DEV_SERVER_VERIFY_MARKER = "<!-- marker:dev-server-verify -->";
 // Companion skills co-injected alongside agent-browser-verify on dev server detection.
 // These share the same iteration guard and loop-guard bypass logic.
 const DEV_SERVER_COMPANION_SKILLS: string[] = ["verification"];
+
+// Companion skills co-injected alongside ai-sdk when the tool call targets a client-side React file.
+const AI_SDK_SKILL = "ai-sdk";
+const AI_SDK_COMPANION_SKILLS: string[] = ["ai-elements"];
 const DEV_SERVER_UNAVAILABLE_WARNING = `<!-- agent-browser-unavailable -->
 **Recommendation: Install agent-browser for automatic verification**
 
@@ -184,11 +194,80 @@ function isTsxEditTool(toolName: string, toolInput: Record<string, unknown>): bo
   return /\.tsx$/.test(filePath);
 }
 
+/** Check if the current tool call targets a client-side React file (not an API route/server action). */
+function isClientReactFile(toolName: string, toolInput: Record<string, unknown>): boolean {
+  if (toolName !== "Write" && toolName !== "Edit") return false;
+  const filePath = (toolInput.file_path as string) || "";
+  if (!/\.[jt]sx$/.test(filePath)) return false;
+  return !/\/(api|actions)\//.test(filePath) && !/\broute\.[jt]sx?$/.test(filePath);
+}
+
 export interface TsxReviewTriggerResult {
   triggered: boolean;
   count: number;
   threshold: number;
   debounced: boolean;
+}
+export type { HookPlatform };
+
+const RUNTIME_ENV_KEYS = [
+  "VERCEL_PLUGIN_SEEN_SKILLS",
+  "VERCEL_PLUGIN_TSX_EDIT_COUNT",
+  "VERCEL_PLUGIN_DEV_VERIFY_COUNT",
+] as const;
+
+type RuntimeEnvKey = (typeof RUNTIME_ENV_KEYS)[number];
+
+export type RuntimeEnvSnapshot = Record<RuntimeEnvKey, string | undefined>;
+export type RuntimeEnvUpdates = Partial<Record<RuntimeEnvKey, string>>;
+
+function hasClaudeEnvFile(): boolean {
+  return !!process.env.CLAUDE_ENV_FILE;
+}
+
+export function captureRuntimeEnvSnapshot(env: NodeJS.ProcessEnv = process.env): RuntimeEnvSnapshot {
+  return {
+    VERCEL_PLUGIN_SEEN_SKILLS: env.VERCEL_PLUGIN_SEEN_SKILLS,
+    VERCEL_PLUGIN_TSX_EDIT_COUNT: env.VERCEL_PLUGIN_TSX_EDIT_COUNT,
+    VERCEL_PLUGIN_DEV_VERIFY_COUNT: env.VERCEL_PLUGIN_DEV_VERIFY_COUNT,
+  };
+}
+
+export function collectRuntimeEnvUpdates(
+  before: RuntimeEnvSnapshot,
+  env: NodeJS.ProcessEnv = process.env,
+): RuntimeEnvUpdates {
+  const updates: RuntimeEnvUpdates = {};
+
+  for (const key of RUNTIME_ENV_KEYS) {
+    const next = env[key];
+    if (typeof next === "string" && next !== before[key]) {
+      updates[key] = next;
+    }
+  }
+
+  return updates;
+}
+
+function finalizeRuntimeEnvUpdates(
+  platform: HookPlatform,
+  before: RuntimeEnvSnapshot,
+  env: NodeJS.ProcessEnv = process.env,
+): RuntimeEnvUpdates | undefined {
+  const updates = collectRuntimeEnvUpdates(before, env);
+
+  if (platform === "cursor" || !hasClaudeEnvFile()) {
+    return Object.keys(updates).length > 0 ? updates : undefined;
+  }
+
+  for (const key of RUNTIME_ENV_KEYS) {
+    const value = updates[key];
+    if (typeof value === "string") {
+      setSessionEnv(platform, key, value);
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -376,8 +455,9 @@ function checkVercelEnvHelp(
 export interface ParsedInput {
   toolName: string;
   toolInput: Record<string, unknown>;
-  sessionId: string | null;
-  cwd: string | null;
+  sessionId: string;
+  cwd: string;
+  platform: HookPlatform;
   toolTarget: string;
   /** Agent-scoped dedup: present when running inside a subagent. */
   scopeId: string | undefined;
@@ -387,7 +467,11 @@ export interface ParsedInput {
  * Parse raw stdin JSON into a normalized input descriptor.
  * Returns null if input is empty or unparseable.
  */
-export function parseInput(raw: string, logger?: Logger): ParsedInput | null {
+export function parseInput(
+  raw: string,
+  logger?: Logger,
+  env: NodeJS.ProcessEnv = process.env,
+): ParsedInput | null {
   const l = logger || log;
   const trimmed = (raw || "").trim();
   if (!trimmed) {
@@ -396,7 +480,7 @@ export function parseInput(raw: string, logger?: Logger): ParsedInput | null {
     return null;
   }
 
-  let input: Record<string, unknown>;
+  let input: unknown;
   try {
     input = JSON.parse(trimmed);
   } catch (err) {
@@ -405,25 +489,42 @@ export function parseInput(raw: string, logger?: Logger): ParsedInput | null {
     return null;
   }
 
-  const toolName = (input.tool_name as string) || "";
-  const toolInput = (input.tool_input as Record<string, unknown>) || {};
-  const sessionId = (input.session_id as string) || process.env.SESSION_ID || null;
-  const cwdCandidate = input.cwd ?? input.working_directory;
-  const cwd = typeof cwdCandidate === "string" && cwdCandidate.trim() !== "" ? cwdCandidate : null;
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    l.issue("STDIN_NOT_OBJECT", "Parsed stdin JSON was not an object", "Send a JSON object payload with tool_name and tool_input fields", { inputType: typeof input });
+    l.complete("stdin_not_object");
+    return null;
+  }
+
+  const parsed = input as Record<string, unknown>;
+  const workspaceRoot = Array.isArray(parsed.workspace_roots) && typeof parsed.workspace_roots[0] === "string"
+    ? parsed.workspace_roots[0]
+    : undefined;
+  const toolName = (parsed.tool_name as string) || "";
+  const toolInput = (parsed.tool_input as Record<string, unknown>) || {};
+  const platform = detectPlatform(parsed);
+  const sessionId = typeof (parsed.session_id ?? parsed.conversation_id) === "string"
+    ? (parsed.session_id ?? parsed.conversation_id) as string
+    : "";
+  const cwdCandidate = parsed.cwd
+    ?? workspaceRoot
+    ?? env.CURSOR_PROJECT_DIR
+    ?? env.CLAUDE_PROJECT_ROOT
+    ?? process.cwd();
+  const cwd = typeof cwdCandidate === "string" && cwdCandidate.trim() !== "" ? cwdCandidate : process.cwd();
   const toolTarget = toolName === "Bash"
     ? ((toolInput.command as string) || "")
     : ((toolInput.file_path as string) || "");
 
   // Extract agent_id for scoped dedup (present when running inside a subagent)
-  const agentId = typeof input.agent_id === "string" && input.agent_id.length > 0
-    ? input.agent_id
+  const agentId = typeof parsed.agent_id === "string" && parsed.agent_id.length > 0
+    ? parsed.agent_id
     : undefined;
   const scopeId = agentId;
 
-  l.debug("input-parsed", { toolName, sessionId: sessionId as string, cwd, scopeId });
+  l.debug("input-parsed", { toolName, sessionId: sessionId as string, cwd, platform, scopeId });
   l.debug("tool-target", { toolName, target: redactCommand(toolTarget) });
 
-  return { toolName, toolInput, sessionId, cwd, toolTarget, scopeId };
+  return { toolName, toolInput, sessionId, cwd, platform, toolTarget, scopeId };
 }
 
 // ---------------------------------------------------------------------------
@@ -482,17 +583,24 @@ export function loadSkills(pluginRoot?: string, logger?: Logger): LoadedSkills |
       }
 
       const validation = validateSkillMap(built);
-      if (!validation.ok) {
-        l.issue("SKILLMAP_VALIDATE_FAIL", "Skill map validation failed after build", "Check SKILL.md frontmatter types: pathPatterns and bashPatterns must be arrays", { errors: validation.errors });
+      if (validation.ok) {
+        if (validation.warnings && validation.warnings.length > 0) {
+          for (const w of validation.warnings) {
+            l.debug("skillmap-validation-warning", { warning: w });
+          }
+        }
+        skillMap = validation.normalizedSkillMap.skills;
+      } else {
+        const validationErrors = "errors" in validation ? validation.errors : [];
+        l.issue(
+          "SKILLMAP_VALIDATE_FAIL",
+          "Skill map validation failed after build",
+          "Check SKILL.md frontmatter types: pathPatterns and bashPatterns must be arrays",
+          { errors: validationErrors },
+        );
         l.complete("skillmap_fail");
         return null;
       }
-      if (validation.warnings && validation.warnings.length > 0) {
-        for (const w of validation.warnings) {
-          l.debug("skillmap-validation-warning", { warning: w });
-        }
-      }
-      skillMap = validation.normalizedSkillMap.skills;
     } catch (err) {
       l.issue("SKILLMAP_LOAD_FAIL", "Failed to build skill map from SKILL.md frontmatter", "Check that skills/*/SKILL.md files exist and contain valid YAML frontmatter with metadata.pathPatterns", { error: String(err) });
       l.complete("skillmap_fail");
@@ -993,6 +1101,41 @@ export interface FormatOutputParams {
   reasons?: Record<string, SkillInjectionReason>;
   verificationId?: string;
   skillMap?: Record<string, { docs?: string[]; sitemap?: string }>;
+  platform?: HookPlatform;
+  env?: RuntimeEnvUpdates;
+}
+
+function formatPlatformOutput(
+  platform: HookPlatform,
+  additionalContext?: string,
+  env?: RuntimeEnvUpdates,
+): string {
+  if (platform === "cursor") {
+    const output: Record<string, unknown> = {};
+    if (additionalContext) {
+      output.additional_context = additionalContext;
+    }
+    if (env && Object.keys(env).length > 0) {
+      output.env = env;
+    }
+    return Object.keys(output).length > 0 ? JSON.stringify(output) : "{}";
+  }
+
+  const output: Record<string, unknown> = {};
+
+  if (additionalContext) {
+    const hookSpecificOutput: SyncHookJSONOutput["hookSpecificOutput"] = {
+      hookEventName: "PreToolUse" as const,
+      additionalContext,
+    };
+    output.hookSpecificOutput = hookSpecificOutput;
+  }
+
+  if (env && Object.keys(env).length > 0) {
+    output.env = env;
+  }
+
+  return Object.keys(output).length > 0 ? JSON.stringify(output) : "{}";
 }
 
 /**
@@ -1026,9 +1169,24 @@ function encodeJsonForHtmlComment(value: unknown): string {
   return JSON.stringify(value).replace(/-->/g, "--\\u003E");
 }
 
-export function formatOutput({ parts, matched, injectedSkills, summaryOnly, droppedByCap, droppedByBudget, toolName, toolTarget, matchReasons, reasons, verificationId, skillMap }: FormatOutputParams): string {
+export function formatOutput({
+  parts,
+  matched,
+  injectedSkills,
+  summaryOnly,
+  droppedByCap,
+  droppedByBudget,
+  toolName,
+  toolTarget,
+  matchReasons,
+  reasons,
+  verificationId,
+  skillMap,
+  platform = "claude-code",
+  env,
+}: FormatOutputParams): string {
   if (parts.length === 0) {
-    return "{}";
+    return formatPlatformOutput(platform, undefined, env);
   }
 
   const skillInjection: Record<string, unknown> = {
@@ -1059,14 +1217,7 @@ export function formatOutput({ parts, matched, injectedSkills, summaryOnly, drop
   const sections = [banner];
   if (docsBlock) sections.push(docsBlock);
   sections.push(parts.join("\n\n"));
-
-  const output: SyncHookJSONOutput = {
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse" as const,
-      additionalContext: sections.join("\n\n") + "\n" + metaComment,
-    },
-  };
-  return JSON.stringify(output);
+  return formatPlatformOutput(platform, sections.join("\n\n") + "\n" + metaComment, env);
 }
 
 // ---------------------------------------------------------------------------
@@ -1088,7 +1239,8 @@ function run(): string {
   if (!parsed) return "{}";
   if (log.active) timing.stdin_parse = Math.round(log.now() - tPhase);
 
-  const { toolName, toolInput, sessionId, cwd, toolTarget, scopeId } = parsed;
+  const { toolName, toolInput, sessionId, cwd, platform, toolTarget, scopeId } = parsed;
+  const runtimeEnvBefore = captureRuntimeEnvSnapshot();
 
   if (isTelemetryEnabled() && sessionId) {
     const toolEntries: Array<{ key: string; value: string }> = [
@@ -1115,8 +1267,8 @@ function run(): string {
   const dedupOff = process.env.VERCEL_PLUGIN_HOOK_DEDUP === "off";
   const hasFileDedup = !dedupOff && !!sessionId;
   const seenEnv = getSeenSkillsEnv();
-  const seenClaims = hasFileDedup ? listSessionKeys(sessionId as string, "seen-skills", scopeId).join(",") : "";
-  const seenFile = hasFileDedup ? readSessionFile(sessionId as string, "seen-skills", scopeId) : "";
+  const seenClaims = hasFileDedup ? listSessionKeys(sessionId, "seen-skills", scopeId).join(",") : "";
+  const seenFile = hasFileDedup ? readSessionFile(sessionId, "seen-skills", scopeId) : "";
   const seenState = hasFileDedup
     ? mergeSeenSkillStates(seenEnv, seenFile, seenClaims)
     : seenEnv;
@@ -1131,7 +1283,7 @@ function run(): string {
   const likelySkills = parseLikelySkills(likelySkillsEnv);
   const setupMode = process.env.VERCEL_PLUGIN_SETUP_MODE === "1";
 
-  log.debug("dedup-strategy", { strategy: dedupStrategy, sessionId: sessionId as string, seenEnv: seenState });
+  log.debug("dedup-strategy", { strategy: dedupStrategy, sessionId, seenEnv: seenState });
   if (likelySkills.size > 0) {
     log.debug("likely-skills", { skills: [...likelySkills] });
   }
@@ -1310,6 +1462,30 @@ function run(): string {
     }
   }
 
+  // Stage 4.9: Co-inject ai-elements alongside ai-sdk on client React files.
+  // AI Elements is mandatory for rendering AI-generated text in browser UIs,
+  // but only relevant for client components (not API routes or server actions).
+  let aiSdkCompanionInjected = false;
+  if (rankedSkills.includes(AI_SDK_SKILL) && isClientReactFile(toolName, toolInput)) {
+    for (const companion of AI_SDK_COMPANION_SKILLS) {
+      if (rankedSkills.includes(companion)) continue;
+      const companionAlreadySeen = !dedupOff && injectedSkills.has(companion);
+      if (companionAlreadySeen) {
+        forceSummarySkills.add(companion);
+        log.debug("ai-sdk-companion-dedup-bypass", { skill: companion, mode: "summary" });
+      }
+      const sdkIdx = rankedSkills.indexOf(AI_SDK_SKILL);
+      if (sdkIdx !== -1) {
+        rankedSkills.splice(sdkIdx + 1, 0, companion);
+      } else {
+        rankedSkills.unshift(companion);
+      }
+      matched.add(companion);
+      aiSdkCompanionInjected = true;
+      log.debug("ai-sdk-companion-inject", { skill: companion });
+    }
+  }
+
   let vercelEnvHelpInjected = false;
   if (vercelEnvHelp.triggered) {
     let helpClaimed = true;
@@ -1347,7 +1523,8 @@ function run(): string {
       injectedSkills: [],
       boostsApplied: profilerBoosted,
     }, log.active ? timing : null);
-    return "{}";
+    const envUpdates = finalizeRuntimeEnvUpdates(platform, runtimeEnvBefore);
+    return formatPlatformOutput(platform, undefined, envUpdates);
   }
 
   // Stage 5: injectSkills (enforces byte budget + MAX_SKILLS ceiling)
@@ -1407,7 +1584,8 @@ function run(): string {
       droppedByBudget,
       boostsApplied: profilerBoosted,
     }, log.active ? timing : null);
-    return "{}";
+    const envUpdates = finalizeRuntimeEnvUpdates(platform, runtimeEnvBefore);
+    return formatPlatformOutput(platform, undefined, envUpdates);
   }
 
   if (log.active) timing.total = log.elapsed();
@@ -1452,6 +1630,16 @@ function run(): string {
       reasonCode: "tsx-review-trigger",
     };
   }
+  if (aiSdkCompanionInjected) {
+    for (const companion of AI_SDK_COMPANION_SKILLS) {
+      if (loaded.includes(companion) || (summaryOnly && summaryOnly.includes(companion))) {
+        reasons[companion] = {
+          trigger: "ai-sdk-companion",
+          reasonCode: "ai-sdk-client-component",
+        };
+      }
+    }
+  }
   // Add pattern-match reasons for remaining skills
   for (const skill of loaded) {
     if (!reasons[skill] && matchReasons?.[skill]) {
@@ -1463,7 +1651,23 @@ function run(): string {
   }
 
   // Stage 6: formatOutput
-  const result = formatOutput({ parts, matched, injectedSkills: loaded, summaryOnly, droppedByCap, droppedByBudget, toolName, toolTarget, matchReasons, reasons, verificationId, skillMap: skills.skillMap });
+  const envUpdates = finalizeRuntimeEnvUpdates(platform, runtimeEnvBefore);
+  const result = formatOutput({
+    parts,
+    matched,
+    injectedSkills: loaded,
+    summaryOnly,
+    droppedByCap,
+    droppedByBudget,
+    toolName,
+    toolTarget,
+    matchReasons,
+    reasons,
+    verificationId,
+    skillMap: skills.skillMap,
+    platform,
+    env: envUpdates,
+  });
 
   if (loaded.length > 0) {
     appendAuditLog({
@@ -1626,6 +1830,7 @@ export {
   run, validateSkillMap,
   TSX_REVIEW_SKILL, REVIEW_MARKER, DEFAULT_REVIEW_THRESHOLD, isTsxEditTool, getTsxEditCount, resetTsxEditCount,
   DEV_SERVER_VERIFY_SKILL, DEV_SERVER_VERIFY_MARKER, DEV_SERVER_VERIFY_MAX_ITERATIONS, DEV_SERVER_COMPANION_SKILLS,
+  AI_SDK_SKILL, AI_SDK_COMPANION_SKILLS, isClientReactFile,
   checkVercelEnvHelp,
   DEV_SERVER_UNAVAILABLE_WARNING,
 };

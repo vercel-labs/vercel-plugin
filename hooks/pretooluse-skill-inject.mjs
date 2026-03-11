@@ -4,8 +4,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   detectPlatform,
-  setSessionEnv,
-  getEnvFilePath
+  setSessionEnv
 } from "./compat.mjs";
 import {
   appendAuditLog,
@@ -138,8 +137,7 @@ const RUNTIME_ENV_KEYS = [
   "VERCEL_PLUGIN_DEV_VERIFY_COUNT"
 ];
 function hasClaudeEnvFile() {
-  const envFile = getEnvFilePath();
-  return typeof envFile === "string" && envFile.trim() !== "";
+  return !!process.env.CLAUDE_ENV_FILE;
 }
 function captureRuntimeEnvSnapshot(env = process.env) {
   return {
