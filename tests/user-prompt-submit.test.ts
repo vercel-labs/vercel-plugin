@@ -12,37 +12,55 @@ beforeEach(() => {
   testSession = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 });
 
-/** Extract skillInjection metadata from additionalContext HTML comment */
-function extractSkillInjection(hookSpecificOutput: any): any {
-  const ctx = hookSpecificOutput?.additionalContext || "";
+/** Extract skillInjection metadata from Claude or Cursor additional-context output */
+function extractSkillInjection(output: any): any {
+  const ctx = output?.additionalContext || output?.additional_context || "";
   const match = ctx.match(/<!-- skillInjection: ({.*?}) -->/);
   if (!match) return undefined;
   try { return JSON.parse(match[1]); } catch { return undefined; }
 }
 
+function buildSpawnEnv(env?: Record<string, string | undefined>): Record<string, string> {
+  const merged: Record<string, string> = { ...process.env } as Record<string, string>;
+  for (const [key, value] of Object.entries(env || {})) {
+    if (value === undefined) {
+      delete merged[key];
+    } else {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
 /** Run the UserPromptSubmit hook as a subprocess */
-async function runHook(
-  prompt: string,
-  env?: Record<string, string>,
+async function runHookPayload(
+  payload: Record<string, unknown>,
+  env?: Record<string, string | undefined>,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  const payload = JSON.stringify({
-    prompt,
-    session_id: testSession,
-    cwd: ROOT,
-    hook_event_name: "UserPromptSubmit",
-  });
   const proc = Bun.spawn(["node", HOOK_SCRIPT], {
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, ...env },
+    env: buildSpawnEnv(env),
   });
-  proc.stdin.write(payload);
+  proc.stdin.write(JSON.stringify(payload));
   proc.stdin.end();
   const code = await proc.exited;
   const stdout = await new Response(proc.stdout).text();
   const stderr = await new Response(proc.stderr).text();
   return { code, stdout, stderr };
+}
+
+async function runHook(
+  prompt: string,
+  env?: Record<string, string | undefined>,
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return runHookPayload({
+    prompt,
+    session_id: testSession,
+    cwd: ROOT,
+    hook_event_name: "UserPromptSubmit",
+  }, env);
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +80,7 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
     const result = JSON.parse(stdout);
     expect(result.hookSpecificOutput).toBeDefined();
     expect(result.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
-    expect(result.hookSpecificOutput.additionalContext).toContain("AI Elements");
+    expect(result.hookSpecificOutput.additionalContext).toContain("Skill(ai-elements)");
 
     const meta = extractSkillInjection(result.hookSpecificOutput);
     expect(meta).toBeDefined();
@@ -93,7 +111,7 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
     expect(code).toBe(0);
     const result = JSON.parse(stdout);
     expect(result.hookSpecificOutput).toBeDefined();
-    expect(result.hookSpecificOutput.additionalContext).toContain("skill:workflow");
+    expect(result.hookSpecificOutput.additionalContext).toContain("Skill(workflow)");
 
     const meta = extractSkillInjection(result.hookSpecificOutput);
     expect(meta).toBeDefined();
@@ -164,6 +182,77 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
     );
     expect(code).toBe(0);
     expect(JSON.parse(stdout)).toEqual({});
+  });
+
+  test("cursor payload returns flat output with continue and env patch", async () => {
+    const { code, stdout } = await runHookPayload(
+      {
+        conversation_id: testSession,
+        workspace_roots: [ROOT],
+        cursor_version: "1.0.0",
+        message: "Also, let's add markdown formatting to the streamed text results using streaming markdown",
+        hook_event_name: "beforeSubmitPrompt",
+      },
+      {
+        VERCEL_PLUGIN_SEEN_SKILLS: "",
+        CLAUDE_ENV_FILE: undefined,
+      },
+    );
+    expect(code).toBe(0);
+    const result = JSON.parse(stdout);
+    expect(result.continue).toBe(true);
+    expect(result.additional_context).toContain("Skill(ai-elements)");
+    expect(result.hookSpecificOutput).toBeUndefined();
+    expect(result.env?.VERCEL_PLUGIN_SEEN_SKILLS).toContain("ai-elements");
+
+    const meta = extractSkillInjection(result);
+    expect(meta).toBeDefined();
+    expect(meta.injectedSkills).toContain("ai-elements");
+  });
+
+  test("cursor payload returns continue:true with no matching signals", async () => {
+    const { code, stdout } = await runHookPayload(
+      {
+        conversation_id: testSession,
+        workspace_roots: [ROOT],
+        cursor_version: "1.0.0",
+        prompt: "Please refactor the database connection pool to use connection strings from environment variables",
+        hook_event_name: "beforeSubmitPrompt",
+      },
+      {
+        VERCEL_PLUGIN_SEEN_SKILLS: "",
+        CLAUDE_ENV_FILE: undefined,
+      },
+    );
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout)).toEqual({ continue: true });
+  });
+
+  test("appends seen skills to CLAUDE_ENV_FILE when available", async () => {
+    const tempDir = join(tmpdir(), `user-prompt-submit-env-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    const envFile = join(tempDir, "claude.env");
+    mkdirSync(tempDir, { recursive: true });
+    writeFileSync(envFile, "", "utf-8");
+
+    try {
+      const { code, stdout } = await runHook(
+        "Add ai elements to render streaming markdown in the chat component",
+        {
+          VERCEL_PLUGIN_SEEN_SKILLS: "",
+          CLAUDE_ENV_FILE: envFile,
+        },
+      );
+      expect(code).toBe(0);
+
+      const result = JSON.parse(stdout);
+      expect(result.hookSpecificOutput).toBeDefined();
+      expect(result.env).toBeUndefined();
+
+      const envContents = readFileSync(envFile, "utf-8");
+      expect(envContents).toContain('export VERCEL_PLUGIN_SEEN_SKILLS="ai-elements"');
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   // ---------------------------------------------------------------------------

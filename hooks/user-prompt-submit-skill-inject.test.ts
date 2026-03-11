@@ -8,6 +8,8 @@ import {
   writeSessionFile,
 } from "./src/hook-env.mts";
 import {
+  formatOutput,
+  parsePromptInput,
   resolvePromptSeenSkillState,
   syncPromptSeenSkillClaims,
 } from "./src/user-prompt-submit-skill-inject.mts";
@@ -74,5 +76,69 @@ describe("user prompt seen-skills dedup state", () => {
     expect(synced).toBe("skill-env,skill-new");
     expect(readSessionFile(sessionId, SESSION_KIND)).toBe("skill-env,skill-new");
     expect(process.env.VERCEL_PLUGIN_SEEN_SKILLS).toBe("skill-env,skill-new");
+  });
+});
+
+describe("user prompt cursor compatibility", () => {
+  it("test_parsePromptInput_normalizes_cursor_fields_when_workspace_root_present", () => {
+    const parsed = parsePromptInput(
+      JSON.stringify({
+        conversation_id: "cursor-conversation",
+        workspace_roots: ["/tmp/cursor-workspace", "/tmp/ignored"],
+        cursor_version: "1.0.0",
+        prompt: "Use ai elements for streaming markdown in this chat UI",
+      }),
+    );
+
+    expect(parsed).toEqual({
+      prompt: "Use ai elements for streaming markdown in this chat UI",
+      platform: "cursor",
+      sessionId: "cursor-conversation",
+      cwd: "/tmp/cursor-workspace",
+    });
+  });
+
+  it("test_parsePromptInput_uses_cursor_message_and_project_dir_fallbacks", () => {
+    const parsed = parsePromptInput(
+      JSON.stringify({
+        conversation_id: "cursor-conversation",
+        cursor_version: "1.0.0",
+        message: "Use ai elements for streaming markdown in this chat UI",
+      }),
+      undefined,
+      {
+        ...process.env,
+        CURSOR_PROJECT_DIR: "/tmp/cursor-project",
+        CLAUDE_PROJECT_ROOT: "/tmp/claude-project",
+      },
+    );
+
+    expect(parsed).toEqual({
+      prompt: "Use ai elements for streaming markdown in this chat UI",
+      platform: "cursor",
+      sessionId: "cursor-conversation",
+      cwd: "/tmp/cursor-project",
+    });
+  });
+
+  it("test_formatOutput_returns_cursor_flat_shape_with_continue_and_env", () => {
+    const output = JSON.parse(formatOutput(
+      ["You must run the Skill(ai-elements) tool."],
+      ["ai-elements"],
+      ["ai-elements"],
+      [],
+      [],
+      [],
+      { "ai-elements": "matched streaming markdown" },
+      undefined,
+      "cursor",
+      { VERCEL_PLUGIN_SEEN_SKILLS: "ai-elements" },
+    ));
+
+    expect(output.continue).toBe(true);
+    expect(output.additional_context).toContain("Skill(ai-elements)");
+    expect(output.additional_context).toContain("skillInjection");
+    expect(output.env).toEqual({ VERCEL_PLUGIN_SEEN_SKILLS: "ai-elements" });
+    expect(output.hookSpecificOutput).toBeUndefined();
   });
 });

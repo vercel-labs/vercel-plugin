@@ -2,13 +2,14 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, rmSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 const SAFE_SESSION_ID_RE = /^[a-zA-Z0-9_-]+$/;
-function tempSessionIdSegment(sessionId2) {
-  if (SAFE_SESSION_ID_RE.test(sessionId2)) {
-    return sessionId2;
+function tempSessionIdSegment(sessionId) {
+  if (SAFE_SESSION_ID_RE.test(sessionId)) {
+    return sessionId;
   }
-  return createHash("sha256").update(sessionId2).digest("hex");
+  return createHash("sha256").update(sessionId).digest("hex");
 }
 function removeFileIfPresent(path) {
   try {
@@ -22,18 +23,33 @@ function removeDirIfPresent(path) {
   } catch {
   }
 }
-function parseSessionIdFromStdin() {
+function parseSessionEndHookInput(raw) {
   try {
-    const raw = readFileSync(0, "utf8");
     if (!raw.trim()) return null;
-    const data = JSON.parse(raw);
-    return typeof data.session_id === "string" && data.session_id.length > 0 ? data.session_id : null;
+    return JSON.parse(raw);
   } catch {
     return null;
   }
 }
-const sessionId = parseSessionIdFromStdin();
-if (sessionId !== null) {
+function normalizeSessionEndSessionId(input) {
+  const sessionId = input?.session_id;
+  if (typeof sessionId === "string" && sessionId.length > 0) {
+    return sessionId;
+  }
+  const conversationId = input?.conversation_id;
+  if (typeof conversationId === "string" && conversationId.length > 0) {
+    return conversationId;
+  }
+  return null;
+}
+function parseSessionIdFromStdin() {
+  return normalizeSessionEndSessionId(parseSessionEndHookInput(readFileSync(0, "utf8")));
+}
+function main() {
+  const sessionId = parseSessionIdFromStdin();
+  if (sessionId === null) {
+    process.exit(0);
+  }
   const tempRoot = tmpdir();
   const prefix = `vercel-plugin-${tempSessionIdSegment(sessionId)}-`;
   let entries = [];
@@ -49,5 +65,14 @@ if (sessionId !== null) {
       removeFileIfPresent(fullPath);
     }
   }
+  process.exit(0);
 }
-process.exit(0);
+const SESSION_END_CLEANUP_ENTRYPOINT = fileURLToPath(import.meta.url);
+const isSessionEndCleanupEntrypoint = process.argv[1] ? resolve(process.argv[1]) === SESSION_END_CLEANUP_ENTRYPOINT : false;
+if (isSessionEndCleanupEntrypoint) {
+  main();
+}
+export {
+  normalizeSessionEndSessionId,
+  parseSessionEndHookInput
+};

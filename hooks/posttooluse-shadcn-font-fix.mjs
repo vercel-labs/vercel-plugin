@@ -19,6 +19,38 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
+function detectPlatform(input) {
+  if ("conversation_id" in input || "cursor_version" in input) {
+    return "cursor";
+  }
+  return "claude-code";
+}
+
+function resolveWorkspaceRoot(input) {
+  if (!Array.isArray(input.workspace_roots)) {
+    return null;
+  }
+
+  for (const root of input.workspace_roots) {
+    if (typeof root === "string" && root.trim() !== "") {
+      return root;
+    }
+  }
+
+  return null;
+}
+
+function resolveCwd(input) {
+  const candidate = input.cwd
+    ?? input.working_directory
+    ?? resolveWorkspaceRoot(input)
+    ?? process.env.CURSOR_PROJECT_DIR
+    ?? process.env.CLAUDE_WORKING_DIRECTORY
+    ?? process.cwd();
+
+  return typeof candidate === "string" && candidate.trim() !== "" ? candidate : process.cwd();
+}
+
 // Read hook input from stdin
 let input = "";
 for await (const chunk of process.stdin) {
@@ -32,6 +64,8 @@ try {
   process.exit(0);
 }
 
+const platform = detectPlatform(parsed);
+
 const toolName = parsed.tool_name;
 const toolInput = parsed.tool_input || {};
 
@@ -42,7 +76,7 @@ const command = toolInput.command || "";
 if (!command.match(/\bnpx\s+shadcn(@latest)?\s+(init|add)\b/)) process.exit(0);
 
 // Find globals.css — check common locations
-const cwd = process.env.CLAUDE_WORKING_DIRECTORY || process.cwd();
+const cwd = resolveCwd(parsed);
 const candidates = [
   join(cwd, "app/globals.css"),
   join(cwd, "src/app/globals.css"),
@@ -86,8 +120,7 @@ writeFileSync(globalsPath, fixed, "utf-8");
 const relPath = globalsPath.replace(cwd + "/", "");
 
 // Output a detailed explanation to the conversation
-const result = {
-  additionalContext: `<!-- shadcn-font-fix -->
+const message = `<!-- shadcn-font-fix -->
 **Auto-fix applied to \`${relPath}\`**: Replaced CSS variable font references with literal Geist font family names.
 
 ### Why this fix was needed
@@ -117,7 +150,10 @@ You MUST also move the font variable classNames from \`<body>\` to \`<html>\` in
 <html lang="en">
   <body className={\`\${geistSans.variable} \${geistMono.variable} antialiased\`}>
 \`\`\`
-<!-- /shadcn-font-fix -->`,
-};
+<!-- /shadcn-font-fix -->`;
+
+const result = platform === "cursor"
+  ? { additional_context: message }
+  : { additionalContext: message };
 
 console.log(JSON.stringify(result));

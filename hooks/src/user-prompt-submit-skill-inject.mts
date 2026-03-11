@@ -18,7 +18,7 @@
  */
 
 import type { SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import { readFileSync, realpathSync } from "node:fs";
+import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -49,6 +49,9 @@ const DEFAULT_INJECTION_BUDGET_BYTES = 8_000;
 const MIN_PROMPT_LENGTH = 10;
 const PLUGIN_ROOT = resolvePluginRoot();
 const SKILL_INJECTION_VERSION = 1;
+const ENV_SEEN_SKILLS_KEY = "VERCEL_PLUGIN_SEEN_SKILLS";
+
+export type PromptHookPlatform = "claude-code" | "cursor";
 
 /**
  * Companion skills for investigation-mode, in priority order.
@@ -73,9 +76,106 @@ const log: Logger = createLogger();
 
 /** @returns comma-delimited seen skills from env, or "" */
 function getSeenSkillsEnv(): string {
-  return typeof process.env.VERCEL_PLUGIN_SEEN_SKILLS === "string"
-    ? process.env.VERCEL_PLUGIN_SEEN_SKILLS
+  return typeof process.env[ENV_SEEN_SKILLS_KEY] === "string"
+    ? process.env[ENV_SEEN_SKILLS_KEY]
     : "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function detectPromptHookPlatform(input: Record<string, unknown>): PromptHookPlatform {
+  if ("conversation_id" in input || "cursor_version" in input) {
+    return "cursor";
+  }
+
+  return "claude-code";
+}
+
+function detectPromptHookPlatformFromRaw(raw: string): PromptHookPlatform {
+  try {
+    const parsed = JSON.parse(raw);
+    if (isRecord(parsed)) {
+      return detectPromptHookPlatform(parsed);
+    }
+  } catch {
+    // Fall back to Claude-compatible empty output when stdin is invalid.
+  }
+
+  return "claude-code";
+}
+
+function resolvePromptSessionId(input: Record<string, unknown>, env: NodeJS.ProcessEnv): string | null {
+  return nonEmptyString(input.session_id)
+    ?? nonEmptyString(input.conversation_id)
+    ?? nonEmptyString(env.SESSION_ID);
+}
+
+function resolvePromptCwd(input: Record<string, unknown>, env: NodeJS.ProcessEnv): string {
+  const workspaceRoot = Array.isArray(input.workspace_roots)
+    ? input.workspace_roots.find((entry) => typeof entry === "string" && entry.trim() !== "")
+    : null;
+
+  return nonEmptyString(input.cwd)
+    ?? (typeof workspaceRoot === "string" ? workspaceRoot : null)
+    ?? nonEmptyString(env.CURSOR_PROJECT_DIR)
+    ?? nonEmptyString(env.CLAUDE_PROJECT_ROOT)
+    ?? process.cwd();
+}
+
+function resolvePromptText(input: Record<string, unknown>): string {
+  return nonEmptyString(input.prompt)
+    ?? nonEmptyString(input.message)
+    ?? "";
+}
+
+function escapeShellEnvValue(value: string): string {
+  return value.replace(/(["\\$`])/g, "\\$1");
+}
+
+function formatEnvExport(key: string, value: string): string {
+  return `export ${key}="${escapeShellEnvValue(value)}"\n`;
+}
+
+function appendSeenSkillsEnvFile(envFile: string, seenSkills: string, logger: Logger): void {
+  try {
+    appendFileSync(envFile, formatEnvExport(ENV_SEEN_SKILLS_KEY, seenSkills), "utf-8");
+    logger.debug("seen-skills-env-appended", {
+      envFile,
+      seenSkills,
+      state: "skill_injection_completed",
+    });
+  } catch (error) {
+    logger.issue(
+      "SEEN_SKILLS_ENV_APPEND_FAILED",
+      "Failed to append VERCEL_PLUGIN_SEEN_SKILLS to CLAUDE_ENV_FILE",
+      "Verify CLAUDE_ENV_FILE exists and is writable",
+      {
+        attempted: "append_seen_skills_export",
+        envFile,
+        seenSkills,
+        state: "skill_injection_completed",
+        error: String(error),
+      },
+    );
+  }
+}
+
+function formatEmptyOutput(platform: PromptHookPlatform, env?: Record<string, string>): string {
+  if (platform === "cursor") {
+    const output: Record<string, unknown> = { continue: true };
+    if (env && Object.keys(env).length > 0) {
+      output.env = env;
+    }
+    return JSON.stringify(output);
+  }
+
+  return "{}";
 }
 
 /** Resolve the injection byte budget from env or default. */
@@ -144,15 +244,16 @@ export function syncPromptSeenSkillClaims(sessionId: string, loadedSkills: strin
 
 export interface ParsedPromptInput {
   prompt: string;
+  platform: PromptHookPlatform;
   sessionId: string | null;
-  cwd: string | null;
+  cwd: string;
 }
 
 /**
  * Parse raw stdin JSON into a normalized input descriptor.
  * Returns null if input is empty, unparseable, or prompt is too short.
  */
-export function parsePromptInput(raw: string, logger?: Logger): ParsedPromptInput | null {
+export function parsePromptInput(raw: string, logger?: Logger, env: NodeJS.ProcessEnv = process.env): ParsedPromptInput | null {
   const l = logger || log;
   const trimmed = (raw || "").trim();
   if (!trimmed) {
@@ -162,25 +263,35 @@ export function parsePromptInput(raw: string, logger?: Logger): ParsedPromptInpu
 
   let input: Record<string, unknown>;
   try {
-    input = JSON.parse(trimmed);
+    const parsed = JSON.parse(trimmed);
+    if (!isRecord(parsed)) {
+      l.debug("stdin-not-object", {});
+      return null;
+    }
+    input = parsed;
   } catch (err) {
     l.issue("STDIN_PARSE_FAIL", "Failed to parse stdin as JSON", "Verify stdin contains valid JSON", { error: String(err) });
     return null;
   }
 
-  const prompt = (input.prompt as string) || "";
-  const sessionId = (input.session_id as string) || process.env.SESSION_ID || null;
-  const cwdCandidate = input.cwd ?? input.working_directory;
-  const cwd = typeof cwdCandidate === "string" && cwdCandidate.trim() !== "" ? cwdCandidate : null;
+  const platform = detectPromptHookPlatform(input);
+  const prompt = resolvePromptText(input);
+  const sessionId = resolvePromptSessionId(input, env);
+  const cwd = resolvePromptCwd(input, env);
 
   if (prompt.length < MIN_PROMPT_LENGTH) {
     l.debug("prompt-too-short", { length: prompt.length, min: MIN_PROMPT_LENGTH });
     return null;
   }
 
-  l.debug("input-parsed", { promptLength: prompt.length, sessionId: sessionId as string });
+  l.debug("input-parsed", {
+    promptLength: prompt.length,
+    sessionId,
+    cwd,
+    platform,
+  });
 
-  return { prompt, sessionId, cwd };
+  return { prompt, platform, sessionId, cwd };
 }
 
 // ---------------------------------------------------------------------------
@@ -411,9 +522,11 @@ export function formatOutput(
   droppedByBudget: string[],
   promptMatchReasons?: Record<string, string>,
   skillMap?: Record<string, { docs?: string[]; sitemap?: string }>,
+  platform: PromptHookPlatform = "claude-code",
+  env?: Record<string, string>,
 ): string {
   if (parts.length === 0) {
-    return "{}";
+    return formatEmptyOutput(platform, env);
   }
 
   const skillInjection = {
@@ -445,10 +558,23 @@ export function formatOutput(
   if (docsBlock) sections.push(docsBlock);
   sections.push(parts.join("\n\n"));
 
+  const additionalContext = sections.join("\n\n") + "\n" + metaComment;
+
+  if (platform === "cursor") {
+    const output: Record<string, unknown> = {
+      additional_context: additionalContext,
+      continue: true,
+    };
+    if (env && Object.keys(env).length > 0) {
+      output.env = env;
+    }
+    return JSON.stringify(output);
+  }
+
   const output: SyncHookJSONOutput = {
     hookSpecificOutput: {
       hookEventName: "UserPromptSubmit" as const,
-      additionalContext: sections.join("\n\n") + "\n" + metaComment,
+      additionalContext,
     },
   };
   return JSON.stringify(output);
@@ -469,8 +595,9 @@ export function run(): string {
   } catch {
     return "{}";
   }
+  const platform = detectPromptHookPlatformFromRaw(raw);
   const parsed = parsePromptInput(raw, log);
-  if (!parsed) return "{}";
+  if (!parsed) return formatEmptyOutput(platform);
   if (log.active) timing.stdin_parse = Math.round(log.now() - tPhase);
 
   const { prompt, sessionId, cwd } = parsed;
@@ -485,13 +612,13 @@ export function run(): string {
 
   if (!normalizedPrompt) {
     log.debug("normalized-prompt-empty", {});
-    return "{}";
+    return formatEmptyOutput(platform);
   }
 
   // Stage 2: loadSkills (reuse from pretooluse)
   const tSkillmap = log.active ? log.now() : 0;
   const skills = loadSkills(PLUGIN_ROOT, log);
-  if (!skills) return "{}";
+  if (!skills) return formatEmptyOutput(platform);
   if (log.active) timing.skillmap_load = Math.round(log.now() - tSkillmap);
 
   // Stage 3: analyzePrompt — structured analysis of matching + dedup + cap
@@ -645,7 +772,7 @@ export function run(): string {
         .map(([skill]) => skill),
     });
     log.complete("no_prompt_matches", { matchedCount: 0 }, log.active ? timing : null);
-    return "{}";
+    return formatEmptyOutput(platform);
   }
 
   // All matched but filtered by dedup
@@ -660,7 +787,7 @@ export function run(): string {
       matchedCount: allMatched.length,
       dedupedCount: allMatched.length,
     }, log.active ? timing : null);
-    return "{}";
+    return formatEmptyOutput(platform);
   }
 
   // Stage 4: inject selected skills (file I/O for SKILL.md bodies)
@@ -692,7 +819,7 @@ export function run(): string {
       matchedCount: matchedSkills.length,
       dedupedCount: matchedSkills.length,
     }, log.active ? timing : null);
-    return "{}";
+    return formatEmptyOutput(platform);
   }
 
   if (log.active) timing.total = log.elapsed();
@@ -729,6 +856,16 @@ export function run(): string {
     trackEvents(sessionId, telemetryEntries).catch(() => {});
   }
 
+  let outputEnv: Record<string, string> | undefined;
+  const envFile = nonEmptyString(process.env.CLAUDE_ENV_FILE);
+  const seenSkills = getSeenSkillsEnv();
+  if (loaded.length > 0 && seenSkills !== "") {
+    if (envFile) {
+      appendSeenSkillsEnvFile(envFile, seenSkills, log);
+    } else if (platform === "cursor") {
+      outputEnv = { [ENV_SEEN_SKILLS_KEY]: seenSkills };
+    }
+  }
   // Stage 5: formatOutput
   // Build prompt match reasons for the banner
   const promptMatchReasons: Record<string, string> = {};
@@ -738,7 +875,18 @@ export function run(): string {
       promptMatchReasons[skill] = r.reason;
     }
   }
-  return formatOutput(parts, matchedSkills, loaded, summaryOnly, droppedByCap, droppedByBudget, promptMatchReasons, skills.skillMap);
+  return formatOutput(
+    parts,
+    matchedSkills,
+    loaded,
+    summaryOnly,
+    droppedByCap,
+    droppedByBudget,
+    promptMatchReasons,
+    skills.skillMap,
+    platform,
+    outputEnv,
+  );
 }
 
 // ---------------------------------------------------------------------------
