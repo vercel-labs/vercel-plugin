@@ -689,11 +689,21 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
     });
 
     test("all-deduped emits prompt-analysis-issue at debug level", async () => {
-      const { code, stderr } = await runHook(
-        "Use streaming markdown with ai elements for the chat output",
+      const prompt = "Use streaming markdown with ai elements for the chat output";
+      const firstRun = await runHook(
+        prompt,
         {
           VERCEL_PLUGIN_LOG_LEVEL: "debug",
-          VERCEL_PLUGIN_SEEN_SKILLS: "ai-elements",
+          VERCEL_PLUGIN_SEEN_SKILLS: "",
+        },
+      );
+      expect(firstRun.code).toBe(0);
+
+      const { code, stderr } = await runHook(
+        prompt,
+        {
+          VERCEL_PLUGIN_LOG_LEVEL: "debug",
+          VERCEL_PLUGIN_SEEN_SKILLS: "",
         },
       );
       expect(code).toBe(0);

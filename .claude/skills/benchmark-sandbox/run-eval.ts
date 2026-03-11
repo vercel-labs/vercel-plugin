@@ -243,6 +243,16 @@ function normalizeShellOutput(output: string): string {
   return output === "(cmd failed)" ? "" : output.trim();
 }
 
+export const SNAPSHOT_PREP_EXTENSION_MS = 1_800_000;
+
+export function calculateSandboxLifetimeMs(phaseTimeoutMs: number): number {
+  return phaseTimeoutMs + phaseTimeoutMs + 300_000;
+}
+
+export function calculateKeepAliveExtensionMs(keepAlive: boolean, keepAliveHours: number): number | null {
+  return keepAlive ? keepAliveHours * 3600_000 : null;
+}
+
 export function isExpectedRunCommandTimeout(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? "");
   return /timed out|deadline exceeded|operation timed out|request timeout/i.test(message);
@@ -568,7 +578,7 @@ async function runScenario(
         VERCEL_PLUGIN_LOG_LEVEL: "trace",
         ...(vercelToken ? { VERCEL_TOKEN: vercelToken } : {}),
       },
-      timeout: TIMEOUT_MS + 300_000,
+      timeout: calculateSandboxLifetimeMs(TIMEOUT_MS),
     } as any);
     timing.sandboxCreateMs = captureElapsedMs(sandboxCreateStartedAt);
     let appUrl: string | undefined;
@@ -755,6 +765,7 @@ async function runScenario(
     if (projectFilesList.length > 1) {
       try {
         console.log(`  [${scenario.slug}] Snapshotting after build... (${elapsed(t0)})`);
+        try { await sandbox.extendTimeout(SNAPSHOT_PREP_EXTENSION_MS); } catch {}
         const snap = await sandbox.snapshot({ expiration: 4 * 3600_000 }); // 4 hour expiry
         snapshotId = snap.snapshotId;
         console.log(`  [${scenario.slug}] Snapshot created: ${snapshotId} (${elapsed(t0)})`);
@@ -769,7 +780,7 @@ async function runScenario(
             VERCEL_PLUGIN_LOG_LEVEL: "trace",
             ...(vercelToken ? { VERCEL_TOKEN: vercelToken } : {}),
           },
-          timeout: TIMEOUT_MS + 300_000,
+          timeout: calculateSandboxLifetimeMs(TIMEOUT_MS),
           source: { type: "snapshot", snapshotId },
         } as any);
         try { appUrl = sandbox.domain(3000); } catch {}
@@ -819,12 +830,15 @@ async function runScenario(
       }
     }
 
-    // 7. Extend timeout for verification + keep-alive
-    try {
-      await sandbox.extendTimeout(KEEP_ALIVE ? KEEP_ALIVE_HOURS * 3600_000 : 600_000);
-      console.log(`  [${scenario.slug}] Timeout extended (${elapsed(t0)})`);
-    } catch (e: any) {
-      console.log(`  [${scenario.slug}] extendTimeout: ${e.message?.slice(0, 60)}`);
+    // 7. Extend timeout only when the sandbox should stay alive after the eval
+    const keepAliveExtensionMs = calculateKeepAliveExtensionMs(KEEP_ALIVE, KEEP_ALIVE_HOURS);
+    if (keepAliveExtensionMs) {
+      try {
+        await sandbox.extendTimeout(keepAliveExtensionMs);
+        console.log(`  [${scenario.slug}] Keep-alive timeout extended (${elapsed(t0)})`);
+      } catch (e: any) {
+        console.log(`  [${scenario.slug}] extendTimeout: ${e.message?.slice(0, 60)}`);
+      }
     }
 
     // 8. Phase 2: Verification with agent-browser

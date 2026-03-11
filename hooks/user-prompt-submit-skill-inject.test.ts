@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 describe("user prompt seen-skills dedup state", () => {
-  it("test_resolvePromptSeenSkillState_merges_env_file_and_claims_when_session_id_present", () => {
+  it("test_resolvePromptSeenSkillState_merges_file_and_claims_when_session_id_present", () => {
     const sessionId = newSessionId("merge");
 
     process.env.VERCEL_PLUGIN_HOOK_DEDUP = "";
@@ -60,11 +60,12 @@ describe("user prompt seen-skills dedup state", () => {
 
     expect(state.dedupOff).toBe(false);
     expect(state.hasFileDedup).toBe(true);
-    expect(state.hasEnvDedup).toBe(true);
+    expect("hasEnvDedup" in state).toBe(false);
+    expect("seenEnv" in state).toBe(false);
     expect(state.seenClaims).toBe("skill-claim");
-    expect(state.seenState).toBe("shared,skill-claim,skill-env,skill-file");
+    expect(state.seenState).toBe("shared,skill-claim,skill-file");
     expect(readSessionFile(sessionId, SESSION_KIND)).toBe(state.seenState);
-    expect(process.env.VERCEL_PLUGIN_SEEN_SKILLS).toBe(state.seenState);
+    expect(process.env.VERCEL_PLUGIN_SEEN_SKILLS).toBe("skill-env,shared");
   });
 
   it("test_syncPromptSeenSkillClaims_updates_claims_and_session_file_when_skills_injected", () => {
@@ -75,7 +76,7 @@ describe("user prompt seen-skills dedup state", () => {
 
     expect(synced).toBe("skill-env,skill-new");
     expect(readSessionFile(sessionId, SESSION_KIND)).toBe("skill-env,skill-new");
-    expect(process.env.VERCEL_PLUGIN_SEEN_SKILLS).toBe("skill-env,skill-new");
+    expect(process.env.VERCEL_PLUGIN_SEEN_SKILLS).toBe("skill-env");
   });
 });
 

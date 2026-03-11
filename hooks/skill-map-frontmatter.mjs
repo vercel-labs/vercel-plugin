@@ -204,12 +204,6 @@ function parseYamlBlock(lines, startIndex, indent) {
     if (key === "") {
       throw invalidYaml("empty key is not allowed", index + 1);
     }
-    if (key in obj) {
-      throw invalidYaml(
-        `duplicate key "${key}" (first defined earlier in this block)`,
-        index + 1
-      );
-    }
     const remainder = content.slice(colonIndex + 1);
     if (remainder.trim() !== "") {
       obj[key] = parseInlineValue(remainder);
@@ -289,31 +283,9 @@ function parseValidateRules(raw) {
   }
   return rules;
 }
-function parseChainToRules(raw) {
-  if (!Array.isArray(raw)) return [];
-  const rules = [];
-  for (const item of raw) {
-    if (item == null || typeof item !== "object" || Array.isArray(item)) continue;
-    const obj = item;
-    if (typeof obj.pattern !== "string" || obj.pattern === "") continue;
-    if (typeof obj.targetSkill !== "string" || obj.targetSkill === "") continue;
-    const rule = {
-      pattern: obj.pattern,
-      targetSkill: obj.targetSkill
-    };
-    if (typeof obj.message === "string" && obj.message !== "") {
-      rule.message = obj.message;
-    }
-    if (typeof obj.skipIfFileContains === "string" && obj.skipIfFileContains !== "") {
-      rule.skipIfFileContains = obj.skipIfFileContains;
-    }
-    rules.push(rule);
-  }
-  return rules;
-}
 function parseSkillFrontmatter(yamlStr) {
   if (!yamlStr || !yamlStr.trim()) {
-    return { name: "", description: "", summary: "", metadata: {}, validate: [], chainTo: [] };
+    return { name: "", description: "", summary: "", metadata: {}, validate: [] };
   }
   const doc = parseSimpleYaml(yamlStr);
   return {
@@ -322,7 +294,6 @@ function parseSkillFrontmatter(yamlStr) {
     summary: typeof doc.summary === "string" ? doc.summary : "",
     metadata: doc.metadata != null && typeof doc.metadata === "object" && !Array.isArray(doc.metadata) ? doc.metadata : {},
     validate: parseValidateRules(doc.validate),
-    chainTo: parseChainToRules(doc.chainTo),
     ...doc.retrieval != null && typeof doc.retrieval === "object" && !Array.isArray(doc.retrieval) ? { retrieval: parseRetrievalBlock(doc.retrieval) } : {}
   };
 }
@@ -377,7 +348,6 @@ function scanSkillsDir(rootDir) {
       summary: parsed.summary,
       metadata: parsed.metadata,
       validate: parsed.validate,
-      chainTo: parsed.chainTo,
       ...parsed.retrieval ? { retrieval: parsed.retrieval } : {}
     });
   }
@@ -627,9 +597,6 @@ function buildSkillMap(rootDir) {
     if (sitemap) {
       entry.sitemap = sitemap;
     }
-    if (skill.chainTo.length > 0) {
-      entry.chainTo = skill.chainTo;
-    }
     if (promptSignals) {
       entry.promptSignals = promptSignals;
     }
@@ -654,7 +621,6 @@ const KNOWN_KEYS = /* @__PURE__ */ new Set([
   "bashPatterns",
   "importPatterns",
   "validate",
-  "chainTo",
   "promptSignals",
   "retrieval"
 ]);
@@ -804,7 +770,6 @@ function validateSkillMap(raw) {
       addWarning
     });
     const sitemap = typeof cfg.sitemap === "string" && cfg.sitemap.length > 0 ? cfg.sitemap : void 0;
-    const chainTo = parseChainToRules(cfg.chainTo);
     const normalizedEntry = {
       priority,
       summary,
@@ -817,9 +782,6 @@ function validateSkillMap(raw) {
     if (sitemap) {
       normalizedEntry.sitemap = sitemap;
     }
-    if (chainTo.length > 0) {
-      normalizedEntry.chainTo = chainTo;
-    }
     if (promptSignals) {
       normalizedEntry.promptSignals = promptSignals;
     }
@@ -827,44 +789,6 @@ function validateSkillMap(raw) {
       normalizedEntry.retrieval = cfg.retrieval;
     }
     normalizedSkills[skill] = normalizedEntry;
-  }
-  const allSlugs = new Set(Object.keys(normalizedSkills));
-  for (const [skill, config] of Object.entries(normalizedSkills)) {
-    if (!config.chainTo) continue;
-    for (const rule of config.chainTo) {
-      if (!allSlugs.has(rule.targetSkill)) {
-        addError(
-          `skill "${skill}": chainTo references non-existent skill "${rule.targetSkill}"`,
-          {
-            code: "CHAIN_TO_MISSING_TARGET",
-            skill,
-            field: "chainTo.targetSkill",
-            valueType: "string",
-            hint: `Ensure "${rule.targetSkill}" exists as a skill directory`
-          }
-        );
-      }
-    }
-  }
-  for (const [skill, config] of Object.entries(normalizedSkills)) {
-    if (!config.validate?.length) continue;
-    const chainTargets = new Set(
-      (config.chainTo ?? []).map((c) => c.targetSkill)
-    );
-    for (const rule of config.validate) {
-      if (rule.upgradeToSkill && (rule.severity === "error" || rule.severity === "recommended") && !chainTargets.has(rule.upgradeToSkill)) {
-        addWarning(
-          `skill "${skill}": validate rule with upgradeToSkill "${rule.upgradeToSkill}" (severity: ${rule.severity}) has no matching chainTo entry`,
-          {
-            code: "UPGRADE_WITHOUT_CHAIN",
-            skill,
-            field: "validate.upgradeToSkill",
-            valueType: "string",
-            hint: `Add a chainTo entry targeting "${rule.upgradeToSkill}" or let build-manifest synthesize one`
-          }
-        );
-      }
-    }
   }
   if (errors.length > 0) {
     return { ok: false, errors, errorDetails };

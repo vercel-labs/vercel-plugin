@@ -2,11 +2,14 @@ import { describe, expect, test } from "bun:test";
 
 import {
   buildArtifactManifest,
+  calculateKeepAliveExtensionMs,
+  calculateSandboxLifetimeMs,
   calculatePhaseDuration,
   evaluateBuildWaitState,
   isExpectedRunCommandTimeout,
   parseBuildExitCode,
   renderTimingMarkdownTable,
+  SNAPSHOT_PREP_EXTENSION_MS,
   summarizeToolCalls,
 } from "../.claude/skills/benchmark-sandbox/run-eval.ts";
 
@@ -33,6 +36,21 @@ describe("parseBuildExitCode", () => {
   test("returns null when no exit marker is available yet", () => {
     expect(parseBuildExitCode("(cmd failed)")).toBeNull();
     expect(parseBuildExitCode("build still running")).toBeNull();
+  });
+});
+
+describe("sandbox timeout helpers", () => {
+  test("gives a full extra phase plus buffer for sandbox lifetime", () => {
+    expect(calculateSandboxLifetimeMs(1_800_000)).toBe(3_900_000);
+  });
+
+  test("uses a fixed 30 minute timeout extension before snapshotting", () => {
+    expect(SNAPSHOT_PREP_EXTENSION_MS).toBe(1_800_000);
+  });
+
+  test("only extends after snapshot when keep-alive is enabled", () => {
+    expect(calculateKeepAliveExtensionMs(false, 8)).toBeNull();
+    expect(calculateKeepAliveExtensionMs(true, 8)).toBe(28_800_000);
   });
 });
 
