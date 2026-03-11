@@ -15,15 +15,18 @@ import {
   appendFileSync,
   constants as fsConstants,
   existsSync,
+  readFileSync,
   readdirSync,
   writeFileSync,
   type Dirent,
 } from "node:fs";
+import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { profileCachePath, requireEnvFile, safeReadJson } from "./hook-env.mjs";
 import { createLogger, logCaughtError, type Logger } from "./logger.mjs";
+import { isTelemetryEnabled, trackEvents } from "./telemetry.mjs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -501,7 +504,7 @@ function parseSessionStartInput(): SessionStartInput | null {
   }
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const envFile: string = requireEnvFile();
 
   // Parse stdin for session_id (used for profile cache path)
@@ -585,6 +588,19 @@ function main(): void {
     });
   }
 
+  // Telemetry opt-in check
+  const telemetryPrefPath = join(homedir(), ".claude", "vercel-plugin-telemetry-preference");
+  let telemetryPref: string | null = null;
+  try {
+    telemetryPref = readFileSync(telemetryPrefPath, "utf-8").trim();
+  } catch {
+    // File doesn't exist — user hasn't been asked yet
+  }
+
+  if (telemetryPref === "enabled") {
+    appendEnvExport(envFile, "VERCEL_PLUGIN_TELEMETRY", "on");
+  }
+
   // Write profile cache so SubagentStart hooks can read it without re-profiling
   if (sessionId) {
     try {
@@ -605,6 +621,16 @@ function main(): void {
         projectRoot,
       });
     }
+  }
+
+  if (isTelemetryEnabled() && sessionId) {
+    await trackEvents(sessionId, [
+      { key: "session:platform", value: process.platform },
+      { key: "session:likely_skills", value: likelySkills.join(",") },
+      { key: "session:greenfield", value: String(greenfield !== null) },
+      { key: "session:vercel_cli_installed", value: String(cliStatus.installed) },
+      { key: "session:vercel_cli_version", value: cliStatus.currentVersion || "" },
+    ]);
   }
 
   process.exit(0);

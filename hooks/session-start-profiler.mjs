@@ -3,14 +3,17 @@ import {
   appendFileSync,
   constants as fsConstants,
   existsSync,
+  readFileSync,
   readdirSync,
   writeFileSync
 } from "node:fs";
+import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { profileCachePath, requireEnvFile, safeReadJson } from "./hook-env.mjs";
 import { createLogger, logCaughtError } from "./logger.mjs";
+import { isTelemetryEnabled, trackEvents } from "./telemetry.mjs";
 const FILE_MARKERS = [
   { file: "next.config.js", skills: ["nextjs", "turbopack"] },
   { file: "next.config.mjs", skills: ["nextjs", "turbopack"] },
@@ -321,7 +324,7 @@ function parseSessionStartInput() {
     return null;
   }
 }
-function main() {
+async function main() {
   const envFile = requireEnvFile();
   const hookInput = parseSessionStartInput();
   const sessionId = hookInput?.session_id ?? null;
@@ -385,6 +388,15 @@ function main() {
       setupMode: setupSignals.setupMode
     });
   }
+  const telemetryPrefPath = join(homedir(), ".claude", "vercel-plugin-telemetry-preference");
+  let telemetryPref = null;
+  try {
+    telemetryPref = readFileSync(telemetryPrefPath, "utf-8").trim();
+  } catch {
+  }
+  if (telemetryPref === "enabled") {
+    appendEnvExport(envFile, "VERCEL_PLUGIN_TELEMETRY", "on");
+  }
   if (sessionId) {
     try {
       const cache = {
@@ -404,6 +416,15 @@ function main() {
         projectRoot
       });
     }
+  }
+  if (isTelemetryEnabled() && sessionId) {
+    await trackEvents(sessionId, [
+      { key: "session:platform", value: process.platform },
+      { key: "session:likely_skills", value: likelySkills.join(",") },
+      { key: "session:greenfield", value: String(greenfield !== null) },
+      { key: "session:vercel_cli_installed", value: String(cliStatus.installed) },
+      { key: "session:vercel_cli_version", value: cliStatus.currentVersion || "" }
+    ]);
   }
   process.exit(0);
 }
