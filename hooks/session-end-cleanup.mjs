@@ -22,27 +22,15 @@ function removeDirIfPresent(path) {
   } catch {
   }
 }
-function parseSessionEndHookInput(raw) {
+function parseSessionIdFromStdin() {
   try {
+    const raw = readFileSync(0, "utf8");
     if (!raw.trim()) return null;
-    return JSON.parse(raw);
+    const data = JSON.parse(raw);
+    return typeof data.session_id === "string" && data.session_id.length > 0 ? data.session_id : null;
   } catch {
     return null;
   }
-}
-function normalizeSessionEndSessionId(input) {
-  const sessionId2 = input?.session_id;
-  if (typeof sessionId2 === "string" && sessionId2.length > 0) {
-    return sessionId2;
-  }
-  const conversationId = input?.conversation_id;
-  if (typeof conversationId === "string" && conversationId.length > 0) {
-    return conversationId;
-  }
-  return null;
-}
-function parseSessionIdFromStdin() {
-  return normalizeSessionEndSessionId(parseSessionEndHookInput(readFileSync(0, "utf8")));
 }
 const sessionId = parseSessionIdFromStdin();
 if (sessionId !== null) {
@@ -63,7 +51,3 @@ if (sessionId !== null) {
   }
 }
 process.exit(0);
-export {
-  normalizeSessionEndSessionId,
-  parseSessionEndHookInput
-};
