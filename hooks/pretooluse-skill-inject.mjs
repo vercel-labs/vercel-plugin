@@ -132,7 +132,7 @@ function isClientReactFile(toolName, toolInput) {
   if (!/\.[jt]sx$/.test(filePath)) return false;
   return !/\/(api|actions)\//.test(filePath) && !/\broute\.[jt]sx?$/.test(filePath);
 }
-const CURSOR_RUNTIME_ENV_KEYS = [
+const RUNTIME_ENV_KEYS = [
   "VERCEL_PLUGIN_SEEN_SKILLS",
   "VERCEL_PLUGIN_TSX_EDIT_COUNT",
   "VERCEL_PLUGIN_DEV_VERIFY_COUNT"
@@ -150,7 +150,7 @@ function captureRuntimeEnvSnapshot(env = process.env) {
 }
 function collectRuntimeEnvUpdates(before, env = process.env) {
   const updates = {};
-  for (const key of CURSOR_RUNTIME_ENV_KEYS) {
+  for (const key of RUNTIME_ENV_KEYS) {
     const next = env[key];
     if (typeof next === "string" && next !== before[key]) {
       updates[key] = next;
@@ -163,7 +163,7 @@ function finalizeRuntimeEnvUpdates(platform, before, env = process.env) {
   if (platform === "cursor" || !hasClaudeEnvFile()) {
     return Object.keys(updates).length > 0 ? updates : void 0;
   }
-  for (const key of CURSOR_RUNTIME_ENV_KEYS) {
+  for (const key of RUNTIME_ENV_KEYS) {
     const value = updates[key];
     if (typeof value === "string") {
       setSessionEnv(platform, key, value);

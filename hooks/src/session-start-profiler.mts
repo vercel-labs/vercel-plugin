@@ -3,11 +3,11 @@
  *
  * Scans the current working directory for common config files and package
  * dependencies, then writes likely skill slugs into VERCEL_PLUGIN_LIKELY_SKILLS
- * in CLAUDE_ENV_FILE. This pre-primes the skill matcher so the first tool call
- * can skip cold-scanning for obvious frameworks.
+ * into the session environment. Claude Code writes shell exports into
+ * CLAUDE_ENV_FILE, while Cursor emits JSON `{ env, additional_context }`.
  *
- * Exits silently (code 0) if CLAUDE_ENV_FILE is not set or the project root
- * cannot be determined.
+ * This pre-primes the skill matcher so the first tool call can skip
+ * cold-scanning for obvious frameworks.
  */
 
 import {
@@ -17,6 +17,7 @@ import {
   existsSync,
   readFileSync,
   readdirSync,
+  readFileSync,
   writeFileSync,
   type Dirent,
 } from "node:fs";
@@ -24,7 +25,14 @@ import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { profileCachePath, requireEnvFile, safeReadJson } from "./hook-env.mjs";
+import {
+  formatOutput,
+  getEnvFilePath,
+  normalizeInput,
+  setSessionEnv,
+  type HookPlatform,
+} from "./compat.mjs";
+import { profileCachePath, safeReadJson } from "./hook-env.mjs";
 import { createLogger, logCaughtError, type Logger } from "./logger.mjs";
 import { isTelemetryEnabled, trackEvents } from "./telemetry.mjs";
 
@@ -491,12 +499,15 @@ export function checkAgentBrowser(): boolean {
 
 interface SessionStartInput {
   session_id?: string;
+  conversation_id?: string;
+  cursor_version?: string;
+  workspace_roots?: string[];
+  cwd?: string;
   [key: string]: unknown;
 }
 
-function parseSessionStartInput(): SessionStartInput | null {
+export function parseSessionStartInput(raw: string): SessionStartInput | null {
   try {
-    const raw = require("node:fs").readFileSync(0, "utf8");
     if (!raw.trim()) return null;
     return JSON.parse(raw) as SessionStartInput;
   } catch {
@@ -504,44 +515,121 @@ function parseSessionStartInput(): SessionStartInput | null {
   }
 }
 
-async function main(): Promise<void> {
-  const envFile: string = requireEnvFile();
+export function detectSessionStartPlatform(
+  input: SessionStartInput | null,
+  env: NodeJS.ProcessEnv = process.env,
+): HookPlatform {
+  if (typeof env.CLAUDE_ENV_FILE === "string" && env.CLAUDE_ENV_FILE.trim() !== "") {
+    return "claude-code";
+  }
 
-  // Parse stdin for session_id (used for profile cache path)
-  const hookInput = parseSessionStartInput();
-  const sessionId = hookInput?.session_id ?? null;
+  if (input && ("conversation_id" in input || "cursor_version" in input)) {
+    return "cursor";
+  }
 
-  // Use CLAUDE_PROJECT_ROOT if available, otherwise cwd
-  const projectRoot: string = process.env.CLAUDE_PROJECT_ROOT || process.cwd();
+  return "claude-code";
+}
 
-  // Greenfield check — seed defaults and skip repository exploration.
-  const greenfield: GreenfieldResult | null = checkGreenfield(projectRoot);
+export function normalizeSessionStartSessionId(input: SessionStartInput | null): string | null {
+  if (!input) return null;
+
+  const sessionId = normalizeInput(input as Record<string, unknown>).sessionId;
+  return sessionId || null;
+}
+
+export function resolveSessionStartProjectRoot(env: NodeJS.ProcessEnv = process.env): string {
+  return env.CLAUDE_PROJECT_ROOT ?? env.CURSOR_PROJECT_DIR ?? process.cwd();
+}
+
+export function buildSessionStartProfilerEnvVars(args: {
+  agentBrowserAvailable: boolean;
+  greenfield: boolean;
+  likelySkills: string[];
+  setupSignals: BootstrapSignals;
+}): Record<string, string> {
+  const envVars: Record<string, string> = {
+    VERCEL_PLUGIN_AGENT_BROWSER_AVAILABLE: args.agentBrowserAvailable ? "1" : "0",
+  };
+
+  if (args.greenfield) {
+    envVars.VERCEL_PLUGIN_GREENFIELD = "true";
+  }
+  if (args.likelySkills.length > 0) {
+    envVars.VERCEL_PLUGIN_LIKELY_SKILLS = args.likelySkills.join(",");
+  }
+  if (args.setupSignals.bootstrapHints.length > 0) {
+    envVars.VERCEL_PLUGIN_BOOTSTRAP_HINTS = args.setupSignals.bootstrapHints.join(",");
+  }
+  if (args.setupSignals.resourceHints.length > 0) {
+    envVars.VERCEL_PLUGIN_RESOURCE_HINTS = args.setupSignals.resourceHints.join(",");
+  }
+  if (args.setupSignals.setupMode) {
+    envVars.VERCEL_PLUGIN_SETUP_MODE = "1";
+  }
+
+  return envVars;
+}
+
+export function buildSessionStartProfilerUserMessages(
+  greenfield: GreenfieldResult | null,
+  cliStatus: VercelCliStatus,
+): string[] {
+  const messages: string[] = [];
+
   if (greenfield) {
-    process.stdout.write(
-      "This is a greenfield project. Skip exploration — there is no existing code to discover. Start executing immediately.\n",
+    messages.push(
+      "This is a greenfield project. Skip exploration — there is no existing code to discover. Start executing immediately.",
     );
   }
 
-  // Vercel CLI version check
-  const cliStatus: VercelCliStatus = checkVercelCli();
   if (!cliStatus.installed) {
-    process.stdout.write(
+    messages.push(
       [
         "IMPORTANT: The Vercel CLI is not installed.",
         "Strongly recommend the user install it with `npm i -g vercel` to unlock agentic features like `vercel env pull`, `vercel deploy`, and `vercel logs`.",
-        "",
       ].join("\n"),
     );
   } else if (cliStatus.needsUpdate) {
-    process.stdout.write(
+    messages.push(
       [
         `IMPORTANT: The Vercel CLI is outdated (${cliStatus.currentVersion} → ${cliStatus.latestVersion}).`,
         "Strongly recommend the user upgrade with `npm i -g vercel@latest` or `pnpm add -g vercel@latest` for best compatibility.",
         "The latest version includes significant agentic features and improvements that will greatly enhance their development experience.",
-        "",
       ].join("\n"),
     );
   }
+
+  return messages;
+}
+
+export function formatSessionStartProfilerCursorOutput(
+  envVars: Record<string, string>,
+  userMessages: string[],
+): string {
+  const additionalContext = userMessages.join("\n\n");
+  return JSON.stringify(formatOutput("cursor", {
+    additionalContext: additionalContext || undefined,
+    env: envVars,
+  }));
+}
+
+function main(): void {
+  const hookInput = parseSessionStartInput(readFileSync(0, "utf8"));
+  const platform = detectSessionStartPlatform(hookInput);
+  const sessionId = normalizeSessionStartSessionId(hookInput);
+  const projectRoot = resolveSessionStartProjectRoot();
+  const envFile = platform === "claude-code" ? getEnvFilePath() : null;
+
+  if (platform === "claude-code" && !envFile) {
+    process.exit(0);
+  }
+
+  // Greenfield check — seed defaults and skip repository exploration.
+  const greenfield: GreenfieldResult | null = checkGreenfield(projectRoot);
+
+  // Vercel CLI version check
+  const cliStatus: VercelCliStatus = checkVercelCli();
+  const userMessages = buildSessionStartProfilerUserMessages(greenfield, cliStatus);
 
   const likelySkills: string[] = greenfield
     ? GREENFIELD_DEFAULT_SKILLS
@@ -559,32 +647,28 @@ async function main(): Promise<void> {
 
   // Check agent-browser CLI availability
   const agentBrowserAvailable: boolean = checkAgentBrowser();
+  const envVars = buildSessionStartProfilerEnvVars({
+    agentBrowserAvailable,
+    greenfield: greenfield !== null,
+    likelySkills,
+    setupSignals,
+  });
+  const cursorOutput = platform === "cursor"
+    ? formatSessionStartProfilerCursorOutput(envVars, userMessages)
+    : null;
 
   try {
-    appendEnvExport(envFile, "VERCEL_PLUGIN_AGENT_BROWSER_AVAILABLE", agentBrowserAvailable ? "1" : "0");
-    if (greenfield) {
-      appendEnvExport(envFile, "VERCEL_PLUGIN_GREENFIELD", "true");
-    }
-    if (likelySkills.length > 0) {
-      appendEnvExport(envFile, "VERCEL_PLUGIN_LIKELY_SKILLS", likelySkills.join(","));
-    }
-    if (setupSignals.bootstrapHints.length > 0) {
-      appendEnvExport(envFile, "VERCEL_PLUGIN_BOOTSTRAP_HINTS", setupSignals.bootstrapHints.join(","));
-    }
-    if (setupSignals.resourceHints.length > 0) {
-      appendEnvExport(envFile, "VERCEL_PLUGIN_RESOURCE_HINTS", setupSignals.resourceHints.join(","));
-    }
-    if (setupSignals.setupMode) {
-      appendEnvExport(envFile, "VERCEL_PLUGIN_SETUP_MODE", "1");
+    if (platform === "claude-code") {
+      for (const [key, value] of Object.entries(envVars)) {
+        setSessionEnv(platform, key, value);
+      }
     }
   } catch (error) {
     logCaughtError(log, "session-start-profiler:append-env-export-failed", error, {
-      envFile,
+      envFile: envFile ?? null,
+      platform,
       projectRoot,
-      likelySkillsCount: likelySkills.length,
-      bootstrapHintCount: setupSignals.bootstrapHints.length,
-      resourceHintCount: setupSignals.resourceHints.length,
-      setupMode: setupSignals.setupMode,
+      envVarCount: Object.keys(envVars).length,
     });
   }
 
@@ -599,6 +683,11 @@ async function main(): Promise<void> {
 
   if (telemetryPref === "enabled") {
     appendEnvExport(envFile, "VERCEL_PLUGIN_TELEMETRY", "on");
+  }
+
+  const additionalContext = userMessages.join("\n\n");
+  if (platform === "claude-code" && additionalContext) {
+    process.stdout.write(`${additionalContext}\n\n`);
   }
 
   // Write profile cache so SubagentStart hooks can read it without re-profiling
@@ -624,13 +713,17 @@ async function main(): Promise<void> {
   }
 
   if (isTelemetryEnabled() && sessionId) {
-    await trackEvents(sessionId, [
+    trackEvents(sessionId, [
       { key: "session:platform", value: process.platform },
       { key: "session:likely_skills", value: likelySkills.join(",") },
       { key: "session:greenfield", value: String(greenfield !== null) },
       { key: "session:vercel_cli_installed", value: String(cliStatus.installed) },
       { key: "session:vercel_cli_version", value: cliStatus.currentVersion || "" },
-    ]);
+    ]).catch(() => {});
+  }
+
+  if (cursorOutput) {
+    process.stdout.write(cursorOutput);
   }
 
   process.exit(0);
