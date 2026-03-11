@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-10T20:31:32.307Z",
+  "generatedAt": "2026-03-11T03:44:37.877Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -2303,6 +2303,13 @@
         "\\bnpm\\s+create\\s+next-app\\b"
       ],
       "importRegexSources": [],
+      "validate": [
+        {
+          "pattern": "\"base\"\\s*:\\s*\"base-ui\"",
+          "message": "AI Elements components use Radix-specific APIs (asChild, openDelay) and have type errors with Base UI. If this project uses AI Elements, reinitialize with: npx shadcn@latest init -d --base radix -f",
+          "severity": "warn"
+        }
+      ],
       "retrieval": {
         "aliases": [
           "shadcn ui",
@@ -3942,6 +3949,32 @@
           "message": "searchParams is async in Next.js 16 — add await: const { query } = await searchParams",
           "severity": "recommended",
           "skipIfFileContains": "^['\\\"]use client['\\\"]"
+        },
+        {
+          "pattern": "from\\s+[''\"\"](next-auth|@auth/core)[''\"\"]|NextAuth\\(|getServerSession\\(",
+          "message": "Legacy auth pattern detected. Modern Vercel apps should use Clerk, Descope, or Auth0 for managed authentication.",
+          "severity": "recommended",
+          "skipIfFileContains": "@clerk/|@descope/|@auth0/",
+          "upgradeToSkill": "auth",
+          "upgradeWhy": "Migrate from next-auth/manual JWT to a managed auth provider (Clerk, Descope, Auth0) for better Vercel integration.",
+          "upgradeMode": "soft"
+        },
+        {
+          "pattern": "NextApiRequest|NextApiResponse|export\\s+default\\s+function\\s+handler",
+          "message": "Pages Router API handler detected. Use App Router route handlers with named HTTP exports instead.",
+          "severity": "recommended",
+          "skipIfFileContains": "export\\s+(async\\s+)?function\\s+(GET|POST|PUT|PATCH|DELETE)",
+          "upgradeToSkill": "vercel-functions",
+          "upgradeWhy": "Migrate from Pages Router API routes to App Router route handlers with Web Request/Response API.",
+          "upgradeMode": "soft"
+        },
+        {
+          "pattern": "from\\s+[''\"\"](lru-cache|node-cache|memory-cache)[''\"\"]|new\\s+(LRUCache|NodeCache)\\(",
+          "message": "In-process cache detected. Serverless deployments lose process memory between invocations.",
+          "severity": "recommended",
+          "upgradeToSkill": "runtime-cache",
+          "upgradeWhy": "Replace process-memory caches with Vercel Runtime Cache for shared, region-aware caching.",
+          "upgradeMode": "soft"
         }
       ],
       "promptSignals": {
@@ -5013,6 +5046,33 @@
           "message": "message.content is deprecated in AI SDK v6 — use message.parts to iterate UIMessage parts instead",
           "severity": "recommended",
           "skipIfFileContains": "message\\.parts"
+        },
+        {
+          "pattern": "process\\.env\\.(OPENAI_API_KEY|ANTHROPIC_API_KEY)|openai\\([''\"]|anthropic\\([''\"]|\\bgpt-4o\\b",
+          "message": "Direct provider API key or stale model usage detected. Route AI calls through the Vercel AI Gateway for auth, routing, failover, and cost visibility.",
+          "severity": "recommended",
+          "skipIfFileContains": "gateway\\(|@vercel/ai-gateway|ai-gateway",
+          "upgradeToSkill": "ai-gateway",
+          "upgradeWhy": "Move model calls behind the Vercel AI Gateway for OIDC auth, provider routing, failover, and cost tracking.",
+          "upgradeMode": "soft"
+        },
+        {
+          "pattern": "react-markdown|dangerouslySetInnerHTML|ReactMarkdown",
+          "message": "Manual markdown/HTML rendering of AI content detected. Use AI Elements for safe, streaming-aware AI message rendering.",
+          "severity": "recommended",
+          "skipIfFileContains": "@vercel/ai-elements|MessageResponse|ai-elements",
+          "upgradeToSkill": "ai-elements",
+          "upgradeWhy": "Replace fragile markdown rendering with AI Elements MessageResponse for streaming-aware, safe AI content display.",
+          "upgradeMode": "soft"
+        },
+        {
+          "pattern": "message\\.content\\b|tool-invocation",
+          "message": "Deprecated AI SDK UIMessage rendering pattern. Use message.parts with part-aware rendering.",
+          "severity": "recommended",
+          "skipIfFileContains": "message\\.parts|part\\.type",
+          "upgradeToSkill": "json-render",
+          "upgradeWhy": "Migrate from deprecated message.content to message.parts with type-safe rendering for text, tool calls, and streaming states.",
+          "upgradeMode": "soft"
         }
       ],
       "promptSignals": {
@@ -5933,6 +5993,42 @@
           "pattern": "NextApiRequest|NextApiResponse",
           "message": "NextApiRequest/NextApiResponse are Pages Router types — use Web API Request/Response",
           "severity": "error"
+        },
+        {
+          "pattern": "from\\s+[''\"](openai|@anthropic-ai/sdk|anthropic)[''\"]|new\\s+(OpenAI|Anthropic)\\(",
+          "message": "Direct AI provider SDK detected in route handler. Use the Vercel AI SDK for streaming, tools, and provider abstraction.",
+          "severity": "recommended",
+          "skipIfFileContains": "@ai-sdk/|from\\s+[''\"](ai)[''\"]|import.*from\\s+[''\"](ai)[''\"]|streamText|generateText",
+          "upgradeToSkill": "ai-sdk",
+          "upgradeWhy": "Replace vendor-locked provider SDKs with @ai-sdk/openai or @ai-sdk/anthropic for unified streaming and tool support.",
+          "upgradeMode": "soft"
+        },
+        {
+          "pattern": "setTimeout\\s*\\(|setInterval\\s*\\(|await\\s+new\\s+Promise\\s*\\([^)]*setTimeout",
+          "message": "Long-running or polling logic detected in a serverless handler. Functions have execution time limits.",
+          "severity": "recommended",
+          "skipIfFileContains": "use workflow|use step|@vercel/workflow",
+          "upgradeToSkill": "workflow",
+          "upgradeWhy": "Move delayed/polling logic to Vercel Workflow for durable execution with pause, resume, retries, and crash safety.",
+          "upgradeMode": "soft"
+        },
+        {
+          "pattern": "writeFile(Sync)?\\(|createWriteStream\\(|from\\s+[''\"](multer|formidable)[''\"]|fs\\.writeFile",
+          "message": "Local filesystem write detected. Serverless functions have ephemeral, read-only filesystems.",
+          "severity": "error",
+          "skipIfFileContains": "@vercel/blob|@upstash/|@neondatabase/",
+          "upgradeToSkill": "vercel-storage",
+          "upgradeWhy": "Replace local filesystem writes with Vercel Blob, Neon, or Upstash for persistent, platform-native storage.",
+          "upgradeMode": "soft"
+        },
+        {
+          "pattern": "export\\s+(async\\s+)?function\\s+(GET|POST|PUT|PATCH|DELETE)\\b",
+          "message": "Route handler has no observability instrumentation. Add logging and error tracking for production debugging.",
+          "severity": "warn",
+          "skipIfFileContains": "console\\.error|logger\\.|captureException|Sentry|@vercel/otel|withTracing",
+          "upgradeToSkill": "observability",
+          "upgradeWhy": "Add structured logging, error tracking, and OTel instrumentation to route handlers.",
+          "upgradeMode": "soft"
         }
       ],
       "retrieval": {

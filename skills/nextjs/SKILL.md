@@ -109,6 +109,26 @@ validate:
     message: 'searchParams is async in Next.js 16 — add await: const { query } = await searchParams'
     severity: recommended
     skipIfFileContains: "^['\"]use client['\"]"
+  -
+    pattern: 'from\s+[''""](next-auth|@auth/core)[''""]|NextAuth\(|getServerSession\('
+    message: 'Legacy auth pattern detected. Modern Vercel apps should use Clerk, Descope, or Auth0 for managed authentication.'
+    severity: recommended
+    upgradeToSkill: auth
+    upgradeWhy: 'Migrate from next-auth/manual JWT to a managed auth provider (Clerk, Descope, Auth0) for better Vercel integration.'
+    skipIfFileContains: '@clerk/|@descope/|@auth0/'
+  -
+    pattern: 'NextApiRequest|NextApiResponse|export\s+default\s+function\s+handler'
+    message: 'Pages Router API handler detected. Use App Router route handlers with named HTTP exports instead.'
+    severity: recommended
+    upgradeToSkill: vercel-functions
+    upgradeWhy: 'Migrate from Pages Router API routes to App Router route handlers with Web Request/Response API.'
+    skipIfFileContains: 'export\s+(async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)'
+  -
+    pattern: 'from\s+[''""](lru-cache|node-cache|memory-cache)[''""]|new\s+(LRUCache|NodeCache)\('
+    message: 'In-process cache detected. Serverless deployments lose process memory between invocations.'
+    severity: recommended
+    upgradeToSkill: runtime-cache
+    upgradeWhy: 'Replace process-memory caches with Vercel Runtime Cache for shared, region-aware caching.'
 retrieval:
   aliases:
     - next.js
