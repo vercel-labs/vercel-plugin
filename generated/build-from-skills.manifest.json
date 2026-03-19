@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-03-18T17:37:00.213Z",
+  "generatedAt": "2026-03-19T04:56:49.438Z",
   "templates": [
     {
       "template": "agents/ai-architect.md.tmpl",
@@ -344,21 +344,21 @@
           "skillName": "observability",
           "target": "Drains > Security: Signature Verification",
           "type": "section",
-          "lineNumber": 126
+          "lineNumber": 128
         },
         {
           "marker": "{{include:skill:observability:Drains > Fallback Guidance (No Drains)}}",
           "skillName": "observability",
           "target": "Drains > Fallback Guidance (No Drains)",
           "type": "section",
-          "lineNumber": 133
+          "lineNumber": 135
         },
         {
           "marker": "{{include:skill:observability:Decision Matrix}}",
           "skillName": "observability",
           "target": "Decision Matrix",
           "type": "section",
-          "lineNumber": 138
+          "lineNumber": 140
         }
       ]
     },

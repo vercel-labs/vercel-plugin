@@ -12,7 +12,7 @@ Comprehensive project health check. Diagnoses deployment state, environment conf
    - **If found**: read `projectId` and `orgId` to confirm linkage. Print project name.
    - **If not found**: print a clear message:
      > This project is not linked to Vercel. Run `vercel link` to connect it, then re-run `/status`.
-     Stop here — remaining steps require a linked project.
+     Stop here — remaining steps require a linked project. **Do NOT fall back to GitHub Actions (`gh run list`) or any other CI system.** The Vercel CLI is the only authoritative source for this command.
 2. Verify `vercel` CLI is available on PATH. If missing, suggest `npm i -g vercel`.
 3. Detect monorepo markers (`turbo.json`, `pnpm-workspace.yaml`). If present, note which package scope is active.
 
@@ -33,8 +33,10 @@ No destructive operations — this command is read-only.
 ### 1. Recent Deployments
 
 ```
-vercel ls --limit 5
+vercel ls
 ```
+
+> **Note:** `vercel ls` does not support `--limit`. It returns recent deployments by default.
 
 Extract: deployment URL, state (READY / ERROR / BUILDING), target (production / preview), created timestamp.
 
