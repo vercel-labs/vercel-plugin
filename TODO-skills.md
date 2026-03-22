@@ -16,29 +16,29 @@ geist - OURS -> DELETED
 geistdocs - OURS -> DELETED
 investigation-mode - OURS, keep
 json-render - PAUSE -> ask John, its a combinatin
-marketplace - OURS -> delete
-micro - OURS ->
-ncc - OURS -> ?
+marketplace - OURS -> KEEP
+micro - OURS -> DELETED
+ncc - OURS -> DELETED
 next-forge - COPIED
 nextjs - COPIED
 next-cache-components - COPIED/NEW
 next-upgrade - COPIED/NEW
-observability - OURS -> delete
-payments - OURS -> delete
+observability - OURS -> KEEP
+payments - OURS -> DELETED
 react-best-practices - COPIED
-routing-middleware - OURS
-runtime-cache - OURS
+routing-middleware - OURS -> delete
+runtime-cache - OURS -> delete
 satori - OURS -> delete
 shadcn - PAUSE -> ask John
 sign-in-with-vercel - OURS
-swr - OURS
+swr - OURS -> delete
 turbopack - OURS
 turborepo - COPIED
 v0-dev - OURS
 vercel-agent - OURS
 vercel-api - OURS
 vercel-cli - COPIED
-vercel-firewall - OURS
+vercel-firewall - OURS -> delete
 vercel-flags - OURS
 vercel-functions - OURS
 vercel-queues - OURS

@@ -491,24 +491,7 @@ SWR (v2, React Hooks)                      ⤳ skill: swr  📖 docs: https://sw
     ↔ Next.js (App Router & Pages Router)
     ↔ React (any React framework)
 
-NCC (Node.js Compiler Collection)          ⤳ skill: ncc  📖 docs: https://github.com/vercel/ncc
-├── Purpose: Compile Node.js modules into a single file with all dependencies
-│   ⊃ Serverless function bundling
-│   ⊃ CLI tool distribution
-│   ⊃ GitHub Actions bundling
-│   ⊃ TypeScript compilation (uses project tsconfig.json)
-│   ⊃ External module exclusion
-│
-└── Use When: Single-file deployment, reducing node_modules, bundling serverless functions
 
-MICRO (HTTP Microservices)                 ⤳ skill: micro  📖 docs: https://github.com/vercel/micro
-├── Purpose: Lightweight async HTTP microservices framework
-│   ⊃ Single-endpoint HTTP servers
-│   ⊃ JSON/text/buffer body parsing
-│   ⊃ Composable handler middleware
-│   ⊃ micro-dev for hot-reloading development
-│
-└── Use When: Minimal HTTP services, single-purpose API endpoints
 
 GEIST (Font Family)                        ⤳ skill: geist  📖 docs: https://github.com/vercel/geist-font
 ├── Purpose: Vercel's open-source font family for Next.js

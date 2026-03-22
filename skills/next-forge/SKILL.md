@@ -139,10 +139,6 @@ chainTo:
     targetSkill: auth
     message: 'Clerk auth patterns in next-forge — loading Auth guidance for middleware auth, sign-in/sign-up flows, and organization handling.'
     skipIfFileContains: '@auth0/|@descope/'
-  -
-    pattern: from\s+['"](stripe|@stripe/stripe-js)['"]|Stripe\(|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET
-    targetSkill: payments
-    message: 'Stripe integration in next-forge — loading Payments guidance for checkout sessions, webhooks, and subscription billing.'
 
 ---
 

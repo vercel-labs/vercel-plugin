@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-22T21:06:54.931Z",
+  "generatedAt": "2026-03-22T21:34:59.597Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -365,85 +365,6 @@
         "examples": []
       }
     },
-    "micro": {
-      "priority": 4,
-      "summary": "",
-      "docs": [
-        "https://github.com/vercel/micro"
-      ],
-      "pathPatterns": [],
-      "bashPatterns": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bmicro\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bmicro\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bmicro\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bmicro\\b",
-        "\\bnpx\\s+micro\\b",
-        "\\bnpx\\s+micro-dev\\b"
-      ],
-      "importPatterns": [
-        "micro",
-        "micro-dev"
-      ],
-      "bodyPath": "skills/micro/SKILL.md",
-      "pathRegexSources": [],
-      "bashRegexSources": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bmicro\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bmicro\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bmicro\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bmicro\\b",
-        "\\bnpx\\s+micro\\b",
-        "\\bnpx\\s+micro-dev\\b"
-      ],
-      "importRegexSources": [
-        {
-          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]micro(?:\\/[^'\"]*)?['\"]",
-          "flags": "m"
-        },
-        {
-          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]micro-dev(?:\\/[^'\"]*)?['\"]",
-          "flags": "m"
-        }
-      ],
-      "validate": [
-        {
-          "pattern": "from\\s+[''\"](micro)[''\"]|send\\s*\\(\\s*res\\s*,",
-          "message": "Legacy micro framework detected. Modern Vercel serverless uses Web Request/Response API route handlers.",
-          "severity": "recommended",
-          "skipIfFileContains": "export\\s+(async\\s+)?function\\s+(GET|POST|PUT|PATCH|DELETE)|Response\\.json",
-          "upgradeToSkill": "vercel-functions",
-          "upgradeWhy": "Migrate from micro send(res, status, data) to modern route handlers with return Response.json(data).",
-          "upgradeMode": "soft"
-        }
-      ],
-      "chainTo": [
-        {
-          "pattern": "from\\s+[''\\\"](micro)[''\"]|send\\s*\\(\\s*res\\s*,",
-          "targetSkill": "vercel-functions",
-          "message": "Legacy micro framework detected — loading Vercel Functions guidance for modern route handler migration."
-        }
-      ],
-      "retrieval": {
-        "aliases": [
-          "microservice",
-          "http server",
-          "lightweight api",
-          "micro framework"
-        ],
-        "intents": [
-          "create microservice",
-          "build http server",
-          "set up api endpoint",
-          "use micro"
-        ],
-        "entities": [
-          "micro",
-          "microservice",
-          "HTTP",
-          "async handler"
-        ],
-        "examples": []
-      }
-    },
     "agent-browser": {
       "priority": 3,
       "summary": "",
@@ -603,131 +524,6 @@
           "tool call",
           "streaming",
           "message parts"
-        ],
-        "examples": []
-      }
-    },
-    "payments": {
-      "priority": 5,
-      "summary": "",
-      "docs": [
-        "https://docs.stripe.com",
-        "https://docs.stripe.com/payments/quickstart"
-      ],
-      "sitemap": "https://docs.stripe.com/sitemap.xml",
-      "pathPatterns": [
-        "app/api/webhook/stripe/**",
-        "app/api/webhooks/stripe/**",
-        "src/app/api/webhook/stripe/**",
-        "src/app/api/webhooks/stripe/**",
-        "pages/api/webhook/stripe.*",
-        "pages/api/webhooks/stripe.*",
-        "app/api/checkout/**",
-        "src/app/api/checkout/**",
-        "app/api/stripe/**",
-        "src/app/api/stripe/**",
-        "lib/stripe.*",
-        "src/lib/stripe.*",
-        "utils/stripe.*",
-        "src/utils/stripe.*"
-      ],
-      "bashPatterns": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bstripe\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bstripe\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bstripe\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bstripe\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@stripe/stripe-js\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@stripe/stripe-js\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@stripe/stripe-js\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@stripe/stripe-js\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@stripe/react-stripe-js\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@stripe/react-stripe-js\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@stripe/react-stripe-js\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@stripe/react-stripe-js\\b"
-      ],
-      "importPatterns": [],
-      "bodyPath": "skills/payments/SKILL.md",
-      "pathRegexSources": [
-        "^app\\/api\\/webhook\\/stripe\\/.*$",
-        "^app\\/api\\/webhooks\\/stripe\\/.*$",
-        "^src\\/app\\/api\\/webhook\\/stripe\\/.*$",
-        "^src\\/app\\/api\\/webhooks\\/stripe\\/.*$",
-        "^pages\\/api\\/webhook\\/stripe\\.[^/]*$",
-        "^pages\\/api\\/webhooks\\/stripe\\.[^/]*$",
-        "^app\\/api\\/checkout\\/.*$",
-        "^src\\/app\\/api\\/checkout\\/.*$",
-        "^app\\/api\\/stripe\\/.*$",
-        "^src\\/app\\/api\\/stripe\\/.*$",
-        "^lib\\/stripe\\.[^/]*$",
-        "^src\\/lib\\/stripe\\.[^/]*$",
-        "^utils\\/stripe\\.[^/]*$",
-        "^src\\/utils\\/stripe\\.[^/]*$"
-      ],
-      "bashRegexSources": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bstripe\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bstripe\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bstripe\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bstripe\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@stripe/stripe-js\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@stripe/stripe-js\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@stripe/stripe-js\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@stripe/stripe-js\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@stripe/react-stripe-js\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@stripe/react-stripe-js\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@stripe/react-stripe-js\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@stripe/react-stripe-js\\b"
-      ],
-      "importRegexSources": [],
-      "chainTo": [
-        {
-          "pattern": "setTimeout\\s*\\(|setInterval\\s*\\(",
-          "targetSkill": "workflow",
-          "message": "Timer-based retry or polling in payment handler — loading Workflow DevKit for durable execution with automatic retries."
-        },
-        {
-          "pattern": "(retries|retryCount|attempts|maxRetries)\\s*[=:<]|catch\\s*\\([^)]*\\)\\s*\\{[^}]*(retry|again)",
-          "targetSkill": "workflow",
-          "message": "Manual retry logic in payment handler — loading Workflow DevKit for automatic retries with backoff and durable execution.",
-          "skipIfFileContains": "createWorkflow|use workflow|use step"
-        },
-        {
-          "pattern": "stripe\\.webhooks\\.constructEvent|constructWebhookEvent|STRIPE_WEBHOOK_SECRET|whsec_",
-          "targetSkill": "payments",
-          "message": "Stripe webhook handling detected — loading Payments guidance for Vercel Marketplace setup with auto-provisioned env vars and unified billing.",
-          "skipIfFileContains": "vercel integration add stripe|STRIPE_SECRET_KEY.*sks_"
-        },
-        {
-          "pattern": "from\\\\s+['\\\"]stripe['\\\"]",
-          "targetSkill": "payments",
-          "message": "Stripe SDK import detected — loading Payments guidance for Vercel Marketplace setup with auto-provisioned env vars, webhook verification, and subscription billing patterns.",
-          "skipIfFileContains": "vercel integration add stripe"
-        },
-        {
-          "pattern": "paypal|braintree",
-          "targetSkill": "payments",
-          "message": "PayPal/Braintree detected — Stripe is the native Vercel Marketplace payment provider with auto-provisioned env vars, unified billing, and first-class Next.js integration.",
-          "skipIfFileContains": "from\\\\s+['\\\"]stripe['\\\"]|vercel integration add stripe"
-        }
-      ],
-      "retrieval": {
-        "aliases": [
-          "stripe",
-          "billing",
-          "checkout",
-          "subscriptions"
-        ],
-        "intents": [
-          "add payments",
-          "set up stripe",
-          "implement checkout",
-          "handle subscriptions"
-        ],
-        "entities": [
-          "Stripe",
-          "checkout",
-          "webhook",
-          "subscription",
-          "payment intent"
         ],
         "examples": []
       }
@@ -1108,74 +904,6 @@
           "Neon Postgres",
           "Upstash Redis",
           "Vercel Storage"
-        ],
-        "examples": []
-      }
-    },
-    "ncc": {
-      "priority": 4,
-      "summary": "",
-      "docs": [
-        "https://github.com/vercel/ncc"
-      ],
-      "pathPatterns": [],
-      "bashPatterns": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/ncc\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/ncc\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@vercel/ncc\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@vercel/ncc\\b",
-        "\\bncc\\s+build\\b"
-      ],
-      "importPatterns": [
-        "@vercel/ncc"
-      ],
-      "bodyPath": "skills/ncc/SKILL.md",
-      "pathRegexSources": [],
-      "bashRegexSources": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/ncc\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/ncc\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@vercel/ncc\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@vercel/ncc\\b",
-        "\\bncc\\s+build\\b"
-      ],
-      "importRegexSources": [
-        {
-          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]@vercel\\/ncc(?:\\/[^'\"]*)?['\"]",
-          "flags": "m"
-        }
-      ],
-      "chainTo": [
-        {
-          "pattern": "ncc\\s+build.*api/|ncc\\s+build.*handler|ncc\\s+build.*serverless|ncc\\s+build.*function",
-          "targetSkill": "vercel-functions",
-          "message": "ncc bundling detected for serverless function — loading Vercel Functions guidance for runtime configuration, streaming, and Fluid Compute.",
-          "skipIfFileContains": "vercel\\.json|@vercel/node|edge-light"
-        },
-        {
-          "pattern": "ncc\\s+build|from\\s+['\"]@vercel/ncc['\"]",
-          "targetSkill": "deployments-cicd",
-          "message": "ncc single-file bundling detected — loading Deployments/CI guidance for deploy --prebuilt and build output optimization.",
-          "skipIfFileContains": "vercel\\s+deploy|vercel\\s+build|\\.github/workflows"
-        }
-      ],
-      "retrieval": {
-        "aliases": [
-          "node bundler",
-          "single file bundle",
-          "ncc compiler",
-          "node compiler"
-        ],
-        "intents": [
-          "bundle node module",
-          "compile to single file",
-          "package serverless function",
-          "use ncc"
-        ],
-        "entities": [
-          "@vercel/ncc",
-          "ncc",
-          "bundle",
-          "single file"
         ],
         "examples": []
       }
@@ -6675,11 +6403,6 @@
           "targetSkill": "auth",
           "message": "Clerk auth patterns in next-forge — loading Auth guidance for middleware auth, sign-in/sign-up flows, and organization handling.",
           "skipIfFileContains": "@auth0/|@descope/"
-        },
-        {
-          "pattern": "from\\s+['\"](stripe|@stripe/stripe-js)['\"]|Stripe\\(|STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SECRET",
-          "targetSkill": "payments",
-          "message": "Stripe integration in next-forge — loading Payments guidance for checkout sessions, webhooks, and subscription billing."
         }
       ],
       "promptSignals": {
