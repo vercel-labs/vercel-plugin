@@ -6,19 +6,19 @@ ai-generation-persistence - OURS
 ai-sdk - COPIED
 auth - OURS
 bootstrap - OURS
-chat-sdk
-cms
-cron-jobs
-deployments-cicd
-email
-env-vars
-geist
-geistdocs
-investigation-mode
-json-render
-marketplace
-micro
-ncc
+chat-sdk - OURS
+cms - OURS
+cron-jobs - OURS
+deployments-cicd - OURS
+email - OURS
+env-vars - OURS
+geist - OURS
+geistdocs - OURS
+investigation-mode - OURS
+json-render - PAUSE -> ask John, its a combinatin
+marketplace - OURS
+micro - OURS
+ncc - OURS
 next-forge
 nextjs
 observability
