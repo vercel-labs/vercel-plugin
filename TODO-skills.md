@@ -26,9 +26,9 @@ next-upgrade - COPIED/NEW
 observability - OURS -> KEEP
 payments - OURS -> DELETED
 react-best-practices - COPIED
-routing-middleware - OURS -> delete
-runtime-cache - OURS -> delete
-satori - OURS -> delete
+routing-middleware - OURS -> KEEP
+runtime-cache - OURS -> KEEP
+satori - OURS -> DELETED
 shadcn - PAUSE -> ask John
 sign-in-with-vercel - OURS
 swr - OURS -> delete

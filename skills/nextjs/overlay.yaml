@@ -254,11 +254,6 @@ chainTo:
     targetSkill: vercel-functions
     message: 'Pages Router API route (pages/api/) detected — loading Vercel Functions guidance for App Router route handlers with named HTTP exports.'
     skipIfFileContains: 'export\s+(async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)'
-  -
-    pattern: "from\\s+['\"]react-dom/server['\"]|renderToString\\s*\\("
-    targetSkill: satori
-    message: 'react-dom/server renderToString detected — for OG image generation, use Satori (@vercel/og) which converts JSX to SVG/PNG without a full React DOM render. Loading Satori guidance.'
-    skipIfFileContains: '@vercel/og|ImageResponse|satori'
 retrieval:
   aliases:
     - next.js

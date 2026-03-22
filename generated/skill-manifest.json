@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-22T21:34:59.597Z",
+  "generatedAt": "2026-03-22T21:38:18.434Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -4232,12 +4232,6 @@
           "targetSkill": "vercel-functions",
           "message": "Pages Router API route (pages/api/) detected — loading Vercel Functions guidance for App Router route handlers with named HTTP exports.",
           "skipIfFileContains": "export\\s+(async\\s+)?function\\s+(GET|POST|PUT|PATCH|DELETE)"
-        },
-        {
-          "pattern": "from\\\\s+['\\\"]react-dom/server['\\\"]|renderToString\\\\s*\\\\(",
-          "targetSkill": "satori",
-          "message": "react-dom/server renderToString detected — for OG image generation, use Satori (@vercel/og) which converts JSX to SVG/PNG without a full React DOM render. Loading Satori guidance.",
-          "skipIfFileContains": "@vercel/og|ImageResponse|satori"
         }
       ],
       "promptSignals": {
@@ -4821,129 +4815,6 @@
           "migration",
           "upgrade",
           "breaking changes"
-        ],
-        "examples": []
-      }
-    },
-    "satori": {
-      "priority": 4,
-      "summary": "",
-      "docs": [
-        "https://github.com/vercel/satori",
-        "https://nextjs.org/docs/app/api-reference/file-conventions/metadata/opengraph-image"
-      ],
-      "sitemap": "https://nextjs.org/sitemap.xml",
-      "pathPatterns": [
-        "app/**/og/**",
-        "app/**/og.*",
-        "app/**/opengraph-image.*",
-        "app/**/twitter-image.*",
-        "src/app/**/og/**",
-        "src/app/**/og.*",
-        "src/app/**/opengraph-image.*",
-        "src/app/**/twitter-image.*",
-        "pages/api/og.*",
-        "pages/api/og/**",
-        "src/pages/api/og.*",
-        "src/pages/api/og/**",
-        "apps/*/app/**/og/**",
-        "apps/*/app/**/og.*",
-        "apps/*/app/**/opengraph-image.*",
-        "apps/*/app/**/twitter-image.*"
-      ],
-      "bashPatterns": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bsatori\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bsatori\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bsatori\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bsatori\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/og\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/og\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@vercel/og\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@vercel/og\\b"
-      ],
-      "importPatterns": [
-        "satori",
-        "satori/wasm",
-        "@vercel/og",
-        "next/og"
-      ],
-      "bodyPath": "skills/satori/SKILL.md",
-      "pathRegexSources": [
-        "^app\\/(?:[^/]+\\/)*og\\/.*$",
-        "^app\\/(?:[^/]+\\/)*og\\.[^/]*$",
-        "^app\\/(?:[^/]+\\/)*opengraph-image\\.[^/]*$",
-        "^app\\/(?:[^/]+\\/)*twitter-image\\.[^/]*$",
-        "^src\\/app\\/(?:[^/]+\\/)*og\\/.*$",
-        "^src\\/app\\/(?:[^/]+\\/)*og\\.[^/]*$",
-        "^src\\/app\\/(?:[^/]+\\/)*opengraph-image\\.[^/]*$",
-        "^src\\/app\\/(?:[^/]+\\/)*twitter-image\\.[^/]*$",
-        "^pages\\/api\\/og\\.[^/]*$",
-        "^pages\\/api\\/og\\/.*$",
-        "^src\\/pages\\/api\\/og\\.[^/]*$",
-        "^src\\/pages\\/api\\/og\\/.*$",
-        "^apps\\/[^/]*\\/app\\/(?:[^/]+\\/)*og\\/.*$",
-        "^apps\\/[^/]*\\/app\\/(?:[^/]+\\/)*og\\.[^/]*$",
-        "^apps\\/[^/]*\\/app\\/(?:[^/]+\\/)*opengraph-image\\.[^/]*$",
-        "^apps\\/[^/]*\\/app\\/(?:[^/]+\\/)*twitter-image\\.[^/]*$"
-      ],
-      "bashRegexSources": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bsatori\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bsatori\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bsatori\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bsatori\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/og\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/og\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@vercel/og\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@vercel/og\\b"
-      ],
-      "importRegexSources": [
-        {
-          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]satori(?:\\/[^'\"]*)?['\"]",
-          "flags": "m"
-        },
-        {
-          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]satori\\/wasm(?:\\/[^'\"]*)?['\"]",
-          "flags": "m"
-        },
-        {
-          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]@vercel\\/og(?:\\/[^'\"]*)?['\"]",
-          "flags": "m"
-        },
-        {
-          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]next\\/og(?:\\/[^'\"]*)?['\"]",
-          "flags": "m"
-        }
-      ],
-      "chainTo": [
-        {
-          "pattern": "from\\s+[''\"\"]puppeteer[''\"\"]|from\\s+[''\"\"]playwright[''\"\"]|launch\\(\\s*\\{.*headless",
-          "targetSkill": "vercel-functions",
-          "message": "Headless browser for OG image generation detected — Satori generates OG images without a browser. Loading Functions guidance for lightweight serverless deployment."
-        },
-        {
-          "pattern": "from\\s+[''\"\"]canvas[''\"\"]|createCanvas\\(",
-          "targetSkill": "vercel-functions",
-          "message": "Node canvas for image generation detected — Satori uses JSX-to-SVG without native dependencies. Loading Functions guidance for serverless-compatible OG images."
-        }
-      ],
-      "retrieval": {
-        "aliases": [
-          "og image",
-          "social image",
-          "html to svg",
-          "open graph"
-        ],
-        "intents": [
-          "generate og image",
-          "create social image",
-          "convert html to svg",
-          "dynamic og"
-        ],
-        "entities": [
-          "Satori",
-          "OG image",
-          "SVG",
-          "open graph"
         ],
         "examples": []
       }
