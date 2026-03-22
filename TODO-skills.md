@@ -3,9 +3,9 @@ agent-browser - COPIED
 ai-elements - PAUSED -> ask John
 ai-gateway - OURS
 ai-generation-persistence - OURS
-ai-sdk
-auth
-bootstrap
+ai-sdk - COPIED
+auth - OURS
+bootstrap - OURS
 chat-sdk
 cms
 cron-jobs
