@@ -215,7 +215,7 @@ describe("pretooluse policy recall integration", () => {
     }
   });
 
-  test("recalled skill is forced into summary-only mode", async () => {
+  test("recalled skill is NOT forced into summary-only mode (summary path is identical to full)", async () => {
     writeMockPlanState(sessionId, {
       storyKind: "flow-verification",
       route: "/settings",
@@ -235,14 +235,15 @@ describe("pretooluse policy recall integration", () => {
     );
     expect(result.code).toBe(0);
 
-    // Check trace for summary-only marking
+    // Recalled skill should NOT be marked summary-only since the summary and
+    // full payloads are identical (both use skillInvocationMessage).
     const traces = readRoutingDecisionTrace(sessionId);
     if (traces.length > 0) {
       const recallEntry = traces[0].ranked?.find(
         (r: { skill: string }) => r.skill === "verification",
       );
       if (recallEntry) {
-        expect(recallEntry.summaryOnly).toBe(true);
+        expect(recallEntry.summaryOnly).toBe(false);
         expect(recallEntry.synthetic).toBe(true);
       }
     }
@@ -458,6 +459,75 @@ describe("pretooluse policy recall integration", () => {
     const recallLog = logs.find((l) => l.event === "policy-recall-injected");
     expect(recallLog).toBeDefined();
     expect(recallLog!.scenario).toBe("PreToolUse|flow-verification|clientRequest|Bash|*");
+  });
+
+  test("recalled skill is inserted behind direct match, not at slot-1", async () => {
+    writeMockPlanState(sessionId, {
+      storyKind: "flow-verification",
+      route: "/settings",
+      targetBoundary: "clientRequest",
+    });
+
+    // Seed policy for "verification" which won't pattern-match "next.config.ts"
+    const policy = buildStrongPolicy(
+      "verification",
+      "PreToolUse|flow-verification|clientRequest|Read|/settings",
+    );
+    saveProjectRoutingPolicy(TEST_PROJECT, policy);
+
+    // Read next.config.ts — will pattern-match "nextjs" as a direct match
+    const result = await runHook(
+      "Read",
+      { file_path: "next.config.ts" },
+      sessionId,
+    );
+    expect(result.code).toBe(0);
+
+    // Check injection metadata: direct match should be first, recalled second
+    const meta = extractInjectionMeta(result.stdout);
+    if (meta && meta.injectedSkills.length >= 2) {
+      // The direct pattern match should remain first
+      expect(meta.reasons?.[meta.injectedSkills[0]]?.trigger).not.toBe("policy-recall");
+      // Verification should be present but not first
+      const verificationIdx = meta.injectedSkills.indexOf("verification");
+      if (verificationIdx !== -1) {
+        expect(verificationIdx).toBeGreaterThan(0);
+      }
+    }
+
+    // Check debug logs confirm insertionIndex > 0
+    const logs = parseLogLines(result.stderr);
+    const recallLog = logs.find((l) => l.event === "policy-recall-injected" && l.skill === "verification");
+    if (recallLog) {
+      expect(recallLog.insertionIndex).toBeGreaterThan(0);
+    }
+  });
+
+  test("recalled skill takes slot-1 when no direct matches exist", async () => {
+    writeMockPlanState(sessionId, {
+      storyKind: "flow-verification",
+      route: "/settings",
+      targetBoundary: "clientRequest",
+    });
+
+    const policy = buildStrongPolicy(
+      "verification",
+      "PreToolUse|flow-verification|clientRequest|Bash|/settings",
+    );
+    saveProjectRoutingPolicy(TEST_PROJECT, policy);
+
+    // echo hello won't pattern-match anything
+    const result = await runHook(
+      "Bash",
+      { command: "echo hello" },
+      sessionId,
+    );
+    expect(result.code).toBe(0);
+
+    const logs = parseLogLines(result.stderr);
+    const recallLog = logs.find((l) => l.event === "policy-recall-injected" && l.skill === "verification");
+    expect(recallLog).toBeDefined();
+    expect(recallLog!.insertionIndex).toBe(0);
   });
 
   test("at most one recalled skill in phase 1", async () => {

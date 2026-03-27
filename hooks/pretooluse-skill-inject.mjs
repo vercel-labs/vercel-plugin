@@ -1050,13 +1050,14 @@ function run() {
       );
       for (const candidate of recalled) {
         if (rankedSkills.includes(candidate.skill)) continue;
-        rankedSkills.unshift(candidate.skill);
+        const insertIdx = rankedSkills.length > 0 ? 1 : 0;
+        rankedSkills.splice(insertIdx, 0, candidate.skill);
         matched.add(candidate.skill);
-        forceSummarySkills.add(candidate.skill);
         policyRecallSynthetic.add(candidate.skill);
         log.debug("policy-recall-injected", {
           skill: candidate.skill,
           scenario: candidate.scenario,
+          insertionIndex: insertIdx,
           exposures: candidate.exposures,
           wins: candidate.wins,
           directiveWins: candidate.directiveWins,

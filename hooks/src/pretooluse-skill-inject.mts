@@ -1614,13 +1614,19 @@ function run(): string {
 
       for (const candidate of recalled) {
         if (rankedSkills.includes(candidate.skill)) continue;
-        rankedSkills.unshift(candidate.skill);
+        // Bounded insertion: place recalled skill behind the top direct match
+        // so it never preempts a stronger current-evidence winner.
+        const insertIdx = rankedSkills.length > 0 ? 1 : 0;
+        rankedSkills.splice(insertIdx, 0, candidate.skill);
         matched.add(candidate.skill);
-        forceSummarySkills.add(candidate.skill);
+        // Do NOT add to forceSummarySkills — the summary path uses the same
+        // payload as full injection (skillInvocationMessage), so forcing
+        // summary-only is a no-op that pretends to save cost when it does not.
         policyRecallSynthetic.add(candidate.skill);
         log.debug("policy-recall-injected", {
           skill: candidate.skill,
           scenario: candidate.scenario,
+          insertionIndex: insertIdx,
           exposures: candidate.exposures,
           wins: candidate.wins,
           directiveWins: candidate.directiveWins,
