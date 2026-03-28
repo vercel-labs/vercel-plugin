@@ -15,6 +15,7 @@ import { runRoutingExplain } from "../commands/routing-explain.ts";
 import { runSessionExplain } from "../commands/session-explain.ts";
 import { runDecisionCat } from "../commands/decision-cat.ts";
 import { createEmptyRoutingPolicy, type RoutingPolicyFile } from "../../hooks/src/routing-policy.mts";
+import { runLearnCommand } from "./learn.ts";
 
 function validateProjectRoot(projectRoot: string): void {
   const skillsDir = join(projectRoot, "skills");
@@ -35,6 +36,7 @@ Commands:
   routing-explain     Show the latest routing decision trace
   session-explain     Show manifest, routing, verification, and exposure state together
   decision-cat <path> Read and display a decision capsule artifact
+  learn               Distill verified routing wins into learned rules
   doctor              Run self-diagnosis checks on the plugin setup
 
 Options for explain:
@@ -52,6 +54,16 @@ Options for routing-explain:
 
 Options for decision-cat:
   --json              Output machine-readable JSON
+  --help, -h          Show this help message
+
+Options for learn:
+  --json              Output machine-readable JSON
+  --write             Write generated/learned-routing-rules.json
+  --project <path>    Project root (default: current plugin directory)
+  --session <id>      Scope to a single session ID
+  --min-support <n>   Minimum support threshold (default: 5)
+  --min-precision <n> Minimum precision threshold (default: 0.8)
+  --min-lift <n>      Minimum lift threshold (default: 1.5)
   --help, -h          Show this help message
 
 Options for session-explain:
@@ -82,6 +94,8 @@ if (command === "explain") {
   runSessionExplainCmd(args.slice(1));
 } else if (command === "decision-cat") {
   runDecisionCatCmd(args.slice(1));
+} else if (command === "learn") {
+  runLearnCmd(args.slice(1));
 } else if (command === "doctor") {
   runDoctor(args.slice(1));
 } else {
@@ -341,4 +355,79 @@ function runDecisionCatCmd(cmdArgs: string[]) {
     }
     process.exit(2);
   }
+}
+
+function runLearnCmd(cmdArgs: string[]) {
+  let jsonOutput = false;
+  let writeOutput = false;
+  let projectRoot = resolve(import.meta.dir, "../..");
+  let sessionId: string | undefined;
+  let minSupport: number | undefined;
+  let minPrecision: number | undefined;
+  let minLift: number | undefined;
+
+  for (let i = 0; i < cmdArgs.length; i++) {
+    const arg = cmdArgs[i];
+    if (arg === "--json") {
+      jsonOutput = true;
+    } else if (arg === "--write") {
+      writeOutput = true;
+    } else if (arg === "--project") {
+      i++;
+      if (i >= cmdArgs.length) {
+        console.error("Error: --project requires a path argument");
+        process.exit(1);
+      }
+      projectRoot = resolve(cmdArgs[i]);
+    } else if (arg === "--session") {
+      i++;
+      if (i >= cmdArgs.length) {
+        console.error("Error: --session requires a session ID argument");
+        process.exit(1);
+      }
+      sessionId = cmdArgs[i];
+    } else if (arg === "--min-support") {
+      i++;
+      if (i >= cmdArgs.length) {
+        console.error("Error: --min-support requires a number");
+        process.exit(1);
+      }
+      minSupport = Number(cmdArgs[i]);
+    } else if (arg === "--min-precision") {
+      i++;
+      if (i >= cmdArgs.length) {
+        console.error("Error: --min-precision requires a number");
+        process.exit(1);
+      }
+      minPrecision = Number(cmdArgs[i]);
+    } else if (arg === "--min-lift") {
+      i++;
+      if (i >= cmdArgs.length) {
+        console.error("Error: --min-lift requires a number");
+        process.exit(1);
+      }
+      minLift = Number(cmdArgs[i]);
+    } else if (arg === "--help" || arg === "-h") {
+      printUsage();
+      process.exit(0);
+    } else {
+      console.error(`Error: unexpected argument "${arg}"`);
+      process.exit(1);
+    }
+  }
+
+  runLearnCommand({
+    project: projectRoot,
+    json: jsonOutput,
+    write: writeOutput,
+    session: sessionId,
+    minSupport,
+    minPrecision,
+    minLift,
+  }).then((code) => {
+    process.exit(code);
+  }).catch((err: any) => {
+    console.error(`Error: ${err.message}`);
+    process.exit(2);
+  });
 }
