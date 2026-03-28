@@ -798,19 +798,38 @@ function applyVerifiedPlaybookInsertion(params) {
   const matched = new Set(params.matched);
   const forceSummarySkills = new Set(params.forceSummarySkills);
   const reasons = {};
-  const selection = params.selection;
-  if (!selection) {
-    return { rankedSkills, matched, forceSummarySkills, reasons, banner: null };
+  if (!params.selection) {
+    return {
+      rankedSkills,
+      matched,
+      forceSummarySkills,
+      reasons,
+      applied: false,
+      appliedOrderedSkills: [],
+      appliedInsertedSkills: [],
+      banner: null
+    };
   }
-  const anchorIdx = rankedSkills.indexOf(selection.anchorSkill);
+  const anchorIdx = rankedSkills.indexOf(params.selection.anchorSkill);
   if (anchorIdx === -1) {
-    return { rankedSkills, matched, forceSummarySkills, reasons, banner: selection.banner };
+    return {
+      rankedSkills,
+      matched,
+      forceSummarySkills,
+      reasons,
+      applied: false,
+      appliedOrderedSkills: [],
+      appliedInsertedSkills: [],
+      banner: null
+    };
   }
+  const appliedInsertedSkills = [];
   let insertOffset = 1;
-  for (const skill of selection.insertedSkills) {
+  for (const skill of params.selection.insertedSkills) {
     if (rankedSkills.includes(skill)) continue;
     rankedSkills.splice(anchorIdx + insertOffset, 0, skill);
     matched.add(skill);
+    appliedInsertedSkills.push(skill);
     if (!params.dedupOff && params.injectedSkills.has(skill)) {
       forceSummarySkills.add(skill);
     }
@@ -820,7 +839,17 @@ function applyVerifiedPlaybookInsertion(params) {
     };
     insertOffset += 1;
   }
-  return { rankedSkills, matched, forceSummarySkills, reasons, banner: selection.banner };
+  const applied = appliedInsertedSkills.length > 0;
+  return {
+    rankedSkills,
+    matched,
+    forceSummarySkills,
+    reasons,
+    applied,
+    appliedOrderedSkills: applied ? [params.selection.anchorSkill, ...appliedInsertedSkills] : [],
+    appliedInsertedSkills,
+    banner: applied ? params.selection.banner : null
+  };
 }
 function buildPlaybookExposureRoles(orderedSkills) {
   const [anchorSkill, ...rest] = orderedSkills.filter(Boolean);
@@ -1372,17 +1401,15 @@ function run() {
         forceSummarySkills.add(skill);
       }
       Object.assign(playbookRecallReasons, playbookApply.reasons);
-      if (playbookApply.banner) {
-        playbookBanner = playbookApply.banner;
-      }
-      if (playbookRecall.selected) {
-        for (const role of buildPlaybookExposureRoles(playbookRecall.selected.orderedSkills)) {
+      if (playbookApply.applied) {
+        if (playbookApply.banner) {
+          playbookBanner = playbookApply.banner;
+        }
+        for (const role of buildPlaybookExposureRoles(playbookApply.appliedOrderedSkills)) {
           playbookExposureRoles.set(role.skill, role);
         }
-      }
-      if (playbookRecall.selected) {
-        for (const skill of playbookRecall.selected.insertedSkills) {
-          if (playbookApply.reasons[skill]) {
+        if (playbookRecall.selected) {
+          for (const skill of playbookApply.appliedInsertedSkills) {
             addCause(causality, {
               code: "verified-playbook",
               stage: "rank",
@@ -1392,7 +1419,7 @@ function run() {
               message: `Inserted verified playbook step after ${playbookRecall.selected.anchorSkill}`,
               detail: {
                 ruleId: playbookRecall.selected.ruleId,
-                orderedSkills: playbookRecall.selected.orderedSkills,
+                orderedSkills: playbookApply.appliedOrderedSkills,
                 support: playbookRecall.selected.support,
                 precision: playbookRecall.selected.precision,
                 lift: playbookRecall.selected.lift
@@ -1408,11 +1435,18 @@ function run() {
               }
             });
           }
+          log.debug("playbook-recall-injected", {
+            ruleId: playbookRecall.selected.ruleId,
+            anchorSkill: playbookRecall.selected.anchorSkill,
+            insertedSkills: playbookApply.appliedInsertedSkills
+          });
         }
-        log.debug("playbook-recall-injected", {
+      } else if (playbookRecall.selected) {
+        log.debug("playbook-recall-noop", {
           ruleId: playbookRecall.selected.ruleId,
           anchorSkill: playbookRecall.selected.anchorSkill,
-          insertedSkills: playbookRecall.selected.insertedSkills
+          requestedInsertedSkills: playbookRecall.selected.insertedSkills,
+          reason: "no_new_skills_inserted"
         });
       }
     } else {

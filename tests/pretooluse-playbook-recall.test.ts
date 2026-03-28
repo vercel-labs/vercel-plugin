@@ -50,8 +50,7 @@ describe("applyVerifiedPlaybookInsertion", () => {
 
     expect(result.rankedSkills).toEqual(["vercel-functions"]);
     expect(result.reasons).toEqual({});
-    // Banner is still returned for output wiring even when anchor is missing
-    expect(result.banner).toBe("[vercel-plugin] Verified playbook applied");
+    expect(result.banner).toBeNull();
   });
 
   test("no-ops when selection is null", () => {
