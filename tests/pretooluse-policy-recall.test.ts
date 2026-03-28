@@ -530,6 +530,88 @@ describe("pretooluse policy recall integration", () => {
     expect(recallLog!.insertionIndex).toBe(0);
   });
 
+  // ---------------------------------------------------------------------------
+  // Regression: policy recall parity with companion recall
+  // ---------------------------------------------------------------------------
+
+  test("policy recall still owns attribution when both policy and companion recall are present", async () => {
+    writeMockPlanState(sessionId, {
+      storyKind: "flow-verification",
+      route: "/settings",
+      targetBoundary: "clientRequest",
+    });
+
+    // Strong policy for "verification"
+    const policy = buildStrongPolicy(
+      "verification",
+      "PreToolUse|flow-verification|clientRequest|Bash|/settings",
+    );
+    saveProjectRoutingPolicy(TEST_PROJECT, policy);
+
+    const result = await runHook(
+      "Bash",
+      { command: "echo hello" },
+      sessionId,
+    );
+    expect(result.code).toBe(0);
+
+    // Policy recall should still be logged
+    const logs = parseLogLines(result.stderr);
+    const recallLog = logs.find((l) => l.event === "policy-recall-injected");
+    expect(recallLog).toBeDefined();
+    expect(recallLog!.skill).toBe("verification");
+
+    // Attribution candidate should be the policy-recalled skill or direct match,
+    // never a companion-only skill
+    const attributionLog = logs.find((l) => l.event === "companion-recall-attribution");
+    if (attributionLog) {
+      // companionRecalledSkills should NOT include the attribution candidate
+      const companionRecalled = attributionLog.companionRecalledSkills as string[];
+      expect(companionRecalled).not.toContain(attributionLog.causalCandidate);
+    }
+  });
+
+  test("companion recall never suppresses a stronger direct pattern match", async () => {
+    writeMockPlanState(sessionId, {
+      storyKind: "flow-verification",
+      route: "/settings",
+      targetBoundary: "clientRequest",
+    });
+
+    // Policy for "verification" — strong history
+    const policy = buildStrongPolicy(
+      "verification",
+      "PreToolUse|flow-verification|clientRequest|Read|/settings",
+    );
+    saveProjectRoutingPolicy(TEST_PROJECT, policy);
+
+    // Read next.config.ts — "nextjs" will be a direct pattern match
+    const result = await runHook(
+      "Read",
+      { file_path: "next.config.ts" },
+      sessionId,
+    );
+    expect(result.code).toBe(0);
+
+    const meta = extractInjectionMeta(result.stdout);
+    if (meta && meta.injectedSkills.length > 0) {
+      // The first injected skill must be the direct pattern match, not a companion
+      const firstSkillReason = meta.reasons?.[meta.injectedSkills[0]];
+      if (firstSkillReason) {
+        expect(firstSkillReason.trigger).not.toBe("verified-companion");
+      }
+    }
+
+    // Decision trace should show direct match before any companion entries
+    const traces = readRoutingDecisionTrace(sessionId);
+    if (traces.length > 0 && traces[0].ranked && traces[0].ranked.length > 0) {
+      const first = traces[0].ranked[0] as { pattern?: { type: string } };
+      if (first.pattern) {
+        expect(first.pattern.type).not.toBe("verified-companion");
+      }
+    }
+  });
+
   test("at most one recalled skill in phase 1", async () => {
     writeMockPlanState(sessionId, {
       storyKind: "flow-verification",

@@ -1182,4 +1182,121 @@ describe("verification → routing-policy closure", () => {
       }
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Regression: companion recall does not distort cap/budget/attribution closure
+  // ---------------------------------------------------------------------------
+
+  describe("companion recall parity guards", () => {
+    afterEach(cleanupFiles);
+
+    test("companion-recalled context exposure does not steal candidate attribution from direct match", () => {
+      // Direct match candidate exposure
+      appendSkillExposure(exposure("comp-parity-e1", {
+        skill: "agent-browser-verify",
+        attributionRole: "candidate",
+        candidateSkill: null,
+        targetBoundary: "uiRender",
+        createdAt: T0,
+      }));
+
+      // Companion-recalled context exposure for the same story
+      appendSkillExposure(exposure("comp-parity-e2", {
+        skill: "verification",
+        attributionRole: "context",
+        candidateSkill: "agent-browser-verify",
+        targetBoundary: "uiRender",
+        createdAt: T1,
+      }));
+
+      // Resolve boundary — both exposures win
+      const resolved = resolveBoundaryOutcome({
+        sessionId: SESSION_ID,
+        boundary: "uiRender",
+        matchedSuggestedAction: false,
+        storyId: "story-1",
+        route: "/dashboard",
+        now: T3,
+      });
+
+      expect(resolved).toHaveLength(2);
+      expect(resolved.every((e) => e.outcome === "win")).toBe(true);
+
+      // Policy should credit ONLY the candidate — context exposures must NOT
+      // affect the routing policy (shouldAffectPolicy gates on attributionRole)
+      const policy = loadProjectRoutingPolicy(PROJECT_ROOT);
+      const key = "PreToolUse|flow-verification|uiRender|Bash|/dashboard";
+      const candidateStats = policy.scenarios[key]?.["agent-browser-verify"];
+      expect(candidateStats).toBeDefined();
+      expect(candidateStats!.wins).toBeGreaterThanOrEqual(1);
+
+      // Context companion must NOT appear in policy scenarios
+      const contextStats = policy.scenarios[key]?.["verification"];
+      expect(contextStats).toBeUndefined();
+    });
+
+    test("policy boost from companion context wins does not exceed direct candidate boost", () => {
+      // Build policy where direct candidate has strong history and companion has mild history
+      const policy = loadProjectRoutingPolicy(PROJECT_ROOT);
+      const key = "PreToolUse|flow-verification|uiRender|Bash|/dashboard";
+      if (!policy.scenarios[key]) policy.scenarios[key] = {};
+      policy.scenarios[key]["agent-browser-verify"] = {
+        exposures: 10,
+        wins: 8,
+        directiveWins: 3,
+        staleMisses: 1,
+        lastUpdatedAt: T0,
+      };
+      policy.scenarios[key]["verification"] = {
+        exposures: 3,
+        wins: 2,
+        directiveWins: 0,
+        staleMisses: 1,
+        lastUpdatedAt: T0,
+      };
+
+      const { saveProjectRoutingPolicy: savePRP } = require("../hooks/src/routing-policy-ledger.mts");
+      savePRP(PROJECT_ROOT, policy);
+
+      const reloaded = loadProjectRoutingPolicy(PROJECT_ROOT);
+
+      // Derive boosts and verify the candidate always gets a higher boost
+      const candidateBoost = derivePolicyBoost(reloaded.scenarios[key]!["agent-browser-verify"]);
+      const companionBoost = derivePolicyBoost(reloaded.scenarios[key]!["verification"]);
+
+      expect(candidateBoost).toBeGreaterThan(companionBoost);
+    });
+
+    test("stale-miss finalization applies only to candidate exposures, not companion context", () => {
+      // Candidate exposure
+      appendSkillExposure(exposure("stale-comp-e1", {
+        skill: "agent-browser-verify",
+        attributionRole: "candidate",
+        targetBoundary: "uiRender",
+        createdAt: T0,
+      }));
+
+      // Companion context exposure
+      appendSkillExposure(exposure("stale-comp-e2", {
+        skill: "verification",
+        attributionRole: "context",
+        candidateSkill: "agent-browser-verify",
+        targetBoundary: "uiRender",
+        createdAt: T1,
+      }));
+
+      // Finalize without boundary resolution
+      const stale = finalizeStaleExposures(SESSION_ID, T_END);
+      expect(stale).toHaveLength(2);
+      expect(stale.every((e) => e.outcome === "stale-miss")).toBe(true);
+
+      // Only candidate exposure should affect routing policy;
+      // context companion is excluded by shouldAffectPolicy
+      const policy = loadProjectRoutingPolicy(PROJECT_ROOT);
+      const key = "PreToolUse|flow-verification|uiRender|Bash|/dashboard";
+      expect(policy.scenarios[key]?.["agent-browser-verify"]?.staleMisses).toBe(1);
+      // Context companion must NOT appear in policy scenarios
+      expect(policy.scenarios[key]?.["verification"]).toBeUndefined();
+    });
+  });
 });

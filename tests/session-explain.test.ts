@@ -406,6 +406,159 @@ describe("session-explain doctor contract", () => {
     }
   });
 
+  test(".doctor.companionRecall detects verified-companion synthetic entries", () => {
+    const trace = makeTrace({
+      ranked: [
+        {
+          skill: "agent-browser-verify",
+          basePriority: 7,
+          effectivePriority: 15,
+          pattern: { type: "bashPattern", value: "dev server" },
+          profilerBoost: 0,
+          policyBoost: 8,
+          policyReason: "4/5 wins",
+          summaryOnly: false,
+          synthetic: false,
+          droppedReason: null,
+        },
+        {
+          skill: "verification",
+          basePriority: 0,
+          effectivePriority: 0,
+          pattern: { type: "verified-companion", value: "scenario-companion-rulebook" },
+          profilerBoost: 0,
+          policyBoost: 0,
+          policyReason: null,
+          summaryOnly: false,
+          synthetic: true,
+          droppedReason: null,
+        },
+      ],
+    });
+    appendRoutingDecisionTrace(trace);
+
+    const output = runSessionExplain(TEST_SESSION, ROOT, true);
+    const result: SessionExplainResult = JSON.parse(output);
+
+    expect(result.doctor).not.toBeNull();
+    expect(result.doctor!.companionRecall.detected).toBe(true);
+    expect(result.doctor!.companionRecall.entries).toHaveLength(1);
+
+    const entry = result.doctor!.companionRecall.entries[0];
+    expect(entry.companionSkill).toBe("verification");
+    expect(entry.candidateSkill).toBe("agent-browser-verify");
+    expect(entry.patternType).toBe("verified-companion");
+    expect(entry.patternValue).toBe("scenario-companion-rulebook");
+    expect(entry.synthetic).toBe(true);
+    expect(entry.droppedReason).toBeNull();
+  });
+
+  test(".doctor.companionRecall.detected is false when no companion entries exist", () => {
+    const trace = makeTrace(); // default trace has no companion entries
+    appendRoutingDecisionTrace(trace);
+
+    const output = runSessionExplain(TEST_SESSION, ROOT, true);
+    const result: SessionExplainResult = JSON.parse(output);
+
+    expect(result.doctor).not.toBeNull();
+    expect(result.doctor!.companionRecall.detected).toBe(false);
+    expect(result.doctor!.companionRecall.entries).toHaveLength(0);
+  });
+
+  test(".doctor emits COMPANION_RECALL_NOT_SYNTHETIC hint for non-synthetic companion", () => {
+    const trace = makeTrace({
+      ranked: [
+        {
+          skill: "agent-browser-verify",
+          basePriority: 7,
+          effectivePriority: 15,
+          pattern: { type: "bashPattern", value: "dev server" },
+          profilerBoost: 0,
+          policyBoost: 8,
+          policyReason: "4/5 wins",
+          summaryOnly: false,
+          synthetic: false,
+          droppedReason: null,
+        },
+        {
+          skill: "verification",
+          basePriority: 0,
+          effectivePriority: 0,
+          pattern: { type: "verified-companion", value: "scenario-companion-rulebook" },
+          profilerBoost: 0,
+          policyBoost: 0,
+          policyReason: null,
+          summaryOnly: false,
+          synthetic: false, // BUG: should be true
+          droppedReason: null,
+        },
+      ],
+    });
+    appendRoutingDecisionTrace(trace);
+
+    const output = runSessionExplain(TEST_SESSION, ROOT, true);
+    const result: SessionExplainResult = JSON.parse(output);
+
+    expect(result.doctor).not.toBeNull();
+    const hint = result.doctor!.hints.find(
+      (h) => h.code === "COMPANION_RECALL_NOT_SYNTHETIC",
+    );
+    expect(hint).toBeDefined();
+    expect(hint!.severity).toBe("warning");
+    expect(hint!.message).toContain("verification");
+  });
+
+  test(".doctor.companionRecall coexists with policyRecall without interference", () => {
+    const trace = makeTrace({
+      policyScenario: "PreToolUse|flow-verification|clientRequest|Bash|/settings",
+      primaryStory: {
+        id: "story-1",
+        kind: "flow-verification",
+        storyRoute: "/settings",
+        targetBoundary: "clientRequest",
+      },
+      ranked: [
+        {
+          skill: "agent-browser-verify",
+          basePriority: 7,
+          effectivePriority: 15,
+          pattern: { type: "policy-recall", value: "route-scoped-verified-policy-recall" },
+          profilerBoost: 0,
+          policyBoost: 8,
+          policyReason: "4/5 wins",
+          summaryOnly: false,
+          synthetic: true,
+          droppedReason: null,
+        },
+        {
+          skill: "verification",
+          basePriority: 0,
+          effectivePriority: 0,
+          pattern: { type: "verified-companion", value: "scenario-companion-rulebook" },
+          profilerBoost: 0,
+          policyBoost: 0,
+          policyReason: null,
+          summaryOnly: false,
+          synthetic: true,
+          droppedReason: null,
+        },
+      ],
+    });
+    appendRoutingDecisionTrace(trace);
+
+    const output = runSessionExplain(TEST_SESSION, ROOT, true);
+    const result: SessionExplainResult = JSON.parse(output);
+
+    expect(result.doctor).not.toBeNull();
+    // Policy recall should still have its own diagnosis
+    expect(result.doctor!.policyRecall).not.toBeNull();
+    // Companion recall should be independently tracked
+    expect(result.doctor!.companionRecall.detected).toBe(true);
+    expect(result.doctor!.companionRecall.entries[0].companionSkill).toBe("verification");
+    // Both should appear in latestRanked
+    expect(result.doctor!.latestRanked).toHaveLength(2);
+  });
+
   test(".doctor is null when no traces exist", () => {
     const output = runSessionExplain(TEST_SESSION, ROOT, true);
     const result: SessionExplainResult = JSON.parse(output);

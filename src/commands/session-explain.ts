@@ -56,11 +56,26 @@ export interface SessionExplainDoctorRankedSkill {
   droppedReason: string | null;
 }
 
+export interface CompanionRecallDoctorEntry {
+  companionSkill: string;
+  candidateSkill: string | null;
+  patternType: string;
+  patternValue: string;
+  synthetic: boolean;
+  droppedReason: string | null;
+}
+
+export interface CompanionRecallDiagnosis {
+  detected: boolean;
+  entries: CompanionRecallDoctorEntry[];
+}
+
 export interface SessionExplainDoctor {
   latestDecisionId: string | null;
   latestScenario: string | null;
   latestRanked: SessionExplainDoctorRankedSkill[];
   policyRecall: PolicyRecallDiagnosis | null;
+  companionRecall: CompanionRecallDiagnosis;
   hints: RoutingDiagnosisHint[];
 }
 
@@ -186,6 +201,44 @@ function buildRoutingDoctor(
         })
       : null;
 
+  // --- Companion recall extraction from ranked[] ---
+  const companionEntries: CompanionRecallDoctorEntry[] = [];
+  for (const entry of rankedSource) {
+    const obj = toRecord(entry);
+    const pattern = toRecord(obj.pattern);
+    if (stringOrNull(pattern.type) === "verified-companion") {
+      const skill = stringOrNull(obj.skill);
+      if (!skill) continue;
+
+      // Find the candidate skill: look for the preceding non-companion entry
+      // in ranked[], since companions are inserted immediately after their candidate.
+      let candidateSkill: string | null = null;
+      const idx = rankedSource.indexOf(entry);
+      for (let i = idx - 1; i >= 0; i--) {
+        const prev = toRecord(rankedSource[i]);
+        const prevPattern = toRecord(prev.pattern);
+        if (stringOrNull(prevPattern.type) !== "verified-companion") {
+          candidateSkill = stringOrNull(prev.skill);
+          break;
+        }
+      }
+
+      companionEntries.push({
+        companionSkill: skill,
+        candidateSkill,
+        patternType: String(pattern.type),
+        patternValue: stringOrNull(pattern.value) ?? "scenario-companion-rulebook",
+        synthetic: obj.synthetic === true,
+        droppedReason: stringOrNull(obj.droppedReason),
+      });
+    }
+  }
+
+  const companionRecall: CompanionRecallDiagnosis = {
+    detected: companionEntries.length > 0,
+    entries: companionEntries,
+  };
+
   const hints: RoutingDiagnosisHint[] = [...(policyRecall?.hints ?? [])];
 
   if (latestRanked.length === 0) {
@@ -198,11 +251,25 @@ function buildRoutingDoctor(
     });
   }
 
+  if (companionRecall.detected) {
+    for (const ce of companionRecall.entries) {
+      if (!ce.synthetic) {
+        hints.push({
+          severity: "warning",
+          code: "COMPANION_RECALL_NOT_SYNTHETIC",
+          message: `Companion-recalled skill ${ce.companionSkill} is not marked synthetic in the routing trace`,
+          hint: "Companion-recalled skills must be synthetic to preserve causal attribution",
+        });
+      }
+    }
+  }
+
   return {
     latestDecisionId: stringOrNull(trace.decisionId),
     latestScenario,
     latestRanked,
     policyRecall,
+    companionRecall,
     hints,
   };
 }
@@ -378,6 +445,8 @@ export function runSessionExplain(
     diagnosisCount: diagnosis.length,
     doctorDecisionId: result.doctor?.latestDecisionId ?? null,
     doctorHintCount: result.doctor?.hints.length ?? 0,
+    companionRecallDetected: result.doctor?.companionRecall.detected ?? false,
+    companionRecallCount: result.doctor?.companionRecall.entries.length ?? 0,
   }));
 
   if (json) return JSON.stringify(result, null, 2);
@@ -435,6 +504,12 @@ function formatSessionExplainText(result: SessionExplainResult): string {
             .join(", ") || "none"
         }`,
       );
+    }
+    if (result.doctor.companionRecall.detected) {
+      const companions = result.doctor.companionRecall.entries
+        .map((e) => `${e.companionSkill}→${e.candidateSkill ?? "?"}`)
+        .join(", ");
+      lines.push(`  Companion recall: ${companions}`);
     }
     for (const hint of result.doctor.hints) {
       lines.push(`  [${hint.severity}] ${hint.code}: ${hint.message}`);
