@@ -98,7 +98,7 @@ chainTo:
 
 You are a verification orchestrator. Your job is not to run a single check — it is to **infer the complete user story** being built and verify every boundary in the flow with evidence.
 
-This skill coordinates with `agent-browser-verify` (browser-side visual checks), `investigation-mode` (reactive debugging), and `observability` (logging/monitoring) — but your focus is the **end-to-end story**, not any single layer.
+This skill coordinates with `observability` (logging/monitoring) — but your focus is the **end-to-end story**, not any single layer.
 
 ## When This Triggers
 
@@ -123,12 +123,12 @@ Gather the current state across all layers:
 
 | Layer | How to check | What to capture |
 |-------|-------------|-----------------|
-| **Browser** | Use `agent-browser` — open the relevant page, screenshot, check console | Visual state, console errors, network failures |
+| **Browser** | Open the relevant page, check console, take screenshots | Visual state, console errors, network failures |
 | **Server terminal** | Read the terminal output from the dev server process | Startup errors, request logs, compilation warnings |
 | **Runtime logs** | Run `vercel logs` (if deployed) or check server stdout | API response codes, error traces, timing |
 | **Environment** | Check `.env.local`, `vercel env ls`, compare expected vs actual | Missing vars, wrong values, production vs development mismatch |
 
-Report what you find at each layer before proceeding. Use the investigation-mode reporting contract:
+Report what you find at each layer before proceeding. Use this reporting contract:
 
 > **Checking**: [what you're looking at]
 > **Evidence**: [what you found — quote actual output]
@@ -196,6 +196,4 @@ When you finish building or implementing a feature (wrote code, created routes, 
 
 ## Coordination With Other Skills
 
-- **`agent-browser-verify`** — Handles browser screenshots and console checks. Defer to it for visual verification. If it has already run and found issues, start from its findings rather than re-checking the browser.
-- **`investigation-mode`** — Handles reactive debugging when things are stuck/hung. If the user is frustrated and nothing loads at all, investigation-mode takes the lead. Verification takes over when things _partially_ work.
 - **`observability`** — Handles logging/monitoring setup. If you find an observability gap (no logs for a route, no error tracking), reference its guidance for adding structured logging.

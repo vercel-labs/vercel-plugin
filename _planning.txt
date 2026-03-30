@@ -1,0 +1,99 @@
+  Easy removes (minimal entanglement)
+
+  Skill: _chain-audit.md - removed
+  Deps: Standalone audit doc. Nothing references it.
+  Verdict: Delete it — it's documentation, not a skill
+  ────────────────────────────────────────
+  Skill: v0-dev
+  Deps: No skill chains TO it. Only chains OUT to shadcn/ai-sdk/nextjs. No hooks, no
+    templates. 3 test files.
+  Verdict: Safe to remove — v0 is its own product
+  ────────────────────────────────────────
+  Skill: vercel-services
+  Deps: No skill chains to it. No tests. No templates. Only profiler file indicators
+    (backend/pyproject.toml etc) and vercel.json experimentalServices key.
+  Verdict: Safe to remove — clean up profiler + vercel-config
+  ────────────────────────────────────────
+  Skill: json-render
+  Deps: Only ai-sdk chains to it (1 chainTo + 1 upgradeToSkill). 3 test files. No hooks.
+  Verdict: Safe to remove — fold the relevant bits into ai-sdk
+  ────────────────────────────────────────
+  Skill: sign-in-with-vercel
+  Deps: auth chains to it (1 upgradeToSkill + 1 chainTo). It chains to auth + env-vars.
+  3
+    test files. No hooks.
+  Verdict: Safe to remove — fold into auth skill
+  ────────────────────────────────────────
+  Skill: vercel-queues
+  Deps: Self-chainTo + chains to workflow. Profiler maps @vercel/queue. 6 test files.
+  Verdict: Safe to remove — fold queue guidance into workflow
+
+  Medium removes (moderate entanglement)
+
+  Skill: investigation-mode
+  Deps: agent-browser-verify chains to it. Hardcoded in prompt-patterns.mts
+    (stuck-investigation route) and user-prompt-submit companion logic. 8+ test files.
+  Verdict: Remove — but need to clean companion picker logic in hooks
+  ────────────────────────────────────────
+  Skill: agent-browser - removed
+  Deps: Hardcoded in 3 hooks (profiler binary check, pretooluse dev-server detection,
+    unavailable warnings). 7 test files + golden snapshots. vercel-sandbox references it
+
+    in prose.
+  Verdict: Remove — significant hook cleanup needed
+  ────────────────────────────────────────
+  Skill: agent-browser-verify - removed 
+  Deps: Hardcoded as DEV_SERVER_VERIFY_SKILL constant. In prompt-patterns browser-only
+    route. Companion suppress set. 7 test files + golden snapshots.
+  Verdict: Remove — co-dependent with agent-browser removal
+  ────────────────────────────────────────
+  Skill: ai-elements
+  Deps: 5 skills chain to it (ai-sdk, shadcn, workflow, json-render, workflow/overlay).
+    Hardcoded as AI_SDK_COMPANION_SKILLS in pretooluse. Profiler maps 3 deps. 6 test
+    files. Dedicated companion test file.
+  Verdict: Remove with care — need to strip chainTo from ai-sdk, shadcn, workflow +
+    remove companion logic
+  ────────────────────────────────────────
+  Skill: vercel-flags
+  Deps: routing-middleware chains to it. Profiler maps @vercel/flags. vercel-config maps
+
+    it. 4 test files + 3 fixtures.
+  Verdict: Remove — clean up routing-middleware chainTo, profiler, vercel-config
+  ────────────────────────────────────────
+  Skill: cron-jobs
+  Deps: deployments-cicd + vercel-cli chain to it. vercel-config maps crons key.
+  Profiler
+    detects it. 3 test files + 6 fixtures.
+  Verdict: Remove — fold into vercel-functions, clean up chains from deployments-cicd
+  and
+     vercel-cli
+
+  Hard removes (deeply wired)
+
+  Skill: env-vars
+  Deps: 3 skills chain to it (sign-in-with-vercel, verification, bootstrap). 6 template
+    includes in commands/env.md.tmpl — this is the entire /env command source. Profiler
+    maps .env.local. Greenfield default skill.
+  Verdict: Think twice — removing it guts the /env command entirely
+  ────────────────────────────────────────
+  Skill: deployments-cicd
+  Deps: 3 skills chain to it + vercel-services references it. 5 template includes in
+    agents/deployment-expert.md.tmpl + 5 in commands/deploy.md.tmpl. 7 vercel.json keys
+    route to it. 15+ test files.
+  Verdict: Think twice — removing it guts the /deploy command and deployment-expert
+  agent
+  ────────────────────────────────────────
+  Skill: observability
+  Deps: 4 skills chain to it (vercel-functions, investigation-mode, ai-sdk, ai-gateway).
+
+    7 template includes across performance-optimizer, deploy, status, marketplace.
+    Auto-boosted for non-greenfield. 15+ test files.
+  Verdict: Think twice — removing it breaks 4 commands/agents
+  ────────────────────────────────────────
+  Skill: turborepo
+  Deps: next-forge depends on it. Profiler maps turbo.json + pnpm-workspace.yaml. 10+
+    test files. Upstream/overlay structure with references/.
+  Verdict: Questionable removal — turborepo is a core Vercel product
+  ────────────────────────────────────────
+  Skill: vercel-api
+  Deps: vercel-agent chains to it. Observability references it in prose (3x).

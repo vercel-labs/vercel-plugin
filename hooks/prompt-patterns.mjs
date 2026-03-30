@@ -182,7 +182,7 @@ function classifyTroubleshootingIntent(normalizedPrompt) {
   if (BROWSER_ONLY_RE.test(normalizedPrompt)) {
     return {
       intent: "browser-only",
-      skills: ["agent-browser-verify", "investigation-mode"],
+      skills: ["verification"],
       reason: "browser-only pattern matched"
     };
   }
@@ -196,7 +196,7 @@ function classifyTroubleshootingIntent(normalizedPrompt) {
   if (STUCK_INVESTIGATION_RE.test(normalizedPrompt)) {
     return {
       intent: "stuck-investigation",
-      skills: ["investigation-mode"],
+      skills: ["verification"],
       reason: "stuck-investigation pattern matched"
     };
   }

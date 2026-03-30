@@ -263,15 +263,11 @@ validate:
     pattern: 'react-markdown|dangerouslySetInnerHTML|ReactMarkdown'
     message: 'Manual markdown/HTML rendering of AI content detected. Use AI Elements for safe, streaming-aware AI message rendering.'
     severity: recommended
-    upgradeToSkill: ai-elements
-    upgradeWhy: 'Replace fragile markdown rendering with AI Elements MessageResponse for streaming-aware, safe AI content display.'
     skipIfFileContains: '@vercel/ai-elements|MessageResponse|ai-elements'
   -
     pattern: 'message\.content\b|tool-invocation'
     message: 'Deprecated AI SDK UIMessage rendering pattern. Use message.parts with part-aware rendering.'
     severity: recommended
-    upgradeToSkill: json-render
-    upgradeWhy: 'Migrate from deprecated message.content to message.parts with type-safe rendering for text, tool calls, and streaming states.'
     skipIfFileContains: 'message\.parts|part\.type'
 chainTo:
   -
@@ -280,55 +276,10 @@ chainTo:
     message: 'Direct provider API key or stale model detected — loading AI Gateway guidance for OIDC auth, routing, and failover.'
     skipIfFileContains: 'gateway\(|@ai-sdk/gateway|VERCEL_OIDC'
   -
-    pattern: 'react-markdown|dangerouslySetInnerHTML|ReactMarkdown'
-    targetSkill: ai-elements
-    message: 'Manual markdown rendering of AI content detected — loading AI Elements for streaming-aware, safe AI message rendering.'
-    skipIfFileContains: 'ai-elements|MessageResponse|<Message\b'
-  -
-    pattern: 'message\.content\b|tool-invocation'
-    targetSkill: json-render
-    message: 'Deprecated UIMessage rendering pattern — loading json-render guidance for message.parts migration.'
-    skipIfFileContains: 'message\.parts|part\.type'
-  -
-    pattern: 'toDataStreamResponse'
-    targetSkill: ai-elements
-    message: 'toDataStreamResponse() is v5 — use toUIMessageStreamResponse() for streaming UI; loading AI Elements for component guidance.'
-    skipIfFileContains: 'toUIMessageStreamResponse'
-  -
-    pattern: 'generateObject\s*\(|streamObject\s*\('
-    targetSkill: ai-elements
-    message: 'v5 structured output API detected — after migrating to Output.object(), use AI Elements to render results properly.'
-    skipIfFileContains: 'Output\.object|Output\.array'
-  -
-    pattern: '\bmaxSteps\s*:'
-    targetSkill: ai-elements
-    message: 'maxSteps is removed in v6 — use stopWhen: stepCountIs(N); loading AI Elements for proper multi-step tool call rendering.'
-    skipIfFileContains: 'stopWhen|stepCountIs'
-  -
-    pattern: 'tool\(\{[^}]*\bparameters\s*:'
-    targetSkill: ai-elements
-    message: 'v5 tool parameters detected — rename to inputSchema; loading AI Elements for tool call UI rendering.'
-    skipIfFileContains: 'inputSchema'
-  -
-    pattern: '\bhandleSubmit\b'
-    targetSkill: ai-elements
-    message: 'handleSubmit was removed from useChat in v6 — use sendMessage({ text }); loading AI Elements for v6 chat UI guidance.'
-    skipIfFileContains: 'sendMessage|function handleSubmit|const handleSubmit'
-  -
-    pattern: 'useChat\(\{[^}]*\bapi\s*:'
-    targetSkill: ai-elements
-    message: 'useChat({ api }) is v5 syntax — v6 uses DefaultChatTransport; loading AI Elements for v6 chat transport guidance.'
-    skipIfFileContains: 'DefaultChatTransport|transport\s*:'
-  -
     pattern: 'generateText\s*\(|streamText\s*\(|agent\.(generate|stream)\s*\('
     targetSkill: observability
     message: 'AI generation call without observability — loading Observability guidance for structured logging, tracing, and error monitoring.'
     skipIfFileContains: 'console\.log\s*\(\s*JSON\.stringify|@sentry/|@opentelemetry/|@datadog/|logger\.|otel|initMonitoring|reportError'
-  -
-    pattern: 'message\.content\b'
-    targetSkill: ai-elements
-    message: 'Raw message.content rendering detected — use AI Elements <Message> or <MessageResponse> components for streaming-aware, markdown-safe AI text display.'
-    skipIfFileContains: 'message\.parts|MessageResponse|@vercel/ai-elements|ai-elements|from\s+[''"]@/components/ai-elements'
   -
     pattern: 'DurableAgent|use workflow|use step|from\s+[''"]workflow[''"]|@workflow/'
     targetSkill: workflow

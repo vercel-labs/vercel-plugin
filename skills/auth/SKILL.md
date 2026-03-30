@@ -38,10 +38,8 @@ metadata:
 validate:
   -
     pattern: 'VERCEL_CLIENT_(ID|SECRET)|vercel\.com/oauth/(authorize|access_token|token)'
-    message: 'Hand-rolled Vercel OAuth detected. Use the dedicated Sign in with Vercel skill for OIDC-based Vercel identity.'
+    message: 'Hand-rolled Vercel OAuth detected. Use the Sign in with Vercel OIDC provider instead of manual token exchange.'
     severity: recommended
-    upgradeToSkill: sign-in-with-vercel
-    upgradeWhy: 'Replace manual Vercel OAuth token exchange with the Sign in with Vercel OIDC provider.'
     skipIfFileContains: 'signInWithVercel|@vercel/auth'
 retrieval:
   aliases:
@@ -68,10 +66,6 @@ retrieval:
     - protect this route with auth
     - set up NextAuth
 chainTo:
-  -
-    pattern: 'VERCEL_CLIENT_(ID|SECRET)|vercel\.com/oauth/(authorize|access_token|token)'
-    targetSkill: sign-in-with-vercel
-    message: 'Hand-rolled Vercel OAuth detected — loading Sign in with Vercel OIDC guidance.'
   -
     pattern: 'export\s+(default\s+)?function\s+middleware'
     targetSkill: routing-middleware
@@ -404,7 +398,6 @@ Clerk provides an upgrade CLI that scans your codebase and applies codemods: `np
 - **Marketplace install and env var provisioning** → `⤳ skill: marketplace`
 - **Middleware routing patterns** → `⤳ skill: routing-middleware`
 - **Environment variable management** → `⤳ skill: env-vars`
-- **Vercel OAuth (Sign in with Vercel)** → `⤳ skill: sign-in-with-vercel`
 
 ## Official Documentation
 

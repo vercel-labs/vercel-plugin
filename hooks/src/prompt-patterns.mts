@@ -352,11 +352,11 @@ const TEST_FRAMEWORK_RE =
  *
  * Returns which verification-family skills should be routed to:
  * - flow-verification → ["verification"]
- * - stuck-investigation → ["investigation-mode"]
- * - browser-only → ["agent-browser-verify", "investigation-mode"]
+ * - stuck-investigation → ["verification"]
+ * - browser-only → ["verification"]
  * - null → no troubleshooting intent detected
  *
- * Test framework mentions suppress all three verification-family skills.
+ * Test framework mentions suppress verification-family skills.
  */
 export function classifyTroubleshootingIntent(
   normalizedPrompt: string,
@@ -378,7 +378,7 @@ export function classifyTroubleshootingIntent(
   if (BROWSER_ONLY_RE.test(normalizedPrompt)) {
     return {
       intent: "browser-only",
-      skills: ["agent-browser-verify", "investigation-mode"],
+      skills: ["verification"],
       reason: "browser-only pattern matched",
     };
   }
@@ -396,7 +396,7 @@ export function classifyTroubleshootingIntent(
   if (STUCK_INVESTIGATION_RE.test(normalizedPrompt)) {
     return {
       intent: "stuck-investigation",
-      skills: ["investigation-mode"],
+      skills: ["verification"],
       reason: "stuck-investigation pattern matched",
     };
   }

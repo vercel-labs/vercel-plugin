@@ -7,8 +7,6 @@ var KEY_SKILL_MAP = {
   headers: ["routing-middleware"],
   cleanUrls: ["routing-middleware"],
   trailingSlash: ["routing-middleware"],
-  // Cron
-  crons: ["cron-jobs"],
   // Functions / compute
   functions: ["vercel-functions"],
   regions: ["vercel-functions"],
@@ -19,16 +17,12 @@ var KEY_SKILL_MAP = {
   outputDirectory: ["deployments-cicd"],
   framework: ["deployments-cicd"],
   devCommand: ["deployments-cicd"],
-  ignoreCommand: ["deployments-cicd"],
-  // Services
-  experimentalServices: ["vercel-services"]
+  ignoreCommand: ["deployments-cicd"]
 };
 var VERCEL_JSON_SKILLS = /* @__PURE__ */ new Set([
-  "cron-jobs",
   "deployments-cicd",
   "routing-middleware",
-  "vercel-functions",
-  "vercel-services"
+  "vercel-functions"
 ]);
 function resolveVercelJsonSkills(filePath) {
   const content = safeReadFile(filePath);

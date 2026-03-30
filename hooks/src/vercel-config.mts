@@ -27,9 +27,6 @@ const KEY_SKILL_MAP: Record<string, string[]> = {
   cleanUrls: ["routing-middleware"],
   trailingSlash: ["routing-middleware"],
 
-  // Cron
-  crons: ["cron-jobs"],
-
   // Functions / compute
   functions: ["vercel-functions"],
   regions: ["vercel-functions"],
@@ -43,8 +40,6 @@ const KEY_SKILL_MAP: Record<string, string[]> = {
   devCommand: ["deployments-cicd"],
   ignoreCommand: ["deployments-cicd"],
 
-  // Services
-  experimentalServices: ["vercel-services"],
 };
 
 /**
@@ -52,11 +47,9 @@ const KEY_SKILL_MAP: Record<string, string[]> = {
  * Used to identify candidates whose priority should be adjusted.
  */
 export const VERCEL_JSON_SKILLS = new Set([
-  "cron-jobs",
   "deployments-cicd",
   "routing-middleware",
   "vercel-functions",
-  "vercel-services",
 ]);
 
 // ---------------------------------------------------------------------------

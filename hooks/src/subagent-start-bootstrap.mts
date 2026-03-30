@@ -68,7 +68,6 @@ interface ProfileCache {
   bootstrapHints: string[];
   resourceHints: string[];
   setupMode: boolean;
-  agentBrowserAvailable: boolean;
   timestamp: string;
 }
 

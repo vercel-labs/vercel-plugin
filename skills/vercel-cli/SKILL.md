@@ -73,10 +73,6 @@ retrieval:
     - vercel logs
 chainTo:
   -
-    pattern: '"crons"\s*:'
-    targetSkill: cron-jobs
-    message: 'Cron configuration detected in vercel.json — loading Cron Jobs guidance for schedule syntax, CRON_SECRET verification, and function handler patterns.'
-  -
     pattern: '"functions"\s*:\s*\{|"maxDuration"\s*:|"memory"\s*:'
     targetSkill: vercel-functions
     message: 'Functions configuration detected in vercel.json — loading Vercel Functions guidance for runtime options, streaming, and Fluid Compute.'
