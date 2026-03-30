@@ -26,17 +26,6 @@ validate:
     pattern: '"base"\s*:\s*"base-ui"'
     message: 'AI Elements components use Radix-specific APIs (asChild, openDelay) and have type errors with Base UI. If this project uses AI Elements, reinitialize with: npx shadcn@latest init -d --base radix -f'
     severity: warn
-chainTo:
-  -
-    pattern: 'react-markdown|ReactMarkdown|from\s+[''"]remark[''"]'
-    targetSkill: ai-elements
-    message: 'Manual markdown rendering detected — loading AI Elements for streaming-aware MessageResponse that handles code highlighting, math, and mermaid out of the box.'
-    skipIfFileContains: 'ai-elements|MessageResponse|<Message\b'
-  -
-    pattern: 'dangerouslySetInnerHTML'
-    targetSkill: ai-elements
-    message: 'Unsafe HTML injection detected — loading AI Elements for safe, streaming-aware AI content rendering via MessageResponse.'
-    skipIfFileContains: 'ai-elements|MessageResponse|<Message\b'
 retrieval:
   aliases:
     - shadcn ui

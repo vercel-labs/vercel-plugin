@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-03-23T18:09:18.986Z",
+  "generatedAt": "2026-03-30T19:31:16.350Z",
   "templates": [
     {
       "template": "agents/ai-architect.md.tmpl",
@@ -29,80 +29,65 @@
       "template": "agents/performance-optimizer.md.tmpl",
       "output": "agents/performance-optimizer.md",
       "dependencies": [
-        "observability",
         "nextjs",
         "next-cache-components"
       ],
       "includes": [
         {
-          "marker": "{{include:skill:observability:Speed Insights > Metrics Tracked}}",
-          "skillName": "observability",
-          "target": "Speed Insights > Metrics Tracked",
-          "type": "section",
-          "lineNumber": 13
-        },
-        {
           "marker": "{{include:skill:nextjs:file:references/rsc-boundaries.md}}",
           "skillName": "nextjs",
           "target": "file:references/rsc-boundaries.md",
           "type": "section",
-          "lineNumber": 118
+          "lineNumber": 123
         },
         {
           "marker": "{{include:skill:nextjs:file:references/bundling.md:Bundle Analysis}}",
           "skillName": "nextjs",
           "target": "file:references/bundling.md:Bundle Analysis",
           "type": "section",
-          "lineNumber": 125
+          "lineNumber": 130
         },
         {
           "marker": "{{include:skill:nextjs:file:references/data-patterns.md:Decision Tree}}",
           "skillName": "nextjs",
           "target": "file:references/data-patterns.md:Decision Tree",
           "type": "section",
-          "lineNumber": 132
+          "lineNumber": 137
         },
         {
           "marker": "{{include:skill:next-cache-components:Cache Invalidation}}",
           "skillName": "next-cache-components",
           "target": "Cache Invalidation",
           "type": "section",
-          "lineNumber": 137
-        },
-        {
-          "marker": "{{include:skill:observability:Drains > Performance Audit Checklist}}",
-          "skillName": "observability",
-          "target": "Drains > Performance Audit Checklist",
-          "type": "section",
-          "lineNumber": 144
+          "lineNumber": 142
         },
         {
           "marker": "{{include:skill:nextjs:file:references/image.md}}",
           "skillName": "nextjs",
           "target": "file:references/image.md",
           "type": "section",
-          "lineNumber": 153
+          "lineNumber": 168
         },
         {
           "marker": "{{include:skill:nextjs:file:references/font.md}}",
           "skillName": "nextjs",
           "target": "file:references/font.md",
           "type": "section",
-          "lineNumber": 158
+          "lineNumber": 173
         },
         {
           "marker": "{{include:skill:next-cache-components:`use cache` Directive}}",
           "skillName": "next-cache-components",
           "target": "`use cache` Directive",
           "type": "section",
-          "lineNumber": 163
+          "lineNumber": 178
         },
         {
           "marker": "{{include:skill:nextjs:file:references/data-patterns.md:Client Component Data Fetching}}",
           "skillName": "nextjs",
           "target": "file:references/data-patterns.md:Client Component Data Fetching",
           "type": "section",
-          "lineNumber": 168
+          "lineNumber": 183
         }
       ]
     },
@@ -190,58 +175,43 @@
       "template": "commands/deploy.md.tmpl",
       "output": "commands/deploy.md",
       "dependencies": [
-        "observability",
         "deployments-cicd"
       ],
       "includes": [
-        {
-          "marker": "{{include:skill:observability:Drains > Deploy Preflight Observability}}",
-          "skillName": "observability",
-          "target": "Drains > Deploy Preflight Observability",
-          "type": "section",
-          "lineNumber": 25
-        },
         {
           "marker": "{{include:skill:deployments-cicd:Deployment Commands > Preview Deployment}}",
           "skillName": "deployments-cicd",
           "target": "Deployment Commands > Preview Deployment",
           "type": "section",
-          "lineNumber": 49
+          "lineNumber": 56
         },
         {
           "marker": "{{include:skill:deployments-cicd:Deployment Commands > Production Deployment}}",
           "skillName": "deployments-cicd",
           "target": "Deployment Commands > Production Deployment",
           "type": "section",
-          "lineNumber": 54
+          "lineNumber": 61
         },
         {
           "marker": "{{include:skill:deployments-cicd:Deployment Commands > Inspect Deployments}}",
           "skillName": "deployments-cicd",
           "target": "Deployment Commands > Inspect Deployments",
           "type": "section",
-          "lineNumber": 71
-        },
-        {
-          "marker": "{{include:skill:observability:Drains > Post-Deploy Error Scan}}",
-          "skillName": "observability",
-          "target": "Drains > Post-Deploy Error Scan",
-          "type": "section",
-          "lineNumber": 92
+          "lineNumber": 78
         },
         {
           "marker": "{{include:skill:deployments-cicd:Deploy Summary Format}}",
           "skillName": "deployments-cicd",
           "target": "Deploy Summary Format",
           "type": "section",
-          "lineNumber": 97
+          "lineNumber": 132
         },
         {
           "marker": "{{include:skill:deployments-cicd:Deploy Next Steps}}",
           "skillName": "deployments-cicd",
           "target": "Deploy Next Steps",
           "type": "section",
-          "lineNumber": 102
+          "lineNumber": 137
         }
       ]
     },
@@ -336,32 +306,8 @@
     {
       "template": "commands/status.md.tmpl",
       "output": "commands/status.md",
-      "dependencies": [
-        "observability"
-      ],
-      "includes": [
-        {
-          "marker": "{{include:skill:observability:Drains > Security: Signature Verification}}",
-          "skillName": "observability",
-          "target": "Drains > Security: Signature Verification",
-          "type": "section",
-          "lineNumber": 128
-        },
-        {
-          "marker": "{{include:skill:observability:Drains > Fallback Guidance (No Drains)}}",
-          "skillName": "observability",
-          "target": "Drains > Fallback Guidance (No Drains)",
-          "type": "section",
-          "lineNumber": 135
-        },
-        {
-          "marker": "{{include:skill:observability:Decision Matrix}}",
-          "skillName": "observability",
-          "target": "Decision Matrix",
-          "type": "section",
-          "lineNumber": 140
-        }
-      ]
+      "dependencies": [],
+      "includes": []
     },
     {
       "template": "commands/env.md.tmpl",

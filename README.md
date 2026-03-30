@@ -42,45 +42,32 @@ A text-form relational graph covering:
 - Common cross-product workflows
 - Migration awareness for sunset products
 
-### Skills (38 skills)
+### Skills (25 skills)
 
 | Skill | Covers |
 |-------|--------|
-| `agent-browser` | Browser automation CLI — dev server verification, page interaction, screenshots, form filling |
-| `agent-browser-verify` | Automated dev-server verification — visual gut-check on page load, console errors, key UI elements |
-| `ai-elements` | Pre-built React components for AI interfaces — chat UIs, tool call rendering, streaming responses |
 | `ai-gateway` | Unified model API, provider routing, failover, cost tracking, 100+ models |
 | `ai-sdk` | AI SDK v6 — text/object generation, streaming, tool calling, agents, MCP, providers, embeddings |
 | `auth` | Authentication integrations — Clerk, Descope, Auth0 setup for Next.js with Marketplace provisioning |
 | `bootstrap` | Project bootstrapping orchestrator — linking, env provisioning, db setup, first-run commands |
 | `chat-sdk` | Multi-platform chat bots — Slack, Telegram, Teams, Discord, Google Chat, GitHub, Linear |
-| `cron-jobs` | Vercel Cron Jobs configuration, scheduling, and best practices |
 | `deployments-cicd` | Deployment and CI/CD — deploy, promote, rollback, --prebuilt, CI workflow files |
 | `env-vars` | Environment variable management — .env files, vercel env commands, OIDC tokens |
-| `investigation-mode` | Orchestrated debugging — runtime logs, workflow status, browser verify, deploy/env triage |
-| `json-render` | AI chat response rendering — UIMessage parts, tool call displays, streaming states |
+| `knowledge-update` | Knowledge update guidance for the plugin |
 | `marketplace` | Integration discovery, installation, auto-provisioned env vars, unified billing |
 | `next-cache-components` | Next.js 16 Cache Components — PPR, `use cache`, cacheLife, cacheTag, updateTag |
 | `next-forge` | Production SaaS monorepo starter — Turborepo, Clerk, Prisma/Neon, Stripe, shadcn/ui |
 | `next-upgrade` | Next.js version upgrades — codemods, migration guides, dependency updates |
 | `nextjs` | App Router, Server Components, Server Actions, Cache Components, routing, rendering strategies |
-| `observability` | Web Analytics, Speed Insights, runtime logs, Log Drains, OpenTelemetry, monitoring |
 | `react-best-practices` | React/Next.js performance optimization — 64 rules across 8 categories |
 | `routing-middleware` | Request interception before cache, rewrites, redirects, personalization — Edge/Node.js/Bun runtimes |
 | `runtime-cache` | Ephemeral per-region key-value cache, tag-based invalidation, shared across Functions/Middleware/Builds |
 | `shadcn` | shadcn/ui — CLI, component installation, custom registries, theming, Tailwind CSS integration |
-| `sign-in-with-vercel` | OAuth 2.0/OIDC identity provider, user authentication via Vercel accounts |
 | `turbopack` | Next.js bundler, HMR, configuration, Turbopack vs Webpack |
-| `turborepo` | Monorepo orchestration, caching, remote caching, --affected, pruned subsets |
-| `v0-dev` | AI code generation, agentic intelligence, GitHub integration |
 | `vercel-agent` | AI-powered code review, incident investigation, SDK installation, PR analysis |
-| `vercel-api` | Vercel MCP Server and REST API — projects, deployments, env vars, domains, logs |
 | `vercel-cli` | All CLI commands — deploy, env, dev, domains, cache management, MCP integration, marketplace |
-| `vercel-flags` | Feature flags, Flags Explorer, gradual rollouts, A/B testing, provider adapters |
 | `vercel-functions` | Serverless, Edge, Fluid Compute, streaming, Cron Jobs, configuration |
-| `vercel-queues` | Durable event streaming, topics, consumer groups, retries, delayed delivery |
 | `vercel-sandbox` | Ephemeral Firecracker microVMs for running untrusted/AI-generated code safely |
-| `vercel-services` | Multiple services in one project — monorepo backends + frontends on the same domain |
 | `vercel-storage` | Blob, Edge Config, Neon Postgres, Upstash Redis, migration from sunset packages |
 | `verification` | Full-story verification — infers user story, verifies end-to-end browser → API → data → response |
 | `workflow` | Workflow DevKit — durable execution, DurableAgent, steps, Worlds, pause/resume |
@@ -143,7 +130,6 @@ skills/<name>/
 
 | Skill | Upstream Repo |
 |-------|--------------|
-| `agent-browser` | [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) |
 | `ai-sdk` | [vercel/ai](https://github.com/vercel/ai) |
 | `chat-sdk` | [vercel/chat](https://github.com/vercel/chat) |
 | `next-cache-components` | [vercel-labs/next-skills](https://github.com/vercel-labs/next-skills) |
@@ -151,7 +137,6 @@ skills/<name>/
 | `next-upgrade` | [vercel-labs/next-skills](https://github.com/vercel-labs/next-skills) |
 | `nextjs` | [vercel-labs/next-skills](https://github.com/vercel-labs/next-skills) |
 | `react-best-practices` | [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) |
-| `turborepo` | [vercel/turborepo](https://github.com/vercel/turborepo) |
 | `vercel-cli` | [vercel/vercel](https://github.com/vercel/vercel) |
 | `vercel-sandbox` | [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) |
 | `workflow` | [vercel/workflow](https://github.com/vercel/workflow) |
@@ -179,8 +164,8 @@ Exits non-zero if any `SKILL.md` is stale. Add to CI to catch drift.
 vercel-plugin/
 ├── .plugin/plugin.json              # Plugin manifest
 ├── vercel.md                        # Ecosystem graph + conventions (injected via SessionStart hook)
-├── skills/                          # 38 skills (12 upstream-synced + 26 plugin-only)
-│   ├── agent-browser/               # Upstream-synced skill example:
+├── skills/                          # 25 skills
+│   ├── ai-sdk/                      # Upstream-synced skill example:
 │   │   ├── overlay.yaml             #   Plugin injection metadata
 │   │   ├── upstream/                #   Pure upstream content
 │   │   │   ├── SKILL.md

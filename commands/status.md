@@ -120,11 +120,10 @@ Scan the project source for `@vercel/analytics` and `@vercel/speed-insights` imp
 
 - Check `package.json` dependencies for `@vercel/analytics` and `@vercel/speed-insights`.
 - If missing either package, flag:
-  > Analytics/Speed Insights not detected. See `⤳ skill: observability` for setup.
+  > Analytics/Speed Insights not detected. Install `@vercel/analytics` and `@vercel/speed-insights` and add the components to your root layout.
 
 #### 6d. Drain Signature Verification
 
-<!-- Sourced from observability skill: Drains > Security: Signature Verification -->
 Vercel signs every drain payload with an HMAC-SHA1 signature in the `x-vercel-signature` header. **Always verify signatures in production** to prevent spoofed data.
 
 > **Critical:** You must verify against the **raw request body** (not a parsed/re-serialized version). JSON parsing and re-stringifying can change key order or whitespace, breaking the signature match.
@@ -165,14 +164,13 @@ Check whether the project has a `DRAIN_SECRET` env var set via `vercel env ls`. 
 
 #### 6e. Fallback Guidance (No Drains)
 
-<!-- Sourced from observability skill: Drains > Fallback Guidance (No Drains) -->
 If drains are unavailable (Hobby plan or not yet configured), use these alternatives:
 
 | Need | Alternative | How |
 |------|-------------|-----|
 | View runtime logs | **Vercel Dashboard** | `https://vercel.com/{team}/{project}/deployments` → select deployment → Logs tab |
-| Stream logs from terminal | **Vercel CLI** | `vercel logs <deployment-url> --follow` (see `⤳ skill: vercel-cli`) |
-| Query logs programmatically | **MCP / REST API** | `get_runtime_logs` tool or `/v3/deployments/:id/events` (see `⤳ skill: vercel-api`) |
+| Stream logs from terminal | **Vercel CLI** | `vercel logs <deployment-url> --follow` |
+| Query logs programmatically | **MCP / REST API** | `get_runtime_logs` tool or `/v3/deployments/:id/events` |
 | Monitor errors post-deploy | **CLI** | `vercel logs <url> --level error --since 1h` |
 | Web Analytics data | **Dashboard only** | `https://vercel.com/{team}/{project}/analytics` |
 | Performance metrics | **Dashboard only** | `https://vercel.com/{team}/{project}/speed-insights` |
@@ -181,7 +179,6 @@ If drains are unavailable (Hobby plan or not yet configured), use these alternat
 
 #### Observability Decision Matrix
 
-<!-- Sourced from observability skill: Decision Matrix -->
 | Need | Use | Why |
 |------|-----|-----|
 | Page views, traffic sources | Web Analytics | First-party, privacy-friendly |
@@ -261,7 +258,7 @@ Based on the diagnostic results, suggest relevant actions:
 - **Stale deployment** → "Your latest deployment is over 7 days old. Consider redeploying."
 - **No vercel.json** → "Add a `vercel.json` if you need custom build, function, or routing configuration."
 - **No drains (Hobby)** → "View logs via Dashboard or `vercel logs <url> --follow`. Upgrade to Pro for drain-based forwarding."
-- **No drains (Pro+)** → "Configure drains for centralized observability. See `⤳ skill: observability` or run via REST API."
+- **No drains (Pro+)** → "Configure drains for centralized observability via Dashboard or REST API."
 - **Errored drain** → "Test the endpoint: `POST /v1/drains/<id>/test`. Check URL reachability and format compatibility."
 - **Missing analytics** → "Install `@vercel/analytics` and add `<Analytics />` to your root layout."
 - **Missing speed insights** → "Install `@vercel/speed-insights` and add `<SpeedInsights />` to your root layout."

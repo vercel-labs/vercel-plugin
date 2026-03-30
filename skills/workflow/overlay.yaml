@@ -414,11 +414,6 @@ chainTo:
     message: 'DurableAgent detected without AI SDK context — loading AI SDK guidance for tool calling, Agent class, and model configuration.'
     skipIfFileContains: 'from\s+[''"]ai[''"]|@ai-sdk/|streamText|generateText'
   -
-    pattern: 'useChat|DefaultChatTransport'
-    targetSkill: ai-elements
-    message: 'Workflow with chat UI detected — loading AI Elements for streaming-aware MessageResponse and Conversation rendering.'
-    skipIfFileContains: 'ai-elements|MessageResponse|<Message\b'
-  -
     pattern: 'process\.env\.(OPENAI_API_KEY|ANTHROPIC_API_KEY)|from\s+[''"]@ai-sdk/(anthropic|openai)[''""]'
     targetSkill: ai-gateway
     message: 'Direct provider API key in workflow — loading AI Gateway guidance for OIDC auth (required for WDK AI steps).'

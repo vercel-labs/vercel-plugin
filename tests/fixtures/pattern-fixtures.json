@@ -2,10 +2,10 @@
   "$schema": "Pattern fixture dry-run: maps file paths and bash commands to expected skill matches",
   "fixtures": [
     {
-      "description": "vercel.json triggers multiple skills (routing, cron, deploy, cli, functions)",
+      "description": "vercel.json triggers multiple skills (routing, deploy, cli, functions)",
       "type": "path",
       "input": "vercel.json",
-      "expectedSkills": ["routing-middleware", "deployments-cicd", "vercel-cli", "cron-jobs", "vercel-functions"]
+      "expectedSkills": ["routing-middleware", "deployments-cicd", "vercel-cli", "vercel-functions"]
     },
     {
       "description": "next.config.ts triggers nextjs, turbopack, next-cache-components, and next-upgrade",
@@ -14,10 +14,10 @@
       "expectedSkills": ["nextjs", "turbopack", "next-cache-components", "next-upgrade"]
     },
     {
-      "description": "middleware.ts triggers routing-middleware, auth, and investigation-mode",
+      "description": "middleware.ts triggers routing-middleware and auth",
       "type": "path",
       "input": "middleware.ts",
-      "expectedSkills": ["routing-middleware", "auth", "investigation-mode"]
+      "expectedSkills": ["routing-middleware", "auth"]
     },
     {
       "description": ".env.local triggers env-vars",
@@ -30,18 +30,6 @@
       "type": "path",
       "input": "app/api/chat/route.ts",
       "expectedSkills": ["ai-sdk", "nextjs", "vercel-functions", "chat-sdk", "next-cache-components"]
-    },
-    {
-      "description": "turbo.json triggers turborepo",
-      "type": "path",
-      "input": "turbo.json",
-      "expectedSkills": ["turborepo"]
-    },
-    {
-      "description": "instrumentation.ts triggers observability and investigation-mode",
-      "type": "path",
-      "input": "instrumentation.ts",
-      "expectedSkills": ["observability", "investigation-mode"]
     },
     {
       "description": "components.json triggers shadcn",
@@ -62,12 +50,6 @@
       "expectedSkills": ["deployments-cicd", "vercel-agent", "workflow"]
     },
     {
-      "description": "flags.ts triggers vercel-flags",
-      "type": "path",
-      "input": "flags.ts",
-      "expectedSkills": ["vercel-flags"]
-    },
-    {
       "description": "vercel deploy command triggers deployments-cicd and vercel-cli",
       "type": "bash",
       "input": "vercel deploy --prod",
@@ -80,22 +62,16 @@
       "expectedSkills": ["shadcn"]
     },
     {
-      "description": "next dev --turbo triggers turbopack, nextjs, agent-browser, and next-cache-components",
+      "description": "next dev --turbo triggers turbopack, nextjs, verification, and next-cache-components",
       "type": "bash",
       "input": "next dev --turbo",
-      "expectedSkills": ["turbopack", "nextjs", "agent-browser", "agent-browser-verify", "verification", "next-cache-components"]
+      "expectedSkills": ["turbopack", "nextjs", "verification", "next-cache-components"]
     },
     {
       "description": "vercel env pull triggers env-vars, ai-gateway, and vercel-cli",
       "type": "bash",
       "input": "vercel env pull .env.local",
       "expectedSkills": ["env-vars", "ai-gateway", "vercel-cli"]
-    },
-    {
-      "description": "turbo run build triggers turborepo",
-      "type": "bash",
-      "input": "turbo run build",
-      "expectedSkills": ["turborepo"]
     },
     {
       "description": "src/components/Button.tsx triggers react-best-practices",
@@ -116,28 +92,28 @@
       "expectedSkills": ["react-best-practices", "nextjs", "next-cache-components"]
     },
     {
-      "description": "npm run dev triggers nextjs, agent-browser, agent-browser-verify, verification",
+      "description": "npm run dev triggers nextjs and verification",
       "type": "bash",
       "input": "npm run dev",
-      "expectedSkills": ["nextjs", "agent-browser", "agent-browser-verify", "verification"]
+      "expectedSkills": ["nextjs", "verification"]
     },
     {
-      "description": "pnpm dev triggers nextjs, agent-browser, agent-browser-verify, verification",
+      "description": "pnpm dev triggers nextjs and verification",
       "type": "bash",
       "input": "pnpm dev",
-      "expectedSkills": ["nextjs", "agent-browser", "agent-browser-verify", "verification"]
+      "expectedSkills": ["nextjs", "verification"]
     },
     {
-      "description": "bun run dev triggers nextjs, agent-browser, agent-browser-verify, verification",
+      "description": "bun run dev triggers nextjs and verification",
       "type": "bash",
       "input": "bun run dev",
-      "expectedSkills": ["nextjs", "agent-browser", "agent-browser-verify", "verification"]
+      "expectedSkills": ["nextjs", "verification"]
     },
     {
-      "description": "vite triggers agent-browser, agent-browser-verify, verification",
+      "description": "vite triggers verification",
       "type": "bash",
       "input": "vite",
-      "expectedSkills": ["agent-browser", "agent-browser-verify", "verification"]
+      "expectedSkills": ["verification"]
     },
     {
       "description": "npm install prisma currently triggers no direct skill matches",

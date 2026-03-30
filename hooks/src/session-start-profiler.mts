@@ -72,18 +72,11 @@ const FILE_MARKERS: FileMarker[] = [
   { file: "next.config.mjs", skills: ["nextjs", "turbopack"] },
   { file: "next.config.ts", skills: ["nextjs", "turbopack"] },
   { file: "next.config.mts", skills: ["nextjs", "turbopack"] },
-  { file: "turbo.json", skills: ["turborepo"] },
   { file: "vercel.json", skills: ["vercel-cli", "deployments-cicd", "vercel-functions"] },
-  { file: ".mcp.json", skills: ["vercel-api"] },
   { file: "middleware.ts", skills: ["routing-middleware"] },
   { file: "middleware.js", skills: ["routing-middleware"] },
   { file: "components.json", skills: ["shadcn"] },
   { file: ".env.local", skills: ["env-vars"] },
-  { file: "pnpm-workspace.yaml", skills: ["turborepo"] },
-  { file: "backend/pyproject.toml", skills: ["vercel-services"] },
-  { file: "backend/main.py", skills: ["vercel-services"] },
-  { file: "backend/go.mod", skills: ["vercel-services"] },
-  { file: "backend/main.go", skills: ["vercel-services"] },
 ];
 
 /**
@@ -91,24 +84,17 @@ const FILE_MARKERS: FileMarker[] = [
  */
 const PACKAGE_MARKERS: Record<string, string[]> = {
   "next": ["nextjs"],
-  "ai": ["ai-sdk", "ai-elements"],
-  "ai-elements": ["ai-elements"],
+  "ai": ["ai-sdk"],
   "@ai-sdk/openai": ["ai-sdk"],
   "@ai-sdk/anthropic": ["ai-sdk"],
-  "@ai-sdk/react": ["ai-sdk", "ai-elements"],
+  "@ai-sdk/react": ["ai-sdk"],
   "@ai-sdk/gateway": ["ai-sdk", "ai-gateway"],
   "@vercel/blob": ["vercel-storage"],
   "@vercel/kv": ["vercel-storage"],
   "@vercel/postgres": ["vercel-storage"],
   "@vercel/edge-config": ["vercel-storage"],
-  "@vercel/analytics": ["observability"],
-  "@vercel/speed-insights": ["observability"],
-  "@vercel/flags": ["vercel-flags"],
   "@vercel/workflow": ["workflow"],
-  "@vercel/queue": ["vercel-queues"],
   "@vercel/sandbox": ["vercel-sandbox"],
-  "@vercel/sdk": ["vercel-api"],
-  "turbo": ["turborepo"],
   "@repo/auth": ["next-forge"],
   "@repo/database": ["next-forge"],
   "@repo/design-system": ["next-forge"],
@@ -205,12 +191,10 @@ export function profileProject(projectRoot: string): string[] {
   // 3. Check vercel.json keys for more specific skills
   const vercelConfig = safeReadJson<Record<string, unknown>>(join(projectRoot, "vercel.json"));
   if (vercelConfig) {
-    if (vercelConfig.crons) skills.add("cron-jobs");
     if (vercelConfig.rewrites || vercelConfig.redirects || vercelConfig.headers) {
       skills.add("routing-middleware");
     }
     if (vercelConfig.functions) skills.add("vercel-functions");
-    if (vercelConfig.experimentalServices) skills.add("vercel-services");
   }
 
   return [...skills].sort();
@@ -473,20 +457,6 @@ function checkVercelCli(): VercelCliStatus {
 }
 
 // ---------------------------------------------------------------------------
-// agent-browser availability check
-// ---------------------------------------------------------------------------
-
-const AGENT_BROWSER_BINARY = "agent-browser";
-
-/**
- * Check if agent-browser CLI is available on PATH.
- * Returns true if `agent-browser` resolves on PATH.
- */
-export function checkAgentBrowser(): boolean {
-  return resolveBinaryFromPath(AGENT_BROWSER_BINARY) !== null;
-}
-
-// ---------------------------------------------------------------------------
 // Main entry point — profile the project and write env vars.
 // ---------------------------------------------------------------------------
 
@@ -576,14 +546,11 @@ export function logBrokenSkillFrontmatterSummary(
 }
 
 export function buildSessionStartProfilerEnvVars(args: {
-  agentBrowserAvailable: boolean;
   greenfield: boolean;
   likelySkills: string[];
   setupSignals: BootstrapSignals;
 }): Record<string, string> {
-  const envVars: Record<string, string> = {
-    VERCEL_PLUGIN_AGENT_BROWSER_AVAILABLE: args.agentBrowserAvailable ? "1" : "0",
-  };
+  const envVars: Record<string, string> = {};
 
   if (args.greenfield) {
     envVars.VERCEL_PLUGIN_GREENFIELD = "true";
@@ -666,22 +633,13 @@ async function main(): Promise<void> {
     ? GREENFIELD_DEFAULT_SKILLS
     : profileProject(projectRoot);
 
-  // Auto-boost observability for all non-greenfield projects so debugging
-  // and logging guidance is always available (+5 priority from profiler).
-  if (!greenfield && !likelySkills.includes("observability")) {
-    likelySkills.push("observability");
-    likelySkills.sort();
-  }
   const setupSignals: BootstrapSignals = greenfield
     ? GREENFIELD_SETUP_SIGNALS
     : profileBootstrapSignals(projectRoot);
   const greenfieldValue = greenfield ? "true" : "";
   const likelySkillsValue = likelySkills.join(",");
 
-  // Check agent-browser CLI availability
-  const agentBrowserAvailable: boolean = checkAgentBrowser();
   const envVars = buildSessionStartProfilerEnvVars({
-    agentBrowserAvailable,
     greenfield: greenfield !== null,
     likelySkills,
     setupSignals,
@@ -746,7 +704,6 @@ async function main(): Promise<void> {
         bootstrapHints: setupSignals.bootstrapHints,
         resourceHints: setupSignals.resourceHints,
         setupMode: setupSignals.setupMode,
-        agentBrowserAvailable,
         timestamp: new Date().toISOString(),
       };
       writeFileSync(profileCachePath(sessionId), JSON.stringify(cache), "utf-8");

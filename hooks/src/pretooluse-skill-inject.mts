@@ -28,7 +28,6 @@ import {
 } from "./compat.mjs";
 import {
   appendAuditLog,
-  generateVerificationId,
   listSessionKeys,
   pluginRoot as resolvePluginRoot,
   readSessionFile,
@@ -68,40 +67,6 @@ const SETUP_MODE_PRIORITY_BOOST = 50;
 const PLUGIN_ROOT = resolvePluginRoot();
 const SUPPORTED_TOOLS = ["Read", "Edit", "Write", "Bash"];
 
-// TSX review trigger constants
-const TSX_REVIEW_SKILL = "react-best-practices";
-const DEFAULT_REVIEW_THRESHOLD = 3;
-const TSX_REVIEW_PRIORITY_BOOST = 40;
-const REVIEW_MARKER = "<!-- marker:review-injected -->";
-const TSX_EDIT_COUNT_SESSION_KEY = "tsx-edit-count";
-
-// Dev-server verification constants
-const DEV_SERVER_VERIFY_SKILL = "agent-browser-verify";
-const DEV_SERVER_VERIFY_PRIORITY_BOOST = 45;
-const DEV_SERVER_VERIFY_MAX_ITERATIONS = 2;
-const DEV_SERVER_VERIFY_MARKER = "<!-- marker:dev-server-verify -->";
-const DEV_VERIFY_COUNT_SESSION_KEY = "dev-verify-count";
-
-// Companion skills co-injected alongside agent-browser-verify on dev server detection.
-// These share the same iteration guard and loop-guard bypass logic.
-const DEV_SERVER_COMPANION_SKILLS: string[] = ["verification"];
-
-// Companion skills co-injected alongside ai-sdk when the tool call targets a client-side React file.
-const AI_SDK_SKILL = "ai-sdk";
-const AI_SDK_COMPANION_SKILLS: string[] = ["ai-elements"];
-const DEV_SERVER_UNAVAILABLE_WARNING = `<!-- agent-browser-unavailable -->
-**Recommendation: Install agent-browser for automatic verification**
-
-We detected a dev server starting. Normally, after several files have been changed, we run \`agent-browser\` to do a browser verification pass — checking that pages load correctly, there are no console errors, and UI elements render as expected. This catches visual regressions and runtime issues that static analysis misses.
-
-\`agent-browser\` is not currently installed. To enable automatic browser verification:
-
-\`\`\`bash
-npm install -g agent-browser && agent-browser install
-\`\`\`
-
-**Tell the user**: "I'd normally run a browser verification pass at this point to make sure everything looks right, but \`agent-browser\` isn't installed yet. You can install it globally with \`npm install -g agent-browser && agent-browser install\` — it takes about a minute and lets me visually verify your app after changes."
-<!-- /agent-browser-unavailable -->`;
 const VERCEL_ENV_HELP_ONCE_KEY = 'vercel-env-help';
 const VERCEL_ENV_COMMAND = /\bvercel\s+env\s+(add|update|pull)\b/;
 const VERCEL_ENV_HELP = `<!-- vercel-env-help -->
@@ -114,23 +79,6 @@ const VERCEL_ENV_HELP = `<!-- vercel-env-help -->
 - Do NOT pass NAME=value as a positional argument. vercel env add reads the value from stdin or from the interactive prompt.
 <!-- /vercel-env-help -->`;
 
-/**
- * Regex patterns to detect dev-server startup commands.
- * These match the same patterns as agent-browser-verify's bashPatterns
- * plus vercel.json devCommand support via env var.
- */
-const DEV_SERVER_PATTERNS: RegExp[] = [
-  /\bnext\s+dev\b/,
-  /\bnpm\s+run\s+dev\b/,
-  /\bpnpm\s+dev\b/,
-  /\bbun\s+(run\s+)?dev\b/,
-  /\byarn\s+dev\b/,
-  /\bvite\s+dev\b/,
-  /\bvite\b(?!.*build)/,
-  /\bnuxt\s+dev\b/,
-  /\bvercel\s+dev\b/,
-  /\bastro\s+dev\b/,
-];
 
 /** Resolve the injection byte budget from env or default. */
 function getInjectionBudget(): number {
@@ -148,99 +96,11 @@ function getInjectionBudget(): number {
 
 const log: Logger = createLogger();
 
-// ---------------------------------------------------------------------------
-// TSX review trigger: session-file-backed edit counter
-// ---------------------------------------------------------------------------
-
-/** Get the configured review threshold from env or default. */
-export function getReviewThreshold(): number {
-  const envVal = process.env.VERCEL_PLUGIN_REVIEW_THRESHOLD;
-  if (envVal != null && envVal !== "") {
-    const parsed = parseInt(envVal, 10);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-  return DEFAULT_REVIEW_THRESHOLD;
-}
-
-function parsePersistentCounter(raw: string | undefined): number {
-  if (raw == null || raw === "") return 0;
-  const n = parseInt(raw, 10);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function readPersistentCounter(
-  sessionId: string | undefined,
-  sessionKey: string,
-  envKey: keyof NodeJS.ProcessEnv,
-): number {
-  if (sessionId) {
-    const sessionValue = readSessionFile(sessionId, sessionKey);
-    if (sessionValue !== "") {
-      return parsePersistentCounter(sessionValue);
-    }
-  }
-
-  return parsePersistentCounter(process.env[envKey]);
-}
-
-function writePersistentCounter(
-  sessionId: string | undefined,
-  sessionKey: string,
-  envKey: keyof NodeJS.ProcessEnv,
-  value: number,
-): void {
-  const nextValue = String(value);
-  process.env[envKey] = nextValue;
-  if (sessionId) {
-    writeSessionFile(sessionId, sessionKey, nextValue);
-  }
-}
-
-/** Read current TSX edit count from session file or env fallback. */
-function getTsxEditCount(sessionId?: string): number {
-  return readPersistentCounter(sessionId, TSX_EDIT_COUNT_SESSION_KEY, "VERCEL_PLUGIN_TSX_EDIT_COUNT");
-}
-
-/** Increment and persist TSX edit count. Returns new count. */
-function incrementTsxEditCount(sessionId?: string): number {
-  const next = getTsxEditCount(sessionId) + 1;
-  writePersistentCounter(sessionId, TSX_EDIT_COUNT_SESSION_KEY, "VERCEL_PLUGIN_TSX_EDIT_COUNT", next);
-  return next;
-}
-
-/** Reset TSX edit count after review injection. */
-function resetTsxEditCount(sessionId?: string): void {
-  writePersistentCounter(sessionId, TSX_EDIT_COUNT_SESSION_KEY, "VERCEL_PLUGIN_TSX_EDIT_COUNT", 0);
-}
-
-/** Check if the current tool call is an Edit/Write on a .tsx file. */
-function isTsxEditTool(toolName: string, toolInput: Record<string, unknown>): boolean {
-  if (toolName !== "Edit" && toolName !== "Write") return false;
-  const filePath = (toolInput.file_path as string) || "";
-  return /\.tsx$/.test(filePath);
-}
-
-/** Check if the current tool call targets a client-side React file (not an API route/server action). */
-function isClientReactFile(toolName: string, toolInput: Record<string, unknown>): boolean {
-  if (toolName !== "Write" && toolName !== "Edit") return false;
-  const filePath = (toolInput.file_path as string) || "";
-  if (!/\.[jt]sx$/.test(filePath)) return false;
-  return !/\/(api|actions)\//.test(filePath) && !/\broute\.[jt]sx?$/.test(filePath);
-}
-
-export interface TsxReviewTriggerResult {
-  triggered: boolean;
-  count: number;
-  threshold: number;
-  debounced: boolean;
-}
 export type { HookPlatform };
 
 const RUNTIME_ENV_KEYS = [
   "VERCEL_PLUGIN_CONTEXT_COMPACTED",
   "VERCEL_PLUGIN_SEEN_SKILLS",
-  "VERCEL_PLUGIN_TSX_EDIT_COUNT",
-  "VERCEL_PLUGIN_DEV_VERIFY_COUNT",
 ] as const;
 
 type RuntimeEnvKey = (typeof RUNTIME_ENV_KEYS)[number];
@@ -252,8 +112,6 @@ export function captureRuntimeEnvSnapshot(env: NodeJS.ProcessEnv = process.env):
   return {
     VERCEL_PLUGIN_CONTEXT_COMPACTED: env.VERCEL_PLUGIN_CONTEXT_COMPACTED,
     VERCEL_PLUGIN_SEEN_SKILLS: env.VERCEL_PLUGIN_SEEN_SKILLS,
-    VERCEL_PLUGIN_TSX_EDIT_COUNT: env.VERCEL_PLUGIN_TSX_EDIT_COUNT,
-    VERCEL_PLUGIN_DEV_VERIFY_COUNT: env.VERCEL_PLUGIN_DEV_VERIFY_COUNT,
   };
 }
 
@@ -282,147 +140,6 @@ function finalizeRuntimeEnvUpdates(
 
   const updates = collectRuntimeEnvUpdates(before, env);
   return Object.keys(updates).length > 0 ? updates : undefined;
-}
-
-/**
- * Check and potentially trigger TSX review injection.
- * Increments counter on .tsx edits, triggers when threshold reached.
- *
- * Dedup bypass: This trigger is decoupled from SEEN_SKILLS dedup.
- * The counter resets after each injection, so re-injection happens naturally
- * when the counter reaches the threshold again — even if the slug is already
- * in SEEN_SKILLS. The counter itself prevents duplicate injection within a cycle.
- */
-export function checkTsxReviewTrigger(
-  toolName: string,
-  toolInput: Record<string, unknown>,
-  _injectedSkills: Set<string>,
-  dedupOff: boolean,
-  sessionId?: string,
-  logger?: Logger,
-): TsxReviewTriggerResult {
-  const l = logger || log;
-  const threshold = getReviewThreshold();
-
-  // Disabled when dedup is off
-  if (dedupOff) {
-    l.debug("tsx-review-not-fired", { reason: "dedup-off" });
-    return { triggered: false, count: 0, threshold, debounced: false };
-  }
-
-  // Only count Edit/Write on .tsx files
-  if (!isTsxEditTool(toolName, toolInput)) {
-    l.debug("tsx-review-not-fired", { reason: "not-tsx-edit", tool: toolName });
-    return { triggered: false, count: getTsxEditCount(sessionId), threshold, debounced: false };
-  }
-
-  const prevCount = getTsxEditCount(sessionId);
-  const count = incrementTsxEditCount(sessionId);
-  const delta = count - prevCount;
-  l.debug("tsx-edit-count", { count, threshold, file: (toolInput.file_path as string) || "" });
-  l.trace("tsx-edit-counter-state", { previous: prevCount, current: count, delta, threshold, remaining: Math.max(0, threshold - count), file: (toolInput.file_path as string) || "" });
-
-  if (count >= threshold) {
-    l.debug("tsx-review-triggered", { count, threshold });
-    return { triggered: true, count, threshold, debounced: false };
-  }
-
-  l.debug("tsx-review-not-fired", { reason: "below-threshold", count, threshold });
-  return { triggered: false, count, threshold, debounced: false };
-}
-
-// ---------------------------------------------------------------------------
-// Dev-server verification trigger
-// ---------------------------------------------------------------------------
-
-/** Read current dev-server verify iteration count from session file or env fallback. */
-export function getDevServerVerifyCount(sessionId?: string): number {
-  return readPersistentCounter(sessionId, DEV_VERIFY_COUNT_SESSION_KEY, "VERCEL_PLUGIN_DEV_VERIFY_COUNT");
-}
-
-/** Increment and persist dev-server verify count. Returns new count. */
-export function incrementDevServerVerifyCount(sessionId?: string): number {
-  const next = getDevServerVerifyCount(sessionId) + 1;
-  writePersistentCounter(sessionId, DEV_VERIFY_COUNT_SESSION_KEY, "VERCEL_PLUGIN_DEV_VERIFY_COUNT", next);
-  return next;
-}
-
-/** Reset dev-server verify count. */
-export function resetDevServerVerifyCount(sessionId?: string): void {
-  writePersistentCounter(sessionId, DEV_VERIFY_COUNT_SESSION_KEY, "VERCEL_PLUGIN_DEV_VERIFY_COUNT", 0);
-}
-
-/** Check if a Bash command is a dev-server startup command. */
-export function isDevServerCommand(command: string): boolean {
-  if (!command) return false;
-  // Check vercel.json devCommand if set
-  const devCommand = process.env.VERCEL_PLUGIN_DEV_COMMAND;
-  if (devCommand && command.includes(devCommand)) return true;
-  return DEV_SERVER_PATTERNS.some((re) => re.test(command));
-}
-
-export interface DevServerVerifyResult {
-  triggered: boolean;
-  unavailable: boolean;
-  loopGuardHit: boolean;
-  iterationCount: number;
-}
-
-/**
- * Check if dev-server verification should be injected.
- * Triggers when a Bash command matches dev-server patterns.
- * Loop guard: max DEV_SERVER_VERIFY_MAX_ITERATIONS per session.
- * Graceful degradation: if agent-browser is unavailable, returns unavailable=true.
- *
- * Dedup bypass: This trigger is decoupled from SEEN_SKILLS dedup.
- * The iteration counter (DEV_VERIFY_COUNT) is the sole gate — it allows
- * re-injection up to MAX_ITERATIONS even when the slug is in SEEN_SKILLS.
- * The loop guard (count >= max) is the hard stop.
- */
-export function checkDevServerVerify(
-  toolName: string,
-  toolInput: Record<string, unknown>,
-  _injectedSkills: Set<string>,
-  _dedupOff: boolean,
-  sessionId?: string,
-  logger?: Logger,
-): DevServerVerifyResult {
-  const l = logger || log;
-  const noResult: DevServerVerifyResult = { triggered: false, unavailable: false, loopGuardHit: false, iterationCount: 0 };
-
-  // Only applies to Bash commands
-  if (toolName !== "Bash") {
-    l.debug("dev-server-verify-not-fired", { reason: "not-bash", tool: toolName });
-    return noResult;
-  }
-
-  const command = (toolInput.command as string) || "";
-  if (!isDevServerCommand(command)) {
-    l.debug("dev-server-verify-not-fired", { reason: "not-dev-server-command" });
-    return noResult;
-  }
-
-  l.debug("dev-server-detected", { command: command.slice(0, 100) });
-
-  // Check agent-browser availability
-  const available = process.env.VERCEL_PLUGIN_AGENT_BROWSER_AVAILABLE;
-  if (available === "0") {
-    l.debug("dev-server-verify-not-fired", { reason: "agent-browser-unavailable" });
-    l.debug("dev-server-verify-unavailable", { reason: "agent-browser not installed" });
-    return { triggered: false, unavailable: true, loopGuardHit: false, iterationCount: 0 };
-  }
-
-  // Loop guard: max iterations (hard stop, regardless of dedup state)
-  const count = getDevServerVerifyCount(sessionId);
-  l.trace("dev-server-verify-counter-state", { current: count, max: DEV_SERVER_VERIFY_MAX_ITERATIONS, remaining: Math.max(0, DEV_SERVER_VERIFY_MAX_ITERATIONS - count), command: command.slice(0, 100) });
-  if (count >= DEV_SERVER_VERIFY_MAX_ITERATIONS) {
-    l.debug("dev-server-verify-not-fired", { reason: "loop-guard", count, max: DEV_SERVER_VERIFY_MAX_ITERATIONS });
-    l.debug("dev-server-verify-loop-guard", { count, max: DEV_SERVER_VERIFY_MAX_ITERATIONS });
-    return { triggered: false, unavailable: false, loopGuardHit: true, iterationCount: count };
-  }
-
-  l.debug("dev-server-verify-triggered", { iterationCount: count });
-  return { triggered: true, unavailable: false, loopGuardHit: false, iterationCount: count };
 }
 
 export interface VercelEnvHelpResult {
@@ -1105,7 +822,6 @@ export interface FormatOutputParams {
   toolTarget: string;
   matchReasons?: Record<string, { pattern: string; matchType: string }>;
   reasons?: Record<string, SkillInjectionReason>;
-  verificationId?: string;
   skillMap?: Record<string, { docs?: string[]; sitemap?: string }>;
   platform?: HookPlatform;
   env?: RuntimeEnvUpdates;
@@ -1186,7 +902,6 @@ export function formatOutput({
   toolTarget,
   matchReasons,
   reasons,
-  verificationId,
   skillMap,
   platform = "claude-code",
   env,
@@ -1206,9 +921,6 @@ export function formatOutput({
   };
   if (reasons && Object.keys(reasons).length > 0) {
     skillInjection.reasons = reasons;
-  }
-  if (verificationId) {
-    skillInjection.verificationId = verificationId;
   }
 
   // Embed injection metadata as an HTML comment inside additionalContext
@@ -1325,25 +1037,8 @@ function run(): string {
 
   const { matchedEntries, matchReasons, matched } = matchResult;
 
-  // Stage 3.5: TSX review trigger — check before dedup to inform synthetic injection
-  const tsxReview = checkTsxReviewTrigger(toolName, toolInput, injectedSkills, dedupOff, sessionId, log);
-
-  // Stage 3.6: Dev-server verification trigger
-  const devServerVerify = checkDevServerVerify(toolName, toolInput, injectedSkills, dedupOff, sessionId, log);
-
-  // Stage 3.7: Vercel env command quick-help trigger
+  // Stage 3.5: Vercel env command quick-help trigger
   const vercelEnvHelp = checkVercelEnvHelp(toolName, toolInput, injectedSkills, dedupOff, log);
-
-  // Stage 3.8: Boost agent-browser-verify and companion skills priority when dev-server detected
-  if (devServerVerify.triggered) {
-    const devServerBoostSkills = new Set([DEV_SERVER_VERIFY_SKILL, ...DEV_SERVER_COMPANION_SKILLS]);
-    for (const entry of matchedEntries) {
-      if (devServerBoostSkills.has(entry.skill)) {
-        entry.effectivePriority = DEV_SERVER_VERIFY_PRIORITY_BOOST;
-        log.debug("dev-server-verify-priority-boost", { skill: entry.skill, effectivePriority: entry.effectivePriority });
-      }
-    }
-  }
 
   // Stage 4: deduplicateSkills
   const dedupResult = deduplicateSkills({
@@ -1359,150 +1054,6 @@ function run(): string {
   }, log);
 
   const { newEntries, rankedSkills, profilerBoosted } = dedupResult;
-
-  // Stage 4.5: Synthetically inject react-best-practices if TSX review triggered
-  let tsxReviewInjected = false;
-  if (tsxReview.triggered && !rankedSkills.includes(TSX_REVIEW_SKILL)) {
-    // Find or create the react-best-practices entry
-    const reviewTemplate = compiledSkills.find((e) => e.skill === TSX_REVIEW_SKILL);
-    const reviewEntry: CompiledSkillEntry = reviewTemplate
-      ? { ...reviewTemplate, effectivePriority: TSX_REVIEW_PRIORITY_BOOST }
-      : {
-          skill: TSX_REVIEW_SKILL,
-          priority: 0,
-          compiledPaths: [],
-          compiledBash: [],
-          compiledImports: [],
-          effectivePriority: TSX_REVIEW_PRIORITY_BOOST,
-        };
-    // Insert at the beginning (highest priority for this injection)
-    rankedSkills.unshift(TSX_REVIEW_SKILL);
-    matched.add(TSX_REVIEW_SKILL);
-    tsxReviewInjected = true;
-    log.debug("tsx-review-synthetic-inject", { skill: TSX_REVIEW_SKILL, count: tsxReview.count });
-  } else if (tsxReview.triggered && rankedSkills.includes(TSX_REVIEW_SKILL)) {
-    // Already matched via patterns, just mark it
-    tsxReviewInjected = true;
-  }
-
-  // Stage 4.6: Dev-server verification — synthetic inject or graceful degradation
-  const forceSummarySkills = new Set<string>();
-  let devServerVerifyInjected = false;
-  let devServerUnavailableWarning = false;
-  if (devServerVerify.unavailable) {
-    // Graceful degradation: inject warning once if not already warned
-    const warningKey = "agent-browser-unavailable-warning";
-    if (!injectedSkills.has(warningKey)) {
-      let warningClaimed = true;
-      if (sessionId) {
-        warningClaimed = tryClaimSessionKey(sessionId, "seen-skills", warningKey, scopeId);
-        if (warningClaimed) {
-          syncSessionFileFromClaims(sessionId, "seen-skills", scopeId);
-        }
-      }
-
-      if (warningClaimed) {
-        devServerUnavailableWarning = true;
-        injectedSkills.add(warningKey);
-        log.debug("dev-server-verify-unavailable-warning", { reason: "agent-browser not installed" });
-      }
-    }
-    // Suppress agent-browser-verify from normal pattern matching when unavailable
-    const verifyIdx = rankedSkills.indexOf(DEV_SERVER_VERIFY_SKILL);
-    if (verifyIdx !== -1) {
-      rankedSkills.splice(verifyIdx, 1);
-      log.debug("dev-server-verify-suppressed", { reason: "agent-browser unavailable" });
-    }
-  } else if (devServerVerify.triggered && !rankedSkills.includes(DEV_SERVER_VERIFY_SKILL)) {
-    const verifyTemplate = compiledSkills.find((e) => e.skill === DEV_SERVER_VERIFY_SKILL);
-    const _verifyEntry: CompiledSkillEntry = verifyTemplate
-      ? { ...verifyTemplate, effectivePriority: DEV_SERVER_VERIFY_PRIORITY_BOOST }
-      : {
-          skill: DEV_SERVER_VERIFY_SKILL,
-          priority: 0,
-          compiledPaths: [],
-          compiledBash: [],
-          compiledImports: [],
-          effectivePriority: DEV_SERVER_VERIFY_PRIORITY_BOOST,
-        };
-    rankedSkills.unshift(DEV_SERVER_VERIFY_SKILL);
-    matched.add(DEV_SERVER_VERIFY_SKILL);
-    devServerVerifyInjected = true;
-    log.debug("dev-server-verify-synthetic-inject", { skill: DEV_SERVER_VERIFY_SKILL, iteration: devServerVerify.iterationCount });
-  } else if (devServerVerify.triggered && rankedSkills.includes(DEV_SERVER_VERIFY_SKILL)) {
-    devServerVerifyInjected = true;
-  }
-
-  // Stage 4.7: Co-inject companion skills alongside agent-browser-verify on dev server detection.
-  // Companions share the same iteration guard and loop-guard bypass as agent-browser-verify.
-  if (devServerVerify.triggered && !devServerVerify.unavailable) {
-    for (const companion of DEV_SERVER_COMPANION_SKILLS) {
-      if (rankedSkills.includes(companion)) continue; // already present via pattern match
-      const companionAlreadySeen = !dedupOff && injectedSkills.has(companion);
-      if (companionAlreadySeen) {
-        // Bypass dedup for companions — same as agent-browser-verify iteration-based bypass
-        // But inject as summary-only on subsequent injections
-        forceSummarySkills.add(companion);
-        log.debug("dev-server-companion-dedup-bypass", { skill: companion, mode: "summary" });
-      }
-      // Insert after agent-browser-verify (or at front if verify not present)
-      const verifyIdx = rankedSkills.indexOf(DEV_SERVER_VERIFY_SKILL);
-      if (verifyIdx !== -1) {
-        rankedSkills.splice(verifyIdx + 1, 0, companion);
-      } else {
-        rankedSkills.unshift(companion);
-      }
-      matched.add(companion);
-      log.debug("dev-server-companion-inject", { skill: companion, iteration: devServerVerify.iterationCount });
-    }
-  }
-
-  // Stage 4.8: When loop guard blocks agent-browser-verify (count >= max), still inject
-  // companion skills like verification. Verification is useful precisely when a user restarts
-  // their dev server multiple times during debugging — it should survive past the iteration cap.
-  if (devServerVerify.loopGuardHit && !devServerVerify.unavailable) {
-    // Suppress agent-browser-verify from normal pattern matching — the loop guard blocks it
-    const verifyIdx = rankedSkills.indexOf(DEV_SERVER_VERIFY_SKILL);
-    if (verifyIdx !== -1) {
-      rankedSkills.splice(verifyIdx, 1);
-      log.debug("dev-server-verify-suppressed-by-loop-guard", { skill: DEV_SERVER_VERIFY_SKILL, count: devServerVerify.iterationCount });
-    }
-    for (const companion of DEV_SERVER_COMPANION_SKILLS) {
-      if (rankedSkills.includes(companion)) continue; // already present via pattern match
-      const companionAlreadySeen = !dedupOff && injectedSkills.has(companion);
-      if (companionAlreadySeen) {
-        forceSummarySkills.add(companion);
-        log.debug("dev-server-companion-loop-guard-dedup-bypass", { skill: companion, mode: "summary" });
-      }
-      rankedSkills.unshift(companion);
-      matched.add(companion);
-      log.debug("dev-server-companion-inject-past-guard", { skill: companion, iterationCount: devServerVerify.iterationCount, max: DEV_SERVER_VERIFY_MAX_ITERATIONS });
-    }
-  }
-
-  // Stage 4.9: Co-inject ai-elements alongside ai-sdk on client React files.
-  // AI Elements is mandatory for rendering AI-generated text in browser UIs,
-  // but only relevant for client components (not API routes or server actions).
-  let aiSdkCompanionInjected = false;
-  if (rankedSkills.includes(AI_SDK_SKILL) && isClientReactFile(toolName, toolInput)) {
-    for (const companion of AI_SDK_COMPANION_SKILLS) {
-      if (rankedSkills.includes(companion)) continue;
-      const companionAlreadySeen = !dedupOff && injectedSkills.has(companion);
-      if (companionAlreadySeen) {
-        forceSummarySkills.add(companion);
-        log.debug("ai-sdk-companion-dedup-bypass", { skill: companion, mode: "summary" });
-      }
-      const sdkIdx = rankedSkills.indexOf(AI_SDK_SKILL);
-      if (sdkIdx !== -1) {
-        rankedSkills.splice(sdkIdx + 1, 0, companion);
-      } else {
-        rankedSkills.unshift(companion);
-      }
-      matched.add(companion);
-      aiSdkCompanionInjected = true;
-      log.debug("ai-sdk-companion-inject", { skill: companion });
-    }
-  }
 
   let vercelEnvHelpInjected = false;
   if (vercelEnvHelp.triggered) {
@@ -1520,7 +1071,7 @@ function run(): string {
     }
   }
 
-  if (rankedSkills.length === 0 && !devServerUnavailableWarning && !vercelEnvHelpInjected) {
+  if (rankedSkills.length === 0 && !vercelEnvHelpInjected) {
     const reason = matched.size === 0 ? "no_matches" : "all_deduped";
     if (log.active) {
       timing.skill_read = 0;
@@ -1529,8 +1080,6 @@ function run(): string {
     log.complete(reason, {
       matchedCount: matched.size,
       dedupedCount: matched.size - rankedSkills.length,
-      tsxReviewTriggered: tsxReview.triggered,
-      devServerVerifyTriggered: devServerVerify.triggered,
       matchedSkills: [...matched],
       injectedSkills: [],
       boostsApplied: profilerBoosted,
@@ -1549,34 +1098,9 @@ function run(): string {
     injectedSkills,
     skillMap: skills.skillMap,
     logger: log,
-    forceSummarySkills: forceSummarySkills.size > 0 ? forceSummarySkills : undefined,
     platform,
   });
   if (log.active) timing.skill_read = Math.round(log.now() - tSkillRead);
-
-  // Append review marker if tsx review was triggered and skill was loaded
-  if (tsxReviewInjected && loaded.includes(TSX_REVIEW_SKILL)) {
-    parts.push(REVIEW_MARKER);
-    const prevCount = getTsxEditCount(sessionId);
-    resetTsxEditCount(sessionId);
-    log.debug("tsx-review-marker-added", { marker: REVIEW_MARKER });
-    log.trace("tsx-edit-counter-reset", { previousCount: prevCount, resetTo: 0, threshold: getReviewThreshold() });
-  }
-
-  // Append dev-server verify marker and increment iteration count
-  if (devServerVerifyInjected && loaded.includes(DEV_SERVER_VERIFY_SKILL)) {
-    const prevIteration = getDevServerVerifyCount(sessionId);
-    const iteration = incrementDevServerVerifyCount(sessionId);
-    parts.push(`${DEV_SERVER_VERIFY_MARKER.replace("-->", `iteration="${iteration}" max="${DEV_SERVER_VERIFY_MAX_ITERATIONS}" -->`)}`);
-    log.debug("dev-server-verify-marker-added", { iteration, max: DEV_SERVER_VERIFY_MAX_ITERATIONS });
-    log.trace("dev-server-verify-counter-increment", { previous: prevIteration, current: iteration, max: DEV_SERVER_VERIFY_MAX_ITERATIONS, remaining: DEV_SERVER_VERIFY_MAX_ITERATIONS - iteration });
-  }
-
-  // Inject unavailable warning instead of skill
-  if (devServerUnavailableWarning) {
-    parts.push(DEV_SERVER_UNAVAILABLE_WARNING);
-    log.debug("dev-server-unavailable-warning-injected", {});
-  }
 
   if (vercelEnvHelpInjected) {
     parts.push(VERCEL_ENV_HELP);
@@ -1589,8 +1113,6 @@ function run(): string {
       matchedCount: matched.size,
       dedupedCount: matchedEntries.length - newEntries.length,
       cappedCount: droppedByCap.length + droppedByBudget.length,
-      tsxReviewTriggered: tsxReview.triggered,
-      devServerVerifyTriggered: devServerVerify.triggered,
       matchedSkills: [...matched],
       injectedSkills: [],
       droppedByCap,
@@ -1608,8 +1130,6 @@ function run(): string {
     injectedCount: parts.length,
     dedupedCount: matchedEntries.length - newEntries.length,
     cappedCount,
-    tsxReviewTriggered: tsxReview.triggered,
-    devServerVerifyTriggered: devServerVerify.triggered,
     matchedSkills: [...matched],
     injectedSkills: loaded,
     droppedByCap,
@@ -1617,43 +1137,9 @@ function run(): string {
     boostsApplied: profilerBoosted,
   }, log.active ? timing : null);
 
-  // Stage 5.5: Build reasons map and verificationId for metadata traceability
+  // Stage 5.5: Build reasons map for metadata traceability
   const reasons: Record<string, SkillInjectionReason> = {};
-  let verificationId: string | undefined;
-  if (devServerVerify.triggered || devServerVerify.loopGuardHit) {
-    verificationId = generateVerificationId();
-    if (loaded.includes(DEV_SERVER_VERIFY_SKILL)) {
-      reasons[DEV_SERVER_VERIFY_SKILL] = {
-        trigger: "dev-server-start",
-        reasonCode: "bash-dev-server-pattern",
-      };
-    }
-    for (const companion of DEV_SERVER_COMPANION_SKILLS) {
-      if (loaded.includes(companion) || (summaryOnly && summaryOnly.includes(companion))) {
-        reasons[companion] = {
-          trigger: "dev-server-companion",
-          reasonCode: devServerVerify.loopGuardHit ? "loop-guard-companion" : "dev-server-co-inject",
-        };
-      }
-    }
-  }
-  if (tsxReview.triggered && loaded.includes(TSX_REVIEW_SKILL)) {
-    reasons[TSX_REVIEW_SKILL] = {
-      trigger: "tsx-edit-threshold",
-      reasonCode: "tsx-review-trigger",
-    };
-  }
-  if (aiSdkCompanionInjected) {
-    for (const companion of AI_SDK_COMPANION_SKILLS) {
-      if (loaded.includes(companion) || (summaryOnly && summaryOnly.includes(companion))) {
-        reasons[companion] = {
-          trigger: "ai-sdk-companion",
-          reasonCode: "ai-sdk-client-component",
-        };
-      }
-    }
-  }
-  // Add pattern-match reasons for remaining skills
+  // Add pattern-match reasons for skills
   for (const skill of loaded) {
     if (!reasons[skill] && matchReasons?.[skill]) {
       reasons[skill] = {
@@ -1676,7 +1162,6 @@ function run(): string {
     toolTarget,
     matchReasons,
     reasons,
-    verificationId,
     skillMap: skills.skillMap,
     platform,
     env: envUpdates,
@@ -1842,9 +1327,5 @@ if (isMainModule()) {
 
 export {
   run, validateSkillMap,
-  TSX_REVIEW_SKILL, REVIEW_MARKER, DEFAULT_REVIEW_THRESHOLD, isTsxEditTool, getTsxEditCount, resetTsxEditCount,
-  DEV_SERVER_VERIFY_SKILL, DEV_SERVER_VERIFY_MARKER, DEV_SERVER_VERIFY_MAX_ITERATIONS, DEV_SERVER_COMPANION_SKILLS,
-  AI_SDK_SKILL, AI_SDK_COMPANION_SKILLS, isClientReactFile,
   checkVercelEnvHelp,
-  DEV_SERVER_UNAVAILABLE_WARNING,
 };

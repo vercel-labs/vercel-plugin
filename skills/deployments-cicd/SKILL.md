@@ -27,8 +27,6 @@ validate:
     pattern: 'cron:\s*[''"]|from\s+[''"](node-cron)[''"]|cron\.schedule\('
     message: 'Manual cron scheduling detected. Use Vercel Cron Jobs (vercel.json crons) for platform-native scheduled tasks.'
     severity: recommended
-    upgradeToSkill: cron-jobs
-    upgradeWhy: 'Replace node-cron or CI-based schedules with Vercel Cron Jobs in vercel.json for managed, observable scheduled execution.'
     skipIfFileContains: 'vercel\.json.*crons|@vercel/cron'
 retrieval:
   aliases:
@@ -48,12 +46,6 @@ retrieval:
     - rollback
     - promote
     - CI workflow
-chainTo:
-  -
-    pattern: 'cron:\s*[''"]|from\s+[''\"](node-cron)[''"]|cron\.schedule\('
-    targetSkill: cron-jobs
-    message: 'Manual cron scheduling detected — loading Vercel Cron Jobs guidance for platform-native scheduling.'
-
 ---
 
 # Vercel Deployments & CI/CD

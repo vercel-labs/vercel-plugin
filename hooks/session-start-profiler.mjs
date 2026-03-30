@@ -25,39 +25,25 @@ var FILE_MARKERS = [
   { file: "next.config.mjs", skills: ["nextjs", "turbopack"] },
   { file: "next.config.ts", skills: ["nextjs", "turbopack"] },
   { file: "next.config.mts", skills: ["nextjs", "turbopack"] },
-  { file: "turbo.json", skills: ["turborepo"] },
   { file: "vercel.json", skills: ["vercel-cli", "deployments-cicd", "vercel-functions"] },
-  { file: ".mcp.json", skills: ["vercel-api"] },
   { file: "middleware.ts", skills: ["routing-middleware"] },
   { file: "middleware.js", skills: ["routing-middleware"] },
   { file: "components.json", skills: ["shadcn"] },
-  { file: ".env.local", skills: ["env-vars"] },
-  { file: "pnpm-workspace.yaml", skills: ["turborepo"] },
-  { file: "backend/pyproject.toml", skills: ["vercel-services"] },
-  { file: "backend/main.py", skills: ["vercel-services"] },
-  { file: "backend/go.mod", skills: ["vercel-services"] },
-  { file: "backend/main.go", skills: ["vercel-services"] }
+  { file: ".env.local", skills: ["env-vars"] }
 ];
 var PACKAGE_MARKERS = {
   "next": ["nextjs"],
-  "ai": ["ai-sdk", "ai-elements"],
-  "ai-elements": ["ai-elements"],
+  "ai": ["ai-sdk"],
   "@ai-sdk/openai": ["ai-sdk"],
   "@ai-sdk/anthropic": ["ai-sdk"],
-  "@ai-sdk/react": ["ai-sdk", "ai-elements"],
+  "@ai-sdk/react": ["ai-sdk"],
   "@ai-sdk/gateway": ["ai-sdk", "ai-gateway"],
   "@vercel/blob": ["vercel-storage"],
   "@vercel/kv": ["vercel-storage"],
   "@vercel/postgres": ["vercel-storage"],
   "@vercel/edge-config": ["vercel-storage"],
-  "@vercel/analytics": ["observability"],
-  "@vercel/speed-insights": ["observability"],
-  "@vercel/flags": ["vercel-flags"],
   "@vercel/workflow": ["workflow"],
-  "@vercel/queue": ["vercel-queues"],
   "@vercel/sandbox": ["vercel-sandbox"],
-  "@vercel/sdk": ["vercel-api"],
-  "turbo": ["turborepo"],
   "@repo/auth": ["next-forge"],
   "@repo/database": ["next-forge"],
   "@repo/design-system": ["next-forge"],
@@ -126,12 +112,10 @@ function profileProject(projectRoot) {
   }
   const vercelConfig = safeReadJson(join(projectRoot, "vercel.json"));
   if (vercelConfig) {
-    if (vercelConfig.crons) skills.add("cron-jobs");
     if (vercelConfig.rewrites || vercelConfig.redirects || vercelConfig.headers) {
       skills.add("routing-middleware");
     }
     if (vercelConfig.functions) skills.add("vercel-functions");
-    if (vercelConfig.experimentalServices) skills.add("vercel-services");
   }
   return [...skills].sort();
 }
@@ -314,10 +298,6 @@ function checkVercelCli() {
   const needsUpdate = versionComparison === null ? !!(currentVersion && latestVersion && currentVersion !== latestVersion) : versionComparison < 0;
   return { installed: true, currentVersion, latestVersion, needsUpdate };
 }
-var AGENT_BROWSER_BINARY = "agent-browser";
-function checkAgentBrowser() {
-  return resolveBinaryFromPath(AGENT_BROWSER_BINARY) !== null;
-}
 function parseSessionStartInput(raw) {
   try {
     if (!raw.trim()) return null;
@@ -375,9 +355,7 @@ function logBrokenSkillFrontmatterSummary(rootDir = pluginRoot(), logger = log) 
   }
 }
 function buildSessionStartProfilerEnvVars(args) {
-  const envVars = {
-    VERCEL_PLUGIN_AGENT_BROWSER_AVAILABLE: args.agentBrowserAvailable ? "1" : "0"
-  };
+  const envVars = {};
   if (args.greenfield) {
     envVars.VERCEL_PLUGIN_GREENFIELD = "true";
   }
@@ -437,16 +415,10 @@ async function main() {
   const cliStatus = checkVercelCli();
   const userMessages = buildSessionStartProfilerUserMessages(greenfield, cliStatus);
   const likelySkills = greenfield ? GREENFIELD_DEFAULT_SKILLS : profileProject(projectRoot);
-  if (!greenfield && !likelySkills.includes("observability")) {
-    likelySkills.push("observability");
-    likelySkills.sort();
-  }
   const setupSignals = greenfield ? GREENFIELD_SETUP_SIGNALS : profileBootstrapSignals(projectRoot);
   const greenfieldValue = greenfield ? "true" : "";
   const likelySkillsValue = likelySkills.join(",");
-  const agentBrowserAvailable = checkAgentBrowser();
   const envVars = buildSessionStartProfilerEnvVars({
-    agentBrowserAvailable,
     greenfield: greenfield !== null,
     likelySkills,
     setupSignals
@@ -502,7 +474,6 @@ async function main() {
         bootstrapHints: setupSignals.bootstrapHints,
         resourceHints: setupSignals.resourceHints,
         setupMode: setupSignals.setupMode,
-        agentBrowserAvailable,
         timestamp: (/* @__PURE__ */ new Date()).toISOString()
       };
       writeFileSync(profileCachePath(sessionId), JSON.stringify(cache), "utf-8");
@@ -538,7 +509,6 @@ if (isSessionStartProfilerEntrypoint) {
 export {
   buildSessionStartProfilerEnvVars,
   buildSessionStartProfilerUserMessages,
-  checkAgentBrowser,
   checkGreenfield,
   detectSessionStartPlatform,
   formatSessionStartProfilerCursorOutput,

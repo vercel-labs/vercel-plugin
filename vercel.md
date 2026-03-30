@@ -39,17 +39,9 @@ VERCEL PLATFORM                            📖 docs: https://vercel.com/docs
 │   ⊃ Routing Middleware (request interception before cache, any framework)
 │   ⊃ Runtime Cache (per-region key-value, tag-based invalidation)
 │   ⊃ Cron Jobs (scheduled function invocation → see § Functions decision matrix)
-│   ⤳ skill: cron-jobs
 │   ⤳ skill: vercel-functions
 │   ⤳ skill: routing-middleware
 │   ⤳ skill: runtime-cache
-│
-├── Services API (multiple services in one project)
-│   ⊃ experimentalServices in vercel.json
-│   ⊃ Multiple backends and frontends deployed to the same domain
-│   → Deployment Engine (services deployed as one application)
-│   ↔ Vercel CLI (vercel dev auto-detects and runs all services)
-│   ⤳ skill: vercel-services  📖 docs: https://vercel.com/docs/services
 │
 ├── Domains & DNS
 │   → Deployment Engine
@@ -92,21 +84,6 @@ VERCEL PLATFORM                            📖 docs: https://vercel.com/docs
 │       → 7 apps (app, web, api, email, docs, studio, storybook)
 │       → 20 @repo/* workspace packages
 │
-├── Vercel Queues (durable event streaming)
-│   ⊃ Topics, consumer groups, delayed delivery
-│   ⊃ At-least-once delivery, 3-AZ durability
-│   → Vercel Functions (consumers run as functions)
-│   ↔ Workflow DevKit (Queues powers WDK under the hood)
-│   ⤳ skill: vercel-queues
-│
-├── Vercel Flags (feature flags platform)
-│   ⊃ Unified dashboard, Flags Explorer
-│   ⊃ Gradual rollouts, A/B testing
-│   ⊃ Provider adapters (LaunchDarkly, Statsig, Hypertune)
-│   ↔ Edge Config (flag storage at the edge)
-│   ↔ Vercel Toolbar (flag toggles in preview)
-│   ⤳ skill: vercel-flags
-│
 └── Teams & Access Control
     ↔ Vercel REST API
     ↔ Vercel Dashboard
@@ -144,7 +121,7 @@ NEXT.JS (v16+)                           ⤳ skill: nextjs  📖 docs: https://n
 │
 ├── Key Integrations
 │   ↔ Vercel AI SDK (chat UIs, streaming, tool calling)
-│   ↔ Vercel Analytics / Speed Insights           ⤳ skill: observability
+│   ↔ Vercel Analytics / Speed Insights
 │   ↔ Vercel Image Optimization (next/image)      ⤳ skill: nextjs
 │   ↔ Satori / @vercel/og (dynamic OG images)     ⤳ skill: nextjs
 │   ↔ Vercel Font Optimization (next/font)
@@ -170,8 +147,7 @@ SHADCN/UI                                ⤳ skill: shadcn  📖 docs: https://u
 │
 └── Integrations
     ↔ Next.js (primary framework)
-    ↔ AI Elements (AI components built on shadcn)     ⤳ skill: ai-elements
-    ↔ v0 (generates shadcn/ui components)             ⤳ skill: v0-dev
+    ↔ AI Elements (AI components built on shadcn)         ↔ v0 (generates shadcn/ui components)
     ↔ Vite, Remix, Astro, Laravel (all supported)
 
 OTHER SUPPORTED FRAMEWORKS
@@ -210,10 +186,8 @@ AI SDK (v6, TypeScript)                    ⤳ skill: ai-sdk  📖 docs: https:/
 │   ⊃ useCompletion (text completion hook)
 │   ⊃ useObject (structured streaming hook)
 │   ⊃ UIMessage / ModelMessage types
-│   ↔ AI Elements (pre-built chat UI components)       ⤳ skill: ai-elements
-│
-├── AI Elements (ai-elements) — MANDATORY UI FOR ALL AI TEXT  ⤳ skill: ai-elements
-│   ⊃ 40+ React components for AI interfaces
+│   ↔ AI Elements (pre-built chat UI components)       │
+├── AI Elements (ai-elements) — MANDATORY UI FOR ALL AI TEXT  │   ⊃ 40+ React components for AI interfaces
 │   ⊃ Message (chat with useChat), MessageResponse (any AI markdown)
 │   ⊃ Conversation, Tool, Reasoning, CodeBlock
 │   ⊃ Built on shadcn/ui (custom registry)
@@ -247,16 +221,14 @@ AI SDK (v6, TypeScript)                    ⤳ skill: ai-sdk  📖 docs: https:/
 │   ⊃ SSE-based (Server-Sent Events)
 │   → Vercel Functions (streaming support)
 │   ↔ Next.js Route Handlers / Server Actions
-│   ↔ AI Elements (render streaming responses)          ⤳ skill: ai-elements
-│
+│   ↔ AI Elements (render streaming responses)          │
 └── Key Patterns
     ↔ Next.js (chat apps, AI features in web apps)
     ↔ Workflow DevKit (durable agents)
     ↔ AI Gateway (model routing, cost tracking)
     ↔ Generation Persistence (IDs, URLs, cost tracking) ⤳ skill: ai-sdk
     ↔ v0 (AI-generated UI components)
-    ↔ AI Elements (production chat UI components)      ⤳ skill: ai-elements
-    ↔ shadcn/ui (component foundation)                 ⤳ skill: shadcn
+    ↔ AI Elements (production chat UI components)          ↔ shadcn/ui (component foundation)                 ⤳ skill: shadcn
 
 AI GATEWAY                                 ⤳ skill: ai-gateway  📖 docs: https://vercel.com/docs/ai-gateway
 ├── Unified API ("creator/model-name" format)
@@ -325,25 +297,6 @@ WORKFLOW DEVKIT (WDK)                      ⤳ skill: workflow  📖 docs: https
     ↔ Vercel Functions (automatic step isolation)
     ↔ Next.js (API routes as workflow endpoints)
 
-v0 (AI Development Agent)                  ⤳ skill: v0-dev  📖 docs: https://v0.dev/docs
-├── Capabilities
-│   ⊃ Natural language → production React/Next.js code
-│   ⊃ Visual input (Figma, screenshots, sketches)
-│   ⊃ Multi-framework output (React, Vue, Svelte, HTML)
-│   ⊃ Agentic intelligence (research, plan, debug, iterate)
-│
-├── Integration Features
-│   ⊃ GitHub Integration (branches, PRs, deploy on merge)
-│   ⊃ One-click Vercel deployment
-│   ⊃ Environment variable import from Vercel
-│   ⊃ shadcn/ui + Tailwind CSS defaults
-│
-└── Ecosystem Position
-    → Next.js (primary output framework)
-    → Vercel Platform (deployment target)
-    ↔ AI SDK (AI features in generated apps)
-    ↔ Vercel Marketplace (integrations in generated apps)
-
 CHAT SDK (TypeScript)                       ⤳ skill: chat-sdk  📖 docs: https://chat-sdk.dev
 ├── Core
 │   ⊃ Chat class (event routing, adapter coordination)
@@ -408,30 +361,6 @@ VERCEL AGENT                               ⤳ skill: vercel-agent  📖 docs: h
 ## 4. Build Tools
 
 ```
-TURBOREPO                                  ⤳ skill: turborepo  📖 docs: https://turbo.build/repo/docs
-├── Purpose: Monorepo build orchestration
-│   ⊃ Task caching (local + remote)
-│   ⊃ Parallel execution (all cores)
-│   ⊃ Incremental builds (content-aware hashing)
-│   ⊃ --affected flag (changed packages only)
-│   ⊃ Pruned subsets (deploy only what's needed)
-│   ⊃ Rust-powered core
-│
-├── Remote Caching
-│   → Vercel Account (free tier available)
-│   ↔ CI/CD pipelines (shared cache across machines)
-│
-├── Conformance (code quality + best-practice checks for monorepos)
-│   ⊃ Automated rule enforcement (ESLint, TypeScript, import boundaries)
-│   ↔ Turborepo (runs as part of task pipeline)
-│   ↔ Vercel Platform (enforced on deploy)
-│   ⤳ skill: turborepo  (Conformance is configured within Turborepo)
-│
-└── Integrations
-    ↔ Next.js (monorepo with multiple Next.js apps)
-    ↔ Vercel Platform (auto-detected, optimized builds)
-    ↔ Turbopack (per-app bundling)
-
 TURBOPACK                                  ⤳ skill: turbopack  📖 docs: https://turbo.build/pack/docs
 ├── Purpose: JavaScript/TypeScript bundler
 │   ⊃ Instant HMR (doesn't degrade with app size)
@@ -449,25 +378,10 @@ TURBOPACK                                  ⤳ skill: turbopack  📖 docs: http
     ⊃ Lives in the Next.js monorepo
 ```
 
-AGENT BROWSER                              ⤳ skill: agent-browser
-├── Purpose: Browser automation for dev-server testing
-│   ⊃ Snapshot-driven interaction with localhost
-│   ⊃ Works with next dev, vite, nuxt dev, vercel dev
-│
-└── Use When: Verifying UI behavior, form testing, e2e workflows
-
-AGENT BROWSER VERIFY                       ⤳ skill: agent-browser-verify
-├── Purpose: Automated dev-server verification checklist
-│   ⊃ Triggers on dev-server start (next dev, vite, etc.)
-│   ⊃ Runs visual gut-check: page loads, no errors, key UI renders
-│
-└── Use When: After starting a dev server, before continuing development
-
 VERIFICATION                                   ⤳ skill: verification
 ├── Purpose: Full-story verification orchestrator
 │   ⊃ Infers the user story from recent edits and project structure
 │   ⊃ Verifies end-to-end: browser → API → data → response
-│   ⊃ Coordinates agent-browser-verify, investigation-mode, observability
 │
 └── Use When: Dev server starts, user says "something's off", or verifying a feature works end-to-end
 
@@ -523,17 +437,6 @@ MARKETPLACE STORAGE (partner-provided)     ⤳ skill: vercel-storage
 ## 6. Security
 
 ```
-SIGN IN WITH VERCEL                        ⤳ skill: sign-in-with-vercel  📖 docs: https://vercel.com/docs/security/sign-in-with-vercel
-├── OAuth 2.0 / OIDC Identity Provider
-│   ⊃ Authorization Code flow
-│   ⊃ ID tokens with user profile claims
-│   ⊃ Access tokens for Vercel API calls
-│
-└── Integrations
-    ↔ Teams & Access Control (team-scoped auth)
-    ↔ Vercel REST API (token exchange)
-    ↔ Next.js (auth route handlers)
-
 AUTHENTICATION INTEGRATIONS                ⤳ skill: auth
 ├── Clerk (native Vercel Marketplace)
 │   ⊃ Auto-provisioned env vars
@@ -556,42 +459,7 @@ AUTHENTICATION INTEGRATIONS                ⤳ skill: auth
 
 ---
 
-## 7. Observability
-
-```
-VERCEL OBSERVABILITY                        ⤳ skill: observability  📖 docs: https://vercel.com/docs/analytics
-├── Web Analytics
-│   ⊃ First-party, privacy-friendly
-│   ⊃ Custom events (Pro/Enterprise)
-│   ⊃ UTM parameters (Analytics Plus)
-│   ↔ Next.js (@vercel/analytics)
-│
-├── Speed Insights
-│   ⊃ Real user performance data
-│   ⊃ Core Web Vitals
-│   ↔ Next.js (@vercel/speed-insights)
-│
-├── Monitoring & Logs
-│   ⊃ Real-time infrastructure logs
-│   ⊃ Function runtime logs
-│   ⊃ Custom queries and visualizations
-│   ⤳ skill: investigation-mode
-│
-├── Vercel Drains (export observability data)
-│   ⊃ OpenTelemetry-compatible traces
-│   ⊃ Web analytics events
-│   ⊃ Speed Insights metrics
-│   → Datadog, Honeycomb, Grafana Tempo, New Relic
-│
-└── Integrations
-    ↔ Vercel Firewall (security event logs)
-    ↔ Vercel Functions (automatic tracing)
-    ↔ Next.js (automatic instrumentation)
-```
-
----
-
-## 8. CLI & API
+## 7. CLI & API
 
 ```
 VERCEL CLI (vercel / vc)                   ⤳ skill: vercel-cli  📖 docs: https://vercel.com/docs/cli
@@ -630,47 +498,6 @@ VERCEL CLI (vercel / vc)                   ⤳ skill: vercel-cli  📖 docs: htt
     ⊃ VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
     ↔ Any CI provider (GitHub Actions, Azure DevOps, etc.)
 
-VERCEL MCP SERVER (Official)                ⤳ skill: vercel-api  📖 docs: https://vercel.com/docs/mcp
-├── URL: https://mcp.vercel.com
-│   ⊃ Streamable HTTP transport
-│   ⊃ OAuth 2.1 authentication (automatic)
-│   ⊃ Read-only in initial release (Beta)
-│
-├── MCP Tools
-│   ⊃ Search & navigate Vercel / Next.js / AI SDK docs
-│   ⊃ List & inspect projects and deployments
-│   ⊃ Query build logs and function invocation logs
-│   ⊃ List domains and environment variables
-│   ⊃ View team members and settings
-│
-├── Supported AI Clients
-│   ⊃ Claude Code (`claude mcp add --transport http vercel https://mcp.vercel.com`)
-│   ⊃ Cursor, VS Code (reviewed and approved clients)
-│
-└── Relationship to REST API
-    → Uses Vercel REST API under the hood
-    ↔ AI SDK MCP Client (@ai-sdk/mcp)
-
-VERCEL REST API / @vercel/sdk               ⤳ skill: vercel-api  📖 docs: https://vercel.com/docs/rest-api
-├── Endpoint Categories
-│   ⊃ /v1/deployments — Create, list, inspect, cancel
-│   ⊃ /v1/projects — CRUD, environment variables, domains
-│   ⊃ /v1/teams — Members, billing, settings
-│   ⊃ /v1/domains — Register, configure, transfer
-│   ⊃ /v1/dns — Record management
-│   ⊃ /v1/certs — SSL certificate management
-│   ⊃ /v1/secrets — Secret management
-│   ⊃ /v1/integrations — Marketplace integration management
-│   ⊃ /v1/edge-config — Edge Config management
-│   ⊃ /v1/firewall — WAF rule management
-│
-├── SDK (@vercel/sdk)
-│   ⊃ TypeScript SDK for all API endpoints
-│   ⊃ vercel.deployments, vercel.projects, etc.
-│
-└── Authentication
-    ⊃ Bearer Token (personal or team)
-    ⊃ OAuth (for integrations)
 ```
 
 ---
@@ -730,7 +557,7 @@ VERCEL MARKETPLACE                          ⤳ skill: marketplace  📖 docs: h
 | **Any AI-generated text (mandatory)** | **AI Elements `<MessageResponse>`** | **Universal markdown renderer — never render AI text as raw `{text}`. Use for chat, workflows, reports, notifications** |
 | Chat interface | AI SDK `useChat` + `streamText` + AI Gateway + AI Elements | Streaming UI, provider-agnostic |
 | Chat UI components (messages, tools, reasoning) | AI Elements (`npx ai-elements`) | Pre-built, handles UIMessage parts |
-| Custom chat rendering (no AI Elements) | Manual `message.parts` iteration | Full control, see ⤳ skill: json-render |
+| Custom chat rendering (no AI Elements) | Manual `message.parts` iteration | Full control over rendering |
 | Image generation (default) | AI Gateway `model: 'google/gemini-3.1-flash-image-preview'` + `generateText` → `result.files` | Multimodal LLM, best quality, gateway-native |
 | Image generation (image-only models) | `experimental_generateImage` (Imagen 4.0, Flux 2) | Only for dedicated image models, not multimodal LLMs |
 | Structured data extraction | AI SDK `generateText` + `Output.object()` + AI Gateway | Type-safe, schema-validated |

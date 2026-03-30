@@ -66,11 +66,6 @@ chainTo:
     message: 'middleware.ts with next/server imports detected — loading Next.js guidance for proxy.ts migration (Next.js 16 renames middleware.ts to proxy.ts with Node.js runtime).'
     skipIfFileContains: 'proxy\.ts|runtime.*nodejs'
   -
-    pattern: 'from\s+[''""](cookie|cookies-next)[''""]|req\.cookies\.get\s*\(|NextResponse\.next\(\s*\{.*headers'
-    targetSkill: vercel-flags
-    message: 'Cookie-based routing in middleware — loading Vercel Flags guidance for managed feature flags with Edge Config storage.'
-    skipIfFileContains: '@vercel/flags|@vercel/edge-config'
-  -
     pattern: 'from\s+[''""](jsonwebtoken)[''""]|jwt\.(verify|decode)\('
     targetSkill: auth
     message: 'Manual JWT verification in middleware — loading Auth guidance for managed auth middleware patterns (Clerk, Descope).'

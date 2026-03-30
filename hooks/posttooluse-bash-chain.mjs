@@ -31,15 +31,6 @@ var PACKAGE_SKILL_MAP = {
     skill: "vercel-functions",
     message: "Koa detected \u2014 consider Vercel Functions with Web Request/Response API for serverless deployment."
   },
-  // Queue / background job libraries → Vercel Queues
-  bullmq: {
-    skill: "vercel-queues",
-    message: "BullMQ detected \u2014 Vercel Queues provides durable event streaming without self-managed Redis. Loading Queues guidance."
-  },
-  bull: {
-    skill: "vercel-queues",
-    message: "Bull detected \u2014 Vercel Queues provides durable event streaming without self-managed Redis. Loading Queues guidance."
-  },
   // Database / ORM libraries → Vercel Storage
   mongoose: {
     skill: "vercel-storage",
@@ -145,21 +136,7 @@ var PACKAGE_SKILL_MAP = {
     skill: "ai-sdk",
     message: "@ai-sdk/react installed \u2014 loading AI SDK v6 guidance for React hooks."
   },
-  // Feature flags
-  "@vercel/flags": {
-    skill: "vercel-flags",
-    message: "Vercel Flags installed \u2014 loading feature flags guidance."
-  },
-  // SWR
-  swr: {
-    skill: "swr",
-    message: "SWR installed \u2014 loading data-fetching guidance."
-  },
   // Security / middleware
-  helmet: {
-    skill: "vercel-firewall",
-    message: "Helmet detected \u2014 Vercel Firewall provides DDoS protection, WAF rules, and security headers at the edge. Loading Firewall guidance."
-  },
   cors: {
     skill: "routing-middleware",
     message: "cors detected \u2014 Vercel Routing Middleware handles CORS at the platform level with rewrites and headers. Loading Routing Middleware guidance."
@@ -168,15 +145,6 @@ var PACKAGE_SKILL_MAP = {
   dotenv: {
     skill: "env-vars",
     message: "dotenv detected \u2014 Vercel manages environment variables natively via `vercel env`. Loading env-vars guidance."
-  },
-  // Cron / scheduling → Vercel cron jobs
-  "node-cron": {
-    skill: "cron-jobs",
-    message: "node-cron detected \u2014 Vercel Cron Jobs provides managed scheduling via vercel.json. Loading cron guidance."
-  },
-  cron: {
-    skill: "cron-jobs",
-    message: "cron package detected \u2014 Vercel Cron Jobs provides managed scheduling via vercel.json. Loading cron guidance."
   }
 };
 var log = createLogger();

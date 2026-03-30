@@ -299,4 +299,4 @@ jobs:
 
 ---
 
-Always reference the **Vercel CLI skill** (`⤳ skill: vercel-cli`) for specific commands, the **Vercel Functions skill** (`⤳ skill: vercel-functions`) for compute configuration, and the **Vercel API skill** (`⤳ skill: vercel-api`) for programmatic deployment management.
+Always reference the **Vercel CLI skill** (`⤳ skill: vercel-cli`) for specific commands, the **Vercel Functions skill** (`⤳ skill: vercel-functions`) for compute configuration, and use MCP or REST API for programmatic deployment management.

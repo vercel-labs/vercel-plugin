@@ -21,12 +21,11 @@ Run these checks before any deployment. Stop on failure and print actionable gui
    - If not a git repo, skip this check.
 5. **Observability preflight** (production deploys only) —
 
-<!-- Sourced from observability skill: Drains > Deploy Preflight Observability -->
 Before promoting to production, verify observability readiness:
 
 - **Drains check**: Query configured drains via MCP `list_drains` or REST API. If no drains are configured on a Pro/Enterprise plan, warn:
   > ⚠️ No drains configured. Production errors won't be forwarded to external monitoring.
-  > Configure drains via Dashboard or REST API before promoting. See `⤳ skill: observability`.
+  > Configure drains via Dashboard or REST API before promoting.
 - **Errored drains**: If any drain is in error state, warn and suggest remediation before deploying:
   > ⚠️ Drain "<url>" is errored. Fix or recreate before production deploy to avoid monitoring gaps.
 - **Error monitoring**: Check that at least one of these is in place: configured drains, an error tracking integration (e.g., Sentry, Datadog via `vercel integration ls`), or `@vercel/analytics` in the project.
@@ -121,7 +120,6 @@ If the deployment state is **READY**, note the URL is live and accessible.
 
 ### 4. Post-Deploy Error Scan (production deploys)
 
-<!-- Sourced from observability skill: Drains > Post-Deploy Error Scan -->
 For production deployments, wait 60 seconds after READY state, then scan for early runtime errors:
 
 ```bash
@@ -151,7 +149,7 @@ vercel logs <deployment-url> --level error --follow
 vercel logs <deployment-url> --level error --since 1h --json
 ```
 
-> For richer post-deploy monitoring, configure drains to forward logs/traces to an external platform. See `⤳ skill: observability`.
+> For richer post-deploy monitoring, configure drains to forward logs/traces to an external platform via Dashboard or REST API.
 
 ## Summary
 

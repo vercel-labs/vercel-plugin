@@ -9,7 +9,6 @@ You are a Vercel performance optimization specialist. Use the diagnostic trees b
 
 ## Core Web Vitals Reference
 
-<!-- Sourced from observability skill: Speed Insights > Metrics Tracked -->
 | Metric | What It Measures | Good Threshold |
 |--------|-----------------|----------------|
 | LCP | Largest Contentful Paint | < 2.5s |
@@ -386,7 +385,6 @@ export async function createPost(data: FormData) {
 
 ## Performance Audit Checklist
 
-<!-- Sourced from observability skill: Drains > Performance Audit Checklist -->
 Run through this when asked to optimize a Vercel application:
 
 1. **Measure first**: Check Speed Insights dashboard for real-user CWV data
@@ -934,4 +932,4 @@ function ClientComponent() {
 
 Report findings as: **Issue** → **Impact** (which CWV affected, by how much) → **Recommendation** (specific code change) → **Expected Improvement** (target metric).
 
-Always reference the **Next.js skill** (`⤳ skill: nextjs`) for framework patterns and the **Observability skill** for monitoring setup.
+Always reference the **Next.js skill** (`⤳ skill: nextjs`) for framework patterns. For monitoring setup, configure drains via Dashboard or REST API.

@@ -37,11 +37,6 @@ var DEFAULT_PROMPT_MIN_SCORE = 6;
 var PROJECT_CONTEXT_PROMPT_SCORE_BOOST = 3;
 var DOMINANT_TOPIC_SCORE_THRESHOLD = 600;
 var DOMINANT_TOPIC_MIN_SCORE = 50;
-var INVESTIGATION_COMPANION_SKILLS = [
-  "workflow",
-  "agent-browser-verify",
-  "vercel-cli"
-];
 var log = createLogger();
 function getSeenSkillsEnv() {
   return typeof process.env[ENV_SEEN_SKILLS_KEY] === "string" ? process.env[ENV_SEEN_SKILLS_KEY] : "";
@@ -441,27 +436,6 @@ function matchPromptSignals(normalizedPrompt, skills, logger, options) {
   });
   return matches;
 }
-function selectInvestigationCompanion(selectedSkills, perSkillResults) {
-  if (!selectedSkills.includes("investigation-mode")) {
-    return { companion: null, reason: "investigation-mode not selected" };
-  }
-  let bestCompanion = null;
-  let bestScore = -Infinity;
-  for (const candidate of INVESTIGATION_COMPANION_SKILLS) {
-    const result = perSkillResults[candidate];
-    if (result && result.matched && result.score > bestScore) {
-      bestScore = result.score;
-      bestCompanion = candidate;
-    }
-  }
-  if (!bestCompanion) {
-    return { companion: null, reason: "no companion scored high enough" };
-  }
-  return {
-    companion: bestCompanion,
-    reason: `companion "${bestCompanion}" scored ${bestScore}`
-  };
-}
 function deduplicateAndInject(matches, skills, logger, platform) {
   const l = logger || log;
   const dedupOff = process.env.VERCEL_PLUGIN_HOOK_DEDUP === "off";
@@ -623,7 +597,7 @@ function run() {
       durationMs: log.active ? log.elapsed() : void 0
     });
   } else if (intentResult.reason === "suppressed by test framework mention") {
-    const suppressSet = /* @__PURE__ */ new Set(["verification", "investigation-mode", "agent-browser-verify"]);
+    const suppressSet = /* @__PURE__ */ new Set(["verification"]);
     const before = report.selectedSkills.length;
     report.selectedSkills = report.selectedSkills.filter((s) => !suppressSet.has(s));
     if (report.selectedSkills.length < before) {
@@ -635,7 +609,7 @@ function run() {
       });
     }
   }
-  const investigationSkills = ["investigation-mode", "observability", "workflow"];
+  const investigationSkills = ["workflow"];
   const matchedInvestigation = Object.entries(report.perSkillResults).filter(([skill, r]) => r.matched && investigationSkills.includes(skill));
   if (matchedInvestigation.length > 0) {
     logDecision(log, {
@@ -643,38 +617,6 @@ function run() {
       event: "investigation_intent_detected",
       reason: "frustration_or_debug_signals",
       skills: matchedInvestigation.map(([skill, r]) => ({ skill, score: r.score })),
-      durationMs: log.active ? log.elapsed() : void 0
-    });
-  }
-  const companionResult = selectInvestigationCompanion(
-    report.selectedSkills,
-    report.perSkillResults
-  );
-  if (companionResult.companion) {
-    const companion = companionResult.companion;
-    const newSelected = ["investigation-mode"];
-    if (!report.selectedSkills.includes(companion)) {
-      newSelected.push(companion);
-    } else {
-      newSelected.push(companion);
-    }
-    report.selectedSkills.length = 0;
-    report.selectedSkills.push(...newSelected);
-    logDecision(log, {
-      hook: "UserPromptSubmit",
-      event: "companion_selected",
-      skill: "investigation-mode",
-      companion,
-      reason: companionResult.reason,
-      durationMs: log.active ? log.elapsed() : void 0
-    });
-  } else if (report.selectedSkills.length > 1) {
-    logDecision(log, {
-      hook: "UserPromptSubmit",
-      event: "companion_selected",
-      skill: report.selectedSkills[0],
-      companion: report.selectedSkills[1],
-      reason: "multi_skill_prompt_match",
       durationMs: log.active ? log.elapsed() : void 0
     });
   }
@@ -818,13 +760,11 @@ if (isMainModule()) {
   }
 }
 export {
-  INVESTIGATION_COMPANION_SKILLS,
   deduplicateAndInject,
   formatOutput,
   matchPromptSignals,
   parsePromptInput,
   resolvePromptSeenSkillState,
   run,
-  selectInvestigationCompanion,
   syncPromptSeenSkillClaims
 };
