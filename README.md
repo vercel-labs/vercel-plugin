@@ -42,7 +42,7 @@ A text-form relational graph covering:
 - Common cross-product workflows
 - Migration awareness for sunset products
 
-### Skills (28 skills)
+### Skills (25 skills)
 
 | Skill | Covers |
 |-------|--------|
@@ -59,15 +59,12 @@ A text-form relational graph covering:
 | `next-forge` | Production SaaS monorepo starter — Turborepo, Clerk, Prisma/Neon, Stripe, shadcn/ui |
 | `next-upgrade` | Next.js version upgrades — codemods, migration guides, dependency updates |
 | `nextjs` | App Router, Server Components, Server Actions, Cache Components, routing, rendering strategies |
-| `observability` | Web Analytics, Speed Insights, runtime logs, Log Drains, OpenTelemetry, monitoring |
 | `react-best-practices` | React/Next.js performance optimization — 64 rules across 8 categories |
 | `routing-middleware` | Request interception before cache, rewrites, redirects, personalization — Edge/Node.js/Bun runtimes |
 | `runtime-cache` | Ephemeral per-region key-value cache, tag-based invalidation, shared across Functions/Middleware/Builds |
 | `shadcn` | shadcn/ui — CLI, component installation, custom registries, theming, Tailwind CSS integration |
 | `turbopack` | Next.js bundler, HMR, configuration, Turbopack vs Webpack |
-| `turborepo` | Monorepo orchestration, caching, remote caching, --affected, pruned subsets |
 | `vercel-agent` | AI-powered code review, incident investigation, SDK installation, PR analysis |
-| `vercel-api` | Vercel MCP Server and REST API — projects, deployments, env vars, domains, logs |
 | `vercel-cli` | All CLI commands — deploy, env, dev, domains, cache management, MCP integration, marketplace |
 | `vercel-functions` | Serverless, Edge, Fluid Compute, streaming, Cron Jobs, configuration |
 | `vercel-sandbox` | Ephemeral Firecracker microVMs for running untrusted/AI-generated code safely |
@@ -140,7 +137,6 @@ skills/<name>/
 | `next-upgrade` | [vercel-labs/next-skills](https://github.com/vercel-labs/next-skills) |
 | `nextjs` | [vercel-labs/next-skills](https://github.com/vercel-labs/next-skills) |
 | `react-best-practices` | [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) |
-| `turborepo` | [vercel/turborepo](https://github.com/vercel/turborepo) |
 | `vercel-cli` | [vercel/vercel](https://github.com/vercel/vercel) |
 | `vercel-sandbox` | [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) |
 | `workflow` | [vercel/workflow](https://github.com/vercel/workflow) |
@@ -168,7 +164,7 @@ Exits non-zero if any `SKILL.md` is stale. Add to CI to catch drift.
 vercel-plugin/
 ├── .plugin/plugin.json              # Plugin manifest
 ├── vercel.md                        # Ecosystem graph + conventions (injected via SessionStart hook)
-├── skills/                          # 32 skills
+├── skills/                          # 25 skills
 │   ├── ai-sdk/                      # Upstream-synced skill example:
 │   │   ├── overlay.yaml             #   Plugin injection metadata
 │   │   ├── upstream/                #   Pure upstream content

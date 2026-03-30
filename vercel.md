@@ -121,7 +121,7 @@ NEXT.JS (v16+)                           ⤳ skill: nextjs  📖 docs: https://n
 │
 ├── Key Integrations
 │   ↔ Vercel AI SDK (chat UIs, streaming, tool calling)
-│   ↔ Vercel Analytics / Speed Insights           ⤳ skill: observability
+│   ↔ Vercel Analytics / Speed Insights
 │   ↔ Vercel Image Optimization (next/image)      ⤳ skill: nextjs
 │   ↔ Satori / @vercel/og (dynamic OG images)     ⤳ skill: nextjs
 │   ↔ Vercel Font Optimization (next/font)
@@ -361,30 +361,6 @@ VERCEL AGENT                               ⤳ skill: vercel-agent  📖 docs: h
 ## 4. Build Tools
 
 ```
-TURBOREPO                                  ⤳ skill: turborepo  📖 docs: https://turbo.build/repo/docs
-├── Purpose: Monorepo build orchestration
-│   ⊃ Task caching (local + remote)
-│   ⊃ Parallel execution (all cores)
-│   ⊃ Incremental builds (content-aware hashing)
-│   ⊃ --affected flag (changed packages only)
-│   ⊃ Pruned subsets (deploy only what's needed)
-│   ⊃ Rust-powered core
-│
-├── Remote Caching
-│   → Vercel Account (free tier available)
-│   ↔ CI/CD pipelines (shared cache across machines)
-│
-├── Conformance (code quality + best-practice checks for monorepos)
-│   ⊃ Automated rule enforcement (ESLint, TypeScript, import boundaries)
-│   ↔ Turborepo (runs as part of task pipeline)
-│   ↔ Vercel Platform (enforced on deploy)
-│   ⤳ skill: turborepo  (Conformance is configured within Turborepo)
-│
-└── Integrations
-    ↔ Next.js (monorepo with multiple Next.js apps)
-    ↔ Vercel Platform (auto-detected, optimized builds)
-    ↔ Turbopack (per-app bundling)
-
 TURBOPACK                                  ⤳ skill: turbopack  📖 docs: https://turbo.build/pack/docs
 ├── Purpose: JavaScript/TypeScript bundler
 │   ⊃ Instant HMR (doesn't degrade with app size)
@@ -483,41 +459,7 @@ AUTHENTICATION INTEGRATIONS                ⤳ skill: auth
 
 ---
 
-## 7. Observability
-
-```
-VERCEL OBSERVABILITY                        ⤳ skill: observability  📖 docs: https://vercel.com/docs/analytics
-├── Web Analytics
-│   ⊃ First-party, privacy-friendly
-│   ⊃ Custom events (Pro/Enterprise)
-│   ⊃ UTM parameters (Analytics Plus)
-│   ↔ Next.js (@vercel/analytics)
-│
-├── Speed Insights
-│   ⊃ Real user performance data
-│   ⊃ Core Web Vitals
-│   ↔ Next.js (@vercel/speed-insights)
-│
-├── Monitoring & Logs
-│   ⊃ Real-time infrastructure logs
-│   ⊃ Function runtime logs
-│   ⊃ Custom queries and visualizations
-│
-├── Vercel Drains (export observability data)
-│   ⊃ OpenTelemetry-compatible traces
-│   ⊃ Web analytics events
-│   ⊃ Speed Insights metrics
-│   → Datadog, Honeycomb, Grafana Tempo, New Relic
-│
-└── Integrations
-    ↔ Vercel Firewall (security event logs)
-    ↔ Vercel Functions (automatic tracing)
-    ↔ Next.js (automatic instrumentation)
-```
-
----
-
-## 8. CLI & API
+## 7. CLI & API
 
 ```
 VERCEL CLI (vercel / vc)                   ⤳ skill: vercel-cli  📖 docs: https://vercel.com/docs/cli
@@ -556,47 +498,6 @@ VERCEL CLI (vercel / vc)                   ⤳ skill: vercel-cli  📖 docs: htt
     ⊃ VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
     ↔ Any CI provider (GitHub Actions, Azure DevOps, etc.)
 
-VERCEL MCP SERVER (Official)                ⤳ skill: vercel-api  📖 docs: https://vercel.com/docs/mcp
-├── URL: https://mcp.vercel.com
-│   ⊃ Streamable HTTP transport
-│   ⊃ OAuth 2.1 authentication (automatic)
-│   ⊃ Read-only in initial release (Beta)
-│
-├── MCP Tools
-│   ⊃ Search & navigate Vercel / Next.js / AI SDK docs
-│   ⊃ List & inspect projects and deployments
-│   ⊃ Query build logs and function invocation logs
-│   ⊃ List domains and environment variables
-│   ⊃ View team members and settings
-│
-├── Supported AI Clients
-│   ⊃ Claude Code (`claude mcp add --transport http vercel https://mcp.vercel.com`)
-│   ⊃ Cursor, VS Code (reviewed and approved clients)
-│
-└── Relationship to REST API
-    → Uses Vercel REST API under the hood
-    ↔ AI SDK MCP Client (@ai-sdk/mcp)
-
-VERCEL REST API / @vercel/sdk               ⤳ skill: vercel-api  📖 docs: https://vercel.com/docs/rest-api
-├── Endpoint Categories
-│   ⊃ /v1/deployments — Create, list, inspect, cancel
-│   ⊃ /v1/projects — CRUD, environment variables, domains
-│   ⊃ /v1/teams — Members, billing, settings
-│   ⊃ /v1/domains — Register, configure, transfer
-│   ⊃ /v1/dns — Record management
-│   ⊃ /v1/certs — SSL certificate management
-│   ⊃ /v1/secrets — Secret management
-│   ⊃ /v1/integrations — Marketplace integration management
-│   ⊃ /v1/edge-config — Edge Config management
-│   ⊃ /v1/firewall — WAF rule management
-│
-├── SDK (@vercel/sdk)
-│   ⊃ TypeScript SDK for all API endpoints
-│   ⊃ vercel.deployments, vercel.projects, etc.
-│
-└── Authentication
-    ⊃ Bearer Token (personal or team)
-    ⊃ OAuth (for integrations)
 ```
 
 ---

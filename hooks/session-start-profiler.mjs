@@ -25,14 +25,11 @@ var FILE_MARKERS = [
   { file: "next.config.mjs", skills: ["nextjs", "turbopack"] },
   { file: "next.config.ts", skills: ["nextjs", "turbopack"] },
   { file: "next.config.mts", skills: ["nextjs", "turbopack"] },
-  { file: "turbo.json", skills: ["turborepo"] },
   { file: "vercel.json", skills: ["vercel-cli", "deployments-cicd", "vercel-functions"] },
-  { file: ".mcp.json", skills: ["vercel-api"] },
   { file: "middleware.ts", skills: ["routing-middleware"] },
   { file: "middleware.js", skills: ["routing-middleware"] },
   { file: "components.json", skills: ["shadcn"] },
-  { file: ".env.local", skills: ["env-vars"] },
-  { file: "pnpm-workspace.yaml", skills: ["turborepo"] }
+  { file: ".env.local", skills: ["env-vars"] }
 ];
 var PACKAGE_MARKERS = {
   "next": ["nextjs"],
@@ -45,12 +42,8 @@ var PACKAGE_MARKERS = {
   "@vercel/kv": ["vercel-storage"],
   "@vercel/postgres": ["vercel-storage"],
   "@vercel/edge-config": ["vercel-storage"],
-  "@vercel/analytics": ["observability"],
-  "@vercel/speed-insights": ["observability"],
   "@vercel/workflow": ["workflow"],
   "@vercel/sandbox": ["vercel-sandbox"],
-  "@vercel/sdk": ["vercel-api"],
-  "turbo": ["turborepo"],
   "@repo/auth": ["next-forge"],
   "@repo/database": ["next-forge"],
   "@repo/design-system": ["next-forge"],
@@ -422,10 +415,6 @@ async function main() {
   const cliStatus = checkVercelCli();
   const userMessages = buildSessionStartProfilerUserMessages(greenfield, cliStatus);
   const likelySkills = greenfield ? GREENFIELD_DEFAULT_SKILLS : profileProject(projectRoot);
-  if (!greenfield && !likelySkills.includes("observability")) {
-    likelySkills.push("observability");
-    likelySkills.sort();
-  }
   const setupSignals = greenfield ? GREENFIELD_SETUP_SIGNALS : profileBootstrapSignals(projectRoot);
   const greenfieldValue = greenfield ? "true" : "";
   const likelySkillsValue = likelySkills.join(",");

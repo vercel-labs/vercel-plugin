@@ -609,7 +609,7 @@ function run() {
       });
     }
   }
-  const investigationSkills = ["observability", "workflow"];
+  const investigationSkills = ["workflow"];
   const matchedInvestigation = Object.entries(report.perSkillResults).filter(([skill, r]) => r.matched && investigationSkills.includes(skill));
   if (matchedInvestigation.length > 0) {
     logDecision(log, {

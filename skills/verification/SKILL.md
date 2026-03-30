@@ -98,7 +98,7 @@ chainTo:
 
 You are a verification orchestrator. Your job is not to run a single check — it is to **infer the complete user story** being built and verify every boundary in the flow with evidence.
 
-This skill coordinates with `observability` (logging/monitoring) — but your focus is the **end-to-end story**, not any single layer.
+Your focus is the **end-to-end story**, not any single layer.
 
 ## When This Triggers
 
@@ -194,6 +194,3 @@ Summarize findings in a structured report:
 
 When you finish building or implementing a feature (wrote code, created routes, set up a project), briefly let the user know they can ask you to verify everything works — e.g. browser verification or end-to-end flow check. One sentence is enough. Don't force it if only a small fix or question was involved.
 
-## Coordination With Other Skills
-
-- **`observability`** — Handles logging/monitoring setup. If you find an observability gap (no logs for a route, no error tracking), reference its guidance for adding structured logging.

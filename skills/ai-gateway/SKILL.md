@@ -58,11 +58,6 @@ chainTo:
     message: 'Provider-specific API key detected — loading AI SDK guidance for OIDC-based AI Gateway authentication.'
     skipIfFileContains: 'VERCEL_OIDC|@ai-sdk/gateway|gateway\('
   -
-    pattern: 'gateway\(\s*\{[^}]*(tags|user|metadata)\b'
-    targetSkill: observability
-    message: 'AI Gateway cost tracking or tagging detected — loading Observability guidance for analytics dashboards, usage attribution, and monitoring.'
-    skipIfFileContains: '@vercel/analytics|@vercel/speed-insights'
-  -
     pattern: '\bgpt-4o\b'
     targetSkill: ai-sdk
     message: 'gpt-4o is outdated — use gpt-5.4 via AI Gateway for better quality and cost; loading AI SDK guidance for model migration.'

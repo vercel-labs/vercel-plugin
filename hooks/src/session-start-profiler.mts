@@ -72,14 +72,11 @@ const FILE_MARKERS: FileMarker[] = [
   { file: "next.config.mjs", skills: ["nextjs", "turbopack"] },
   { file: "next.config.ts", skills: ["nextjs", "turbopack"] },
   { file: "next.config.mts", skills: ["nextjs", "turbopack"] },
-  { file: "turbo.json", skills: ["turborepo"] },
   { file: "vercel.json", skills: ["vercel-cli", "deployments-cicd", "vercel-functions"] },
-  { file: ".mcp.json", skills: ["vercel-api"] },
   { file: "middleware.ts", skills: ["routing-middleware"] },
   { file: "middleware.js", skills: ["routing-middleware"] },
   { file: "components.json", skills: ["shadcn"] },
   { file: ".env.local", skills: ["env-vars"] },
-  { file: "pnpm-workspace.yaml", skills: ["turborepo"] },
 ];
 
 /**
@@ -96,12 +93,8 @@ const PACKAGE_MARKERS: Record<string, string[]> = {
   "@vercel/kv": ["vercel-storage"],
   "@vercel/postgres": ["vercel-storage"],
   "@vercel/edge-config": ["vercel-storage"],
-  "@vercel/analytics": ["observability"],
-  "@vercel/speed-insights": ["observability"],
   "@vercel/workflow": ["workflow"],
   "@vercel/sandbox": ["vercel-sandbox"],
-  "@vercel/sdk": ["vercel-api"],
-  "turbo": ["turborepo"],
   "@repo/auth": ["next-forge"],
   "@repo/database": ["next-forge"],
   "@repo/design-system": ["next-forge"],
@@ -640,12 +633,6 @@ async function main(): Promise<void> {
     ? GREENFIELD_DEFAULT_SKILLS
     : profileProject(projectRoot);
 
-  // Auto-boost observability for all non-greenfield projects so debugging
-  // and logging guidance is always available (+5 priority from profiler).
-  if (!greenfield && !likelySkills.includes("observability")) {
-    likelySkills.push("observability");
-    likelySkills.sort();
-  }
   const setupSignals: BootstrapSignals = greenfield
     ? GREENFIELD_SETUP_SIGNALS
     : profileBootstrapSignals(projectRoot);

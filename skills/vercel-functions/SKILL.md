@@ -56,8 +56,6 @@ validate:
     pattern: 'export\s+(async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\b'
     message: 'Route handler has no observability instrumentation. Add logging and error tracking for production debugging.'
     severity: warn
-    upgradeToSkill: observability
-    upgradeWhy: 'Add structured logging, error tracking, and OTel instrumentation to route handlers.'
     skipIfFileContains: 'console\.error|logger\.|captureException|Sentry|@vercel/otel|withTracing'
   -
     pattern: 'from\s+[''""](lru-cache|node-cache|memory-cache)[''""]|new\s+(LRUCache|NodeCache|Map)\(\s*\).*cache'

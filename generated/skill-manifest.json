@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-30T00:50:32.749Z",
+  "generatedAt": "2026-03-30T01:19:11.180Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -40,11 +40,6 @@
           "pattern": "uses:\\s*vercel/|vercel-action|VERCEL_TOKEN.*github",
           "targetSkill": "deployments-cicd",
           "message": "GitHub Actions with Vercel detected — loading CI/CD guidance for deployment workflows, preview URLs, and production promotions."
-        },
-        {
-          "pattern": "@vercel/sdk|vercel\\.deployments|vercel\\.projects",
-          "targetSkill": "vercel-api",
-          "message": "Vercel SDK usage detected — loading API guidance for programmatic deployment management, project configuration, and MCP server integration."
         }
       ],
       "retrieval": {
@@ -1023,12 +1018,6 @@
           "skipIfFileContains": "VERCEL_OIDC|@ai-sdk/gateway|gateway\\("
         },
         {
-          "pattern": "gateway\\(\\s*\\{[^}]*(tags|user|metadata)\\b",
-          "targetSkill": "observability",
-          "message": "AI Gateway cost tracking or tagging detected — loading Observability guidance for analytics dashboards, usage attribution, and monitoring.",
-          "skipIfFileContains": "@vercel/analytics|@vercel/speed-insights"
-        },
-        {
           "pattern": "\\bgpt-4o\\b",
           "targetSkill": "ai-sdk",
           "message": "gpt-4o is outdated — use gpt-5.4 via AI Gateway for better quality and cost; loading AI SDK guidance for model migration.",
@@ -1397,266 +1386,6 @@
           "registry",
           "theme",
           "components.json"
-        ],
-        "examples": []
-      }
-    },
-    "observability": {
-      "priority": 6,
-      "summary": "",
-      "docs": [
-        "https://vercel.com/docs/observability",
-        "https://vercel.com/docs/observability/otel-overview"
-      ],
-      "sitemap": "https://vercel.com/sitemap/docs.xml",
-      "pathPatterns": [
-        "instrumentation.ts",
-        "instrumentation.js",
-        "src/instrumentation.ts",
-        "src/instrumentation.js",
-        "app/layout.*",
-        "src/app/layout.*",
-        "pages/_app.*",
-        "src/pages/_app.*",
-        "apps/*/instrumentation.ts",
-        "apps/*/instrumentation.js",
-        "apps/*/app/layout.*",
-        "apps/*/src/app/layout.*",
-        "apps/*/pages/_app.*",
-        "apps/*/src/pages/_app.*",
-        "sentry.client.config.*",
-        "sentry.server.config.*",
-        "sentry.edge.config.*"
-      ],
-      "bashPatterns": [
-        "\\bvercel\\s+logs?\\b",
-        "\\bvercel\\s+logs?\\s+.*--follow\\b",
-        "\\bvercel\\s+logs?\\s+.*--level\\b",
-        "\\bvercel\\s+logs?\\s+.*--since\\b",
-        "\\bcurl\\s+.*deployments.*events\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/analytics\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/analytics\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@vercel/analytics\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@vercel/analytics\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/speed-insights\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/speed-insights\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@vercel/speed-insights\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@vercel/speed-insights\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@sentry/nextjs\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@sentry/nextjs\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@sentry/nextjs\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@sentry/nextjs\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@sentry/node\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@sentry/node\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@sentry/node\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@sentry/node\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@datadog/browser-rum\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@datadog/browser-rum\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@datadog/browser-rum\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@datadog/browser-rum\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bcheckly\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bcheckly\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bcheckly\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bcheckly\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bnewrelic\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bnewrelic\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bnewrelic\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bnewrelic\\b"
-      ],
-      "importPatterns": [],
-      "bodyPath": "skills/observability/SKILL.md",
-      "pathRegexSources": [
-        "^instrumentation\\.ts$",
-        "^instrumentation\\.js$",
-        "^src\\/instrumentation\\.ts$",
-        "^src\\/instrumentation\\.js$",
-        "^app\\/layout\\.[^/]*$",
-        "^src\\/app\\/layout\\.[^/]*$",
-        "^pages\\/_app\\.[^/]*$",
-        "^src\\/pages\\/_app\\.[^/]*$",
-        "^apps\\/[^/]*\\/instrumentation\\.ts$",
-        "^apps\\/[^/]*\\/instrumentation\\.js$",
-        "^apps\\/[^/]*\\/app\\/layout\\.[^/]*$",
-        "^apps\\/[^/]*\\/src\\/app\\/layout\\.[^/]*$",
-        "^apps\\/[^/]*\\/pages\\/_app\\.[^/]*$",
-        "^apps\\/[^/]*\\/src\\/pages\\/_app\\.[^/]*$",
-        "^sentry\\.client\\.config\\.[^/]*$",
-        "^sentry\\.server\\.config\\.[^/]*$",
-        "^sentry\\.edge\\.config\\.[^/]*$"
-      ],
-      "bashRegexSources": [
-        "\\bvercel\\s+logs?\\b",
-        "\\bvercel\\s+logs?\\s+.*--follow\\b",
-        "\\bvercel\\s+logs?\\s+.*--level\\b",
-        "\\bvercel\\s+logs?\\s+.*--since\\b",
-        "\\bcurl\\s+.*deployments.*events\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/analytics\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/analytics\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@vercel/analytics\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@vercel/analytics\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/speed-insights\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/speed-insights\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@vercel/speed-insights\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@vercel/speed-insights\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@sentry/nextjs\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@sentry/nextjs\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@sentry/nextjs\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@sentry/nextjs\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@sentry/node\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@sentry/node\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@sentry/node\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@sentry/node\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@datadog/browser-rum\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@datadog/browser-rum\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@datadog/browser-rum\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@datadog/browser-rum\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bcheckly\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bcheckly\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bcheckly\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bcheckly\\b",
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*\\bnewrelic\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*\\bnewrelic\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*\\bnewrelic\\b",
-        "\\byarn\\s+add\\s+[^\\n]*\\bnewrelic\\b"
-      ],
-      "importRegexSources": [],
-      "validate": [
-        {
-          "pattern": "export (async )?function (GET|POST|PUT|PATCH|DELETE)",
-          "message": "API route handlers should include error logging — wrap in try/catch with console.error for production debugging",
-          "severity": "warn",
-          "skipIfFileContains": "console\\\\.error|logger\\\\.|captureException|Sentry"
-        }
-      ],
-      "chainTo": [
-        {
-          "pattern": "console\\.log\\s*\\(\\s*[''\"]error|catch\\s*\\(\\w+\\)\\s*\\{\\s*\\n\\s*console\\.log",
-          "targetSkill": "vercel-functions",
-          "message": "Console.log-only error handling detected in route handler — loading Vercel Functions guidance for structured error handling, proper logging, and function runtime configuration.",
-          "skipIfFileContains": "captureException|@sentry/|@opentelemetry/|logger\\.\\w+|Sentry\\.|reportError"
-        },
-        {
-          "pattern": "from\\s+[''\"]@sentry/(nextjs|node)[''\"\"]",
-          "targetSkill": "nextjs",
-          "message": "Sentry SDK import detected — loading Next.js guidance for instrumentation.ts setup and Sentry config integration.",
-          "skipIfFileContains": "instrumentation\\.register|withSentryConfig"
-        },
-        {
-          "pattern": "winston|pino|bunyan",
-          "targetSkill": "observability",
-          "message": "Third-party logger detected (winston/pino/bunyan) — Vercel provides native structured logging, runtime logs, and Drains for log export. Loading Observability guidance for Vercel-native logging.",
-          "skipIfFileContains": "@vercel/otel|@opentelemetry/|Sentry\\\\."
-        }
-      ],
-      "promptSignals": {
-        "phrases": [
-          "add logging",
-          "add logs",
-          "set up logging",
-          "setup logging",
-          "configure logging",
-          "structured logging",
-          "log drain",
-          "log drains",
-          "vercel analytics",
-          "speed insights",
-          "web analytics",
-          "opentelemetry",
-          "otel",
-          "instrumentation",
-          "monitoring",
-          "set up monitoring",
-          "add observability",
-          "track errors",
-          "error tracking",
-          "sentry",
-          "datadog",
-          "check the logs",
-          "show me the error",
-          "what went wrong",
-          "where did it fail",
-          "show me the logs",
-          "find the error",
-          "why did it fail",
-          "debug the error"
-        ],
-        "allOf": [
-          [
-            "add",
-            "logging"
-          ],
-          [
-            "add",
-            "monitoring"
-          ],
-          [
-            "set up",
-            "logs"
-          ],
-          [
-            "configure",
-            "analytics"
-          ],
-          [
-            "vercel",
-            "logs"
-          ],
-          [
-            "vercel",
-            "analytics"
-          ],
-          [
-            "track",
-            "performance"
-          ],
-          [
-            "track",
-            "errors"
-          ]
-        ],
-        "anyOf": [
-          "logging",
-          "monitoring",
-          "analytics",
-          "observability",
-          "telemetry",
-          "traces",
-          "metrics",
-          "debug",
-          "debugging",
-          "stuck",
-          "hanging",
-          "hung",
-          "waiting",
-          "stalled",
-          "spinning",
-          "timeout",
-          "slow",
-          "pending",
-          "unresponsive"
-        ],
-        "noneOf": [],
-        "minScore": 6
-      },
-      "retrieval": {
-        "aliases": [
-          "monitoring",
-          "logging",
-          "analytics",
-          "performance tracking"
-        ],
-        "intents": [
-          "add monitoring",
-          "set up logging",
-          "track performance",
-          "configure analytics"
-        ],
-        "entities": [
-          "Web Analytics",
-          "Speed Insights",
-          "OpenTelemetry",
-          "Drains",
-          "runtime logs"
         ],
         "examples": []
       }
@@ -3625,81 +3354,6 @@
         ]
       }
     },
-    "turborepo": {
-      "priority": 5,
-      "summary": "",
-      "docs": [
-        "https://turborepo.dev/docs"
-      ],
-      "sitemap": "https://turborepo.dev/sitemap.xml",
-      "pathPatterns": [
-        "turbo.json",
-        "turbo/**"
-      ],
-      "bashPatterns": [
-        "\\bturbo\\s+(run|build|test|lint|dev)\\b",
-        "\\bnpx\\s+turbo\\b",
-        "\\bbunx\\s+turbo\\b"
-      ],
-      "importPatterns": [],
-      "bodyPath": "skills/turborepo/SKILL.md",
-      "pathRegexSources": [
-        "^turbo\\.json$",
-        "^turbo\\/.*$"
-      ],
-      "bashRegexSources": [
-        "\\bturbo\\s+(run|build|test|lint|dev)\\b",
-        "\\bnpx\\s+turbo\\b",
-        "\\bbunx\\s+turbo\\b"
-      ],
-      "importRegexSources": [],
-      "validate": [
-        {
-          "pattern": "\"pipeline\"\\s*:",
-          "message": "turbo.json \"pipeline\" was renamed to \"tasks\" in Turborepo v2 — update to \"tasks\" key. Run `npx @turbo/codemod migrate` for automatic migration.",
-          "severity": "error",
-          "skipIfFileContains": "\"tasks\"\\s*:",
-          "upgradeToSkill": "turborepo",
-          "upgradeWhy": "Reload Turborepo skill for v2 migration guidance — \"pipeline\" → \"tasks\" rename and other breaking changes.",
-          "upgradeMode": "soft"
-        }
-      ],
-      "chainTo": [
-        {
-          "pattern": "from\\s+[''\"\"]@vercel/(postgres|kv)[''\"\"]",
-          "targetSkill": "vercel-storage",
-          "message": "@vercel/postgres and @vercel/kv are sunset — loading Vercel Storage guidance for Neon and Upstash migration."
-        },
-        {
-          "pattern": "\"pipeline\"\\s*:",
-          "targetSkill": "turborepo",
-          "message": "Reload Turborepo skill for v2 migration guidance — \"pipeline\" → \"tasks\" rename and other breaking changes.",
-          "synthesized": true
-        }
-      ],
-      "retrieval": {
-        "aliases": [
-          "monorepo",
-          "turbo",
-          "workspace builds",
-          "task runner"
-        ],
-        "intents": [
-          "set up monorepo",
-          "configure turbo",
-          "optimize build caching",
-          "run tasks in parallel"
-        ],
-        "entities": [
-          "Turborepo",
-          "turbo.json",
-          "remote caching",
-          "--affected",
-          "pipeline"
-        ],
-        "examples": []
-      }
-    },
     "ai-sdk": {
       "priority": 8,
       "summary": "",
@@ -4042,12 +3696,6 @@
           "skipIfFileContains": "gateway\\(|@ai-sdk/gateway|VERCEL_OIDC"
         },
         {
-          "pattern": "generateText\\s*\\(|streamText\\s*\\(|agent\\.(generate|stream)\\s*\\(",
-          "targetSkill": "observability",
-          "message": "AI generation call without observability — loading Observability guidance for structured logging, tracing, and error monitoring.",
-          "skipIfFileContains": "console\\.log\\s*\\(\\s*JSON\\.stringify|@sentry/|@opentelemetry/|@datadog/|logger\\.|otel|initMonitoring|reportError"
-        },
-        {
           "pattern": "DurableAgent|use workflow|use step|from\\s+[''\"]workflow[''\"]|@workflow/",
           "targetSkill": "workflow",
           "message": "Workflow DevKit pattern detected in AI code — loading WDK guidance for durable agent execution, step isolation, and crash-safe orchestration.",
@@ -4325,75 +3973,6 @@
           "vercel env",
           "OIDC",
           "environment variable"
-        ],
-        "examples": []
-      }
-    },
-    "vercel-api": {
-      "priority": 7,
-      "summary": "",
-      "docs": [
-        "https://vercel.com/docs/rest-api"
-      ],
-      "sitemap": "https://vercel.com/sitemap/docs.xml",
-      "pathPatterns": [
-        ".mcp.json",
-        ".vercel/project.json"
-      ],
-      "bashPatterns": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/sdk\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/sdk\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@vercel/sdk\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@vercel/sdk\\b",
-        "\\bclaude\\s+mcp\\s+add\\b[^\\n]*\\bvercel\\b",
-        "\\bmcp\\.vercel\\.com\\b"
-      ],
-      "importPatterns": [],
-      "bodyPath": "skills/vercel-api/SKILL.md",
-      "pathRegexSources": [
-        "^\\.mcp\\.json$",
-        "^\\.vercel\\/project\\.json$"
-      ],
-      "bashRegexSources": [
-        "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/sdk\\b",
-        "\\bpnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/sdk\\b",
-        "\\bbun\\s+(install|i|add)\\s+[^\\n]*@vercel/sdk\\b",
-        "\\byarn\\s+add\\s+[^\\n]*@vercel/sdk\\b",
-        "\\bclaude\\s+mcp\\s+add\\b[^\\n]*\\bvercel\\b",
-        "\\bmcp\\.vercel\\.com\\b"
-      ],
-      "importRegexSources": [],
-      "chainTo": [
-        {
-          "pattern": "vercel\\.deployments\\.(create|list)|vercel\\.projects\\.(create|update)",
-          "targetSkill": "deployments-cicd",
-          "message": "Vercel SDK deployment/project operations detected — loading CI/CD guidance for deployment workflows, preview URLs, and promotion strategies."
-        },
-        {
-          "pattern": "mcp\\.vercel\\.com|claude\\s+mcp\\s+add.*vercel",
-          "targetSkill": "ai-sdk",
-          "message": "Vercel MCP server configuration detected — loading AI SDK guidance for MCP client integration and tool calling patterns."
-        }
-      ],
-      "retrieval": {
-        "aliases": [
-          "vercel rest api",
-          "vercel mcp",
-          "platform api",
-          "vercel sdk"
-        ],
-        "intents": [
-          "call vercel api",
-          "use mcp server",
-          "manage deployments via api",
-          "query vercel data"
-        ],
-        "entities": [
-          "MCP",
-          "REST API",
-          "vercel api",
-          "deployments",
-          "domains"
         ],
         "examples": []
       }
@@ -4779,10 +4358,7 @@
           "pattern": "export\\s+(async\\s+)?function\\s+(GET|POST|PUT|PATCH|DELETE)\\b",
           "message": "Route handler has no observability instrumentation. Add logging and error tracking for production debugging.",
           "severity": "warn",
-          "skipIfFileContains": "console\\.error|logger\\.|captureException|Sentry|@vercel/otel|withTracing",
-          "upgradeToSkill": "observability",
-          "upgradeWhy": "Add structured logging, error tracking, and OTel instrumentation to route handlers.",
-          "upgradeMode": "soft"
+          "skipIfFileContains": "console\\.error|logger\\.|captureException|Sentry|@vercel/otel|withTracing"
         },
         {
           "pattern": "from\\s+[''\"\"](lru-cache|node-cache|memory-cache)[''\"\"]|new\\s+(LRUCache|NodeCache|Map)\\(\\s*\\).*cache",

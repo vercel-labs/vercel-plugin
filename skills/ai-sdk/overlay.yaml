@@ -275,11 +275,6 @@ chainTo:
     message: 'Direct provider API key or stale model detected — loading AI Gateway guidance for OIDC auth, routing, and failover.'
     skipIfFileContains: 'gateway\(|@ai-sdk/gateway|VERCEL_OIDC'
   -
-    pattern: 'generateText\s*\(|streamText\s*\(|agent\.(generate|stream)\s*\('
-    targetSkill: observability
-    message: 'AI generation call without observability — loading Observability guidance for structured logging, tracing, and error monitoring.'
-    skipIfFileContains: 'console\.log\s*\(\s*JSON\.stringify|@sentry/|@opentelemetry/|@datadog/|logger\.|otel|initMonitoring|reportError'
-  -
     pattern: 'DurableAgent|use workflow|use step|from\s+[''"]workflow[''"]|@workflow/'
     targetSkill: workflow
     message: 'Workflow DevKit pattern detected in AI code — loading WDK guidance for durable agent execution, step isolation, and crash-safe orchestration.'

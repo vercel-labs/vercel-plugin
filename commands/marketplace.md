@@ -227,7 +227,7 @@ curl -X POST -H "Authorization: Bearer $VERCEL_TOKEN" \
 > **Payload schema reference:** See `⤳ skill: observability` for Web Analytics drain payload formats (JSON array of `{type, url, referrer, timestamp, geo, device}` events).
 
 - **Drain present** → Proceed to health check.
-- **No drain found** → Integration may not auto-configure drains. Create one manually via REST API (see `⤳ skill: observability`).
+- **No drain found** → Integration may not auto-configure drains. Create one manually via Dashboard or REST API.
 - **Drain errored** → Check the drain status in the Vercel Dashboard. Common fixes: endpoint URL typo, auth header missing, endpoint not accepting POST.
 
 ### 8. Run Local Health Check
@@ -285,8 +285,8 @@ Based on the outcome:
 - **Installed successfully** → "Run `/deploy` to deploy with the new integration. Your environment variables are already configured on Vercel."
 - **Env vars missing** → "Provision the missing variables via the Vercel dashboard or `vercel integration add <name>`, then re-run `/marketplace <name>` to continue setup."
 - **CLI handed off to dashboard** → "Run `vercel integration open <name>` to complete the provider web step, then resume from env verification."
-- **Drain not auto-created** → "Create a drain manually via the REST API. See `⤳ skill: observability` for the `/v1/drains` endpoint and payload format."
-- **Need Speed Insights / Web Analytics export** → "These data types require manual drain setup — they are not auto-configured by vendor installs. See `⤳ skill: observability`."
+- **Drain not auto-created** → "Create a drain manually via the REST API (`POST /v1/drains`) or the Dashboard."
+- **Need Speed Insights / Web Analytics export** → "These data types require manual drain setup — they are not auto-configured by vendor installs. Configure via Dashboard or REST API."
 - **Health check failed** → "Review the error above. Common fixes: copy env vars to `.env.local` with `vercel env pull`, check SDK version compatibility, verify network access."
 - **Want another integration?** → "Run `/marketplace` again to browse available integrations."
 - **Review changes** → "Run `git diff` to review all integration-related code changes before committing."
