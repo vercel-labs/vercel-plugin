@@ -26,6 +26,7 @@ import {
 import { createLogger, logCaughtError } from "./logger.mjs";
 import type { Logger } from "./logger.mjs";
 import type { RegistryClient } from "./registry-client.mjs";
+import type { SkillInstallPlan, SkillInstallAction } from "./orchestrator-install-plan.mjs";
 import { buildSkillCacheStatus, resolveSkillCacheBanner } from "./skill-cache-banner.mjs";
 import { createSkillStore, type SkillStore } from "./skill-store.mjs";
 
@@ -362,9 +363,18 @@ export interface BashChainInjection {
   content: string;
 }
 
+export interface DeferredBashSkill {
+  packageName: string;
+  skill: string;
+  message: string;
+  reason: "cap-reached" | "budget-exceeded";
+  phase: "after-install";
+}
+
 export interface BashChainResult {
   injected: BashChainInjection[];
   missing: string[];
+  deferred: DeferredBashSkill[];
   banners: string[];
   totalBytes: number;
 }
@@ -455,23 +465,59 @@ function tryInjectResolvedBashSkill(args: {
   return "injected";
 }
 
-type AfterInstallDisposition = "continue" | "stop";
+type AfterInstallDisposition =
+  | { kind: "continue" }
+  | { kind: "stop"; reason: "cap-reached" | "budget-exceeded" };
+
+function buildDeferredSkills(args: {
+  remainingResolvedSkills: string[];
+  missingCandidates: Map<string, MissingInjectionCandidate>;
+  reason: "cap-reached" | "budget-exceeded";
+}): DeferredBashSkill[] {
+  const { remainingResolvedSkills, missingCandidates, reason } = args;
+  return remainingResolvedSkills
+    .map((skill) => {
+      const candidate = missingCandidates.get(skill);
+      if (!candidate) return null;
+      return {
+        packageName: candidate.packageName,
+        skill: candidate.skill,
+        message: candidate.message,
+        reason,
+        phase: "after-install" as const,
+      };
+    })
+    .filter((value): value is DeferredBashSkill => value !== null);
+}
 
 function applyAfterInstallAttempt(args: {
   injectResult: InjectionAttemptResult;
-  currentIndex: number;
-  uniqueMissing: string[];
   stillMissing: string[];
+  deferred: DeferredBashSkill[];
+  missingCandidates: Map<string, MissingInjectionCandidate>;
+  remainingResolvedSkills: string[];
 }): AfterInstallDisposition {
-  const { injectResult, currentIndex, uniqueMissing, stillMissing } = args;
+  const {
+    injectResult,
+    stillMissing,
+    deferred,
+    missingCandidates,
+    remainingResolvedSkills,
+  } = args;
   switch (injectResult) {
     case "injected":
     case "skip":
-      return "continue";
+      return { kind: "continue" };
     case "cap-reached":
     case "budget-exceeded":
-      stillMissing.push(...uniqueMissing.slice(currentIndex));
-      return "stop";
+      deferred.push(
+        ...buildDeferredSkills({
+          remainingResolvedSkills,
+          missingCandidates,
+          reason: injectResult,
+        }),
+      );
+      return { kind: "stop", reason: injectResult };
   }
 }
 
@@ -490,7 +536,7 @@ export async function runBashChainInjection(
   registryClient?: RegistryClient,
 ): Promise<BashChainResult> {
   const l = logger || log;
-  const result: BashChainResult = { injected: [], missing: [], banners: [], totalBytes: 0 };
+  const result: BashChainResult = { injected: [], missing: [], deferred: [], banners: [], totalBytes: 0 };
 
   if (packages.length === 0) return result;
 
@@ -605,19 +651,34 @@ export async function runBashChainInjection(
         bundledFallback: env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1",
       });
 
+      const resolvedAfterInstall = new Map<string, string>();
       const stillMissing: string[] = [];
-      for (const [currentIndex, skill] of uniqueMissing.entries()) {
+      for (const skill of uniqueMissing) {
         const candidate = missingCandidates.get(skill);
         const resolved = refreshedStore.resolveSkillBody(skill, l);
         if (!resolved || !candidate) {
           stillMissing.push(skill);
           continue;
         }
+        const trimmedBody = resolved.body.trim();
+        if (!trimmedBody) {
+          stillMissing.push(skill);
+          continue;
+        }
+        resolvedAfterInstall.set(skill, trimmedBody);
+      }
+
+      for (const [currentIndex, skill] of uniqueMissing.entries()) {
+        const candidate = missingCandidates.get(skill);
+        const trimmedBody = resolvedAfterInstall.get(skill);
+        if (!trimmedBody || !candidate) {
+          continue;
+        }
         const injectResult = tryInjectResolvedBashSkill({
           packageName: candidate.packageName,
           skill: candidate.skill,
           message: candidate.message,
-          resolvedBody: resolved.body.trim(),
+          resolvedBody: trimmedBody,
           sessionId,
           seenSet,
           result,
@@ -627,19 +688,86 @@ export async function runBashChainInjection(
         });
         const disposition = applyAfterInstallAttempt({
           injectResult,
-          currentIndex,
-          uniqueMissing,
           stillMissing,
+          deferred: result.deferred,
+          missingCandidates,
+          remainingResolvedSkills: uniqueMissing
+            .slice(currentIndex)
+            .filter((entry) => resolvedAfterInstall.has(entry)),
         });
-        if (disposition === "stop") {
+        if (disposition.kind === "stop") {
           break;
         }
       }
-      result.missing = [...new Set(stillMissing)];
+      // Deferred skills (installed but not injected) should not appear in missing
+      const deferredSkillSet = new Set(result.deferred.map((d) => d.skill));
+      result.missing = [...new Set(stillMissing)].filter((s) => !deferredSkillSet.has(s));
     }
   }
 
+  // Append a next-action palette when deferred skills exist
+  const nextActionPalette = buildPostInstallActionPalette({
+    deferred: result.deferred,
+    env,
+  });
+  if (nextActionPalette) {
+    result.banners.push(nextActionPalette);
+  }
+
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Post-install action palette
+// ---------------------------------------------------------------------------
+
+function parseInstallPlanFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): SkillInstallPlan | null {
+  const raw = env.VERCEL_PLUGIN_INSTALL_PLAN;
+  if (!raw || raw.trim() === "") return null;
+  try {
+    return JSON.parse(raw) as SkillInstallPlan;
+  } catch {
+    return null;
+  }
+}
+
+function formatDeferredSkillLine(deferred: DeferredBashSkill[]): string {
+  return deferred
+    .map((entry) => `${entry.skill} (${entry.reason})`)
+    .join(", ");
+}
+
+export function buildPostInstallActionPalette(args: {
+  deferred: DeferredBashSkill[];
+  env: NodeJS.ProcessEnv;
+}): string | null {
+  if (args.deferred.length === 0) return null;
+
+  const plan = parseInstallPlanFromEnv(args.env);
+  const orderedIds: Array<SkillInstallAction["id"]> = [
+    "vercel-link",
+    "vercel-env-pull",
+    "vercel-deploy",
+    "explain",
+  ];
+
+  const lines: string[] = [
+    "### Vercel next actions",
+    `- Deferred skill injection: ${formatDeferredSkillLine(args.deferred)}`,
+    "- [1] Continue by making another relevant tool call, or run one of the real CLI actions below.",
+  ];
+
+  let index = 2;
+  for (const id of orderedIds) {
+    const action = plan?.actions.find((entry) => entry.id === id);
+    if (!action?.command) continue;
+    lines.push(`- [${index}] ${action.label}: \`${action.command}\``);
+    index += 1;
+  }
+
+  return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -667,7 +795,13 @@ export function formatBashChainOutput(
   chainResult: BashChainResult,
   platform: HookPlatform = "claude-code",
 ): string {
-  if (chainResult.injected.length === 0 && chainResult.banners.length === 0) return "{}";
+  if (
+    chainResult.injected.length === 0 &&
+    chainResult.banners.length === 0 &&
+    chainResult.deferred.length === 0
+  ) {
+    return "{}";
+  }
 
   const contextParts: string[] = [...chainResult.banners];
 
@@ -683,15 +817,15 @@ export function formatBashChainOutput(
     );
   }
 
-  if (chainResult.injected.length > 0) {
-    const metadata = {
-      version: 1,
-      hook: "posttooluse-bash-chain",
-      packages: chainResult.injected.map((i) => i.packageName),
-      chainedSkills: chainResult.injected.map((i) => i.skill),
-    };
-    contextParts.push(`<!-- postBashChain: ${JSON.stringify(metadata)} -->`);
-  }
+  const metadata = {
+    version: 2,
+    hook: "posttooluse-bash-chain",
+    packages: chainResult.injected.map((i) => i.packageName),
+    chainedSkills: chainResult.injected.map((i) => i.skill),
+    missing: chainResult.missing,
+    deferred: chainResult.deferred,
+  };
+  contextParts.push(`<!-- postBashChain: ${JSON.stringify(metadata)} -->`);
 
   return formatPlatformOutput(platform, contextParts.join("\n\n"));
 }

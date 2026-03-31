@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import type { RegistryClient, InstallSkillsResult } from "../hooks/src/registry-client.mts";
+import type { DeferredBashSkill } from "../hooks/src/posttooluse-bash-chain.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const HOOK_SCRIPT = join(ROOT, "hooks", "posttooluse-bash-chain.mjs");
@@ -601,6 +602,54 @@ describe("PostToolUse install-and-reinject", () => {
 
       // Cap=1 means only one skill should be injected even though both are available
       expect(result.injected.length).toBe(1);
+
+      // The second skill should be deferred, not silently dropped
+      expect(result.deferred.length).toBeGreaterThanOrEqual(1);
+      expect(result.deferred[0].reason).toBe("cap-reached");
+      expect(result.deferred[0].phase).toBe("after-install");
+      // Deferred skills should not appear in missing
+      for (const d of result.deferred) {
+        expect(result.missing).not.toContain(d.skill);
+      }
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("cap only defers skills that resolved after install", async () => {
+    const projectDir = join(tmpdir(), `chain-reinject-cap-partial-${Date.now()}`);
+    mkdirSync(projectDir, { recursive: true });
+
+    try {
+      const store = createSkillStore({
+        projectRoot: projectDir,
+        pluginRoot: projectDir,
+        bundledFallback: false,
+      });
+
+      const mockClient = makeMockRegistryClient(projectDir, {
+        "vercel-functions": "# Vercel Functions\nFunctions content.",
+      });
+
+      const result = await runBashChainInjection(
+        ["express", "prisma"],
+        null,
+        projectDir,
+        projectDir,
+        undefined,
+        {
+          VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK: "1",
+          VERCEL_PLUGIN_SKILL_AUTO_INSTALL: "1",
+          VERCEL_PLUGIN_CHAIN_CAP: "1",
+        } as any,
+        store,
+        mockClient,
+      );
+
+      expect(result.injected.length).toBe(1);
+      expect(result.injected[0].skill).toBe("vercel-functions");
+      expect(result.deferred).toEqual([]);
+      expect(result.missing).toContain("vercel-storage");
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
     }
@@ -637,9 +686,14 @@ describe("PostToolUse install-and-reinject", () => {
         mockClient,
       );
 
-      // Skill was installed but too large to inject — should remain missing
+      // Skill was installed but too large to inject — should be deferred, not missing
       expect(result.injected.length).toBe(0);
-      expect(result.missing).toContain("vercel-functions");
+      expect(result.deferred.length).toBe(1);
+      expect(result.deferred[0].skill).toBe("vercel-functions");
+      expect(result.deferred[0].reason).toBe("budget-exceeded");
+      expect(result.deferred[0].phase).toBe("after-install");
+      // Deferred skills are excluded from missing (installed but not injected)
+      expect(result.missing).not.toContain("vercel-functions");
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
     }
@@ -727,5 +781,201 @@ describe("PostToolUse install-and-reinject", () => {
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
     }
+  });
+
+  test("successful inject has empty deferred", async () => {
+    const projectDir = join(tmpdir(), `chain-reinject-no-defer-${Date.now()}`);
+    mkdirSync(projectDir, { recursive: true });
+
+    try {
+      const store = createSkillStore({
+        projectRoot: projectDir,
+        pluginRoot: projectDir,
+        bundledFallback: false,
+      });
+
+      const mockClient = makeMockRegistryClient(projectDir, {
+        "vercel-functions": "# Vercel Functions\nAuto-installed.",
+      });
+
+      const result = await runBashChainInjection(
+        ["express"],
+        null,
+        projectDir,
+        projectDir,
+        undefined,
+        {
+          VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK: "1",
+          VERCEL_PLUGIN_SKILL_AUTO_INSTALL: "1",
+        } as any,
+        store,
+        mockClient,
+      );
+
+      expect(result.injected.length).toBe(1);
+      expect(result.deferred).toEqual([]);
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatBashChainOutput version 2 metadata
+// ---------------------------------------------------------------------------
+
+describe("formatBashChainOutput v2 metadata", () => {
+  let formatBashChainOutput: typeof import("../hooks/src/posttooluse-bash-chain.mts").formatBashChainOutput;
+
+  beforeEach(async () => {
+    const mod = await import("../hooks/posttooluse-bash-chain.mjs");
+    formatBashChainOutput = mod.formatBashChainOutput;
+  });
+
+  test("includes deferred in metadata comment", () => {
+    const deferred: DeferredBashSkill[] = [
+      {
+        packageName: "prisma",
+        skill: "vercel-storage",
+        message: "Storage best practices",
+        reason: "cap-reached",
+        phase: "after-install",
+      },
+    ];
+    const chainResult = {
+      injected: [
+        {
+          packageName: "express",
+          skill: "vercel-functions",
+          message: "Express guidance",
+          content: "# Functions\nContent here.",
+        },
+      ],
+      missing: [],
+      deferred,
+      banners: [],
+      totalBytes: 100,
+    };
+
+    const output = formatBashChainOutput(chainResult);
+    const parsed = JSON.parse(output);
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+
+    // Should contain version 2 metadata
+    const metaMatch = ctx.match(/<!-- postBashChain: ({.*?}) -->/);
+    expect(metaMatch).not.toBeNull();
+    const meta = JSON.parse(metaMatch![1]);
+    expect(meta.version).toBe(2);
+    expect(meta.deferred).toEqual(deferred);
+    expect(meta.missing).toEqual([]);
+  });
+
+  test("returns {} when no injected, banners, or deferred", () => {
+    const output = formatBashChainOutput({
+      injected: [],
+      missing: ["foo"],
+      deferred: [],
+      banners: [],
+      totalBytes: 0,
+    } as any);
+    expect(output).toBe("{}");
+  });
+
+  test("emits output when only deferred skills exist", () => {
+    const output = formatBashChainOutput({
+      injected: [],
+      missing: [],
+      deferred: [
+        {
+          packageName: "prisma",
+          skill: "vercel-storage",
+          message: "Storage",
+          reason: "cap-reached",
+          phase: "after-install",
+        },
+      ],
+      banners: [],
+      totalBytes: 0,
+    } as any);
+    expect(output).not.toBe("{}");
+    const parsed = JSON.parse(output);
+    const ctx = parsed.hookSpecificOutput.additionalContext;
+    expect(ctx).toContain("postBashChain");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildPostInstallActionPalette
+// ---------------------------------------------------------------------------
+
+describe("buildPostInstallActionPalette", () => {
+  let buildPostInstallActionPalette: typeof import("../hooks/src/posttooluse-bash-chain.mts").buildPostInstallActionPalette;
+
+  beforeEach(async () => {
+    const mod = await import("../hooks/posttooluse-bash-chain.mjs");
+    buildPostInstallActionPalette = mod.buildPostInstallActionPalette;
+  });
+
+  test("returns null when no deferred skills", () => {
+    const result = buildPostInstallActionPalette({ deferred: [], env: {} as any });
+    expect(result).toBeNull();
+  });
+
+  test("renders deferred skills without plan actions", () => {
+    const result = buildPostInstallActionPalette({
+      deferred: [
+        {
+          packageName: "prisma",
+          skill: "vercel-storage",
+          message: "Storage",
+          reason: "cap-reached",
+          phase: "after-install" as const,
+        },
+      ],
+      env: {} as any,
+    });
+    expect(result).not.toBeNull();
+    expect(result).toContain("### Vercel next actions");
+    expect(result).toContain("vercel-storage (cap-reached)");
+    expect(result).toContain("[1] Continue");
+  });
+
+  test("renders plan actions from VERCEL_PLUGIN_INSTALL_PLAN", () => {
+    const plan = {
+      schemaVersion: 1,
+      createdAt: "2026-03-31",
+      projectRoot: "/tmp",
+      likelySkills: [],
+      installedSkills: [],
+      missingSkills: [],
+      bundledFallbackEnabled: true,
+      zeroBundleReady: false,
+      projectSkillManifestPath: null,
+      vercelLinked: false,
+      hasEnvLocal: false,
+      detections: [],
+      actions: [
+        { id: "vercel-link", label: "Link Vercel project", description: "", command: "vercel link --yes" },
+        { id: "vercel-env-pull", label: "Pull environment variables", description: "", command: "vercel env pull --yes" },
+        { id: "vercel-deploy", label: "Deploy to Vercel", description: "", command: "vercel deploy" },
+      ],
+    };
+
+    const result = buildPostInstallActionPalette({
+      deferred: [
+        {
+          packageName: "prisma",
+          skill: "vercel-storage",
+          message: "Storage",
+          reason: "budget-exceeded",
+          phase: "after-install" as const,
+        },
+      ],
+      env: { VERCEL_PLUGIN_INSTALL_PLAN: JSON.stringify(plan) } as any,
+    });
+
+    expect(result).toContain("[2] Link Vercel project: `vercel link --yes`");
+    expect(result).toContain("[3] Pull environment variables: `vercel env pull --yes`");
+    expect(result).toContain("[4] Deploy to Vercel: `vercel deploy`");
   });
 });
