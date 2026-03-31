@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-03-31T14:58:55.722Z",
+  "projectRoot": "/Users/johnlindquist/dev/vercel-plugin",
+  "likelySkills": [
+    "deployments-cicd",
+    "env-vars",
+    "observability",
+    "vercel-api",
+    "vercel-cli",
+    "vercel-functions",
+    "vercel-sandbox"
+  ],
+  "installedSkills": [],
+  "missingSkills": [
+    "deployments-cicd",
+    "env-vars",
+    "observability",
+    "vercel-api",
+    "vercel-cli",
+    "vercel-functions",
+    "vercel-sandbox"
+  ],
+  "bundledFallbackEnabled": true,
+  "zeroBundleReady": false,
+  "projectSkillManifestPath": null,
+  "detections": [
+    {
+      "skill": "deployments-cicd",
+      "reasons": [
+        {
+          "kind": "file",
+          "source": "vercel.json",
+          "detail": "matched file marker vercel.json"
+        }
+      ]
+    },
+    {
+      "skill": "env-vars",
+      "reasons": [
+        {
+          "kind": "file",
+          "source": ".env.local",
+          "detail": "matched file marker .env.local"
+        }
+      ]
+    },
+    {
+      "skill": "observability",
+      "reasons": [
+        {
+          "kind": "profiler-default",
+          "source": "profiler-default",
+          "detail": "auto-boosted for non-greenfield debugging coverage"
+        }
+      ]
+    },
+    {
+      "skill": "vercel-api",
+      "reasons": [
+        {
+          "kind": "file",
+          "source": ".mcp.json",
+          "detail": "matched file marker .mcp.json"
+        }
+      ]
+    },
+    {
+      "skill": "vercel-cli",
+      "reasons": [
+        {
+          "kind": "file",
+          "source": "vercel.json",
+          "detail": "matched file marker vercel.json"
+        }
+      ]
+    },
+    {
+      "skill": "vercel-functions",
+      "reasons": [
+        {
+          "kind": "file",
+          "source": "vercel.json",
+          "detail": "matched file marker vercel.json"
+        }
+      ]
+    },
+    {
+      "skill": "vercel-sandbox",
+      "reasons": [
+        {
+          "kind": "dependency",
+          "source": "@vercel/sandbox",
+          "detail": "matched dependency @vercel/sandbox"
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "install-missing",
+      "label": "Install detected skills",
+      "description": "Install 7 missing skills into .skills/.",
+      "command": "npx skills install deployments-cicd env-vars observability vercel-api vercel-cli vercel-functions vercel-sandbox --dir .skills",
+      "default": true
+    },
+    {
+      "id": "activate-cache-only",
+      "label": "Use cache-only mode",
+      "description": "Cache-only mode is blocked until the missing skills are installed.",
+      "command": null,
+      "default": false
+    },
+    {
+      "id": "explain",
+      "label": "Explain detections",
+      "description": "Open the persisted install plan with full detection reasons.",
+      "command": "cat .skills/install-plan.json"
+    }
+  ]
+}

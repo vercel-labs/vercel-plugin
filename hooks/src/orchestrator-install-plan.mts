@@ -30,7 +30,7 @@ export interface SkillDetection {
 }
 
 export interface SkillInstallAction {
-  id: "install-missing" | "explain" | "offline";
+  id: "install-missing" | "explain" | "activate-cache-only";
   label: string;
   description: string;
   command: string | null;
@@ -45,6 +45,8 @@ export interface SkillInstallPlan {
   installedSkills: string[];
   missingSkills: string[];
   bundledFallbackEnabled: boolean;
+  zeroBundleReady: boolean;
+  projectSkillManifestPath: string | null;
   detections: SkillDetection[];
   actions: SkillInstallAction[];
 }
@@ -72,6 +74,8 @@ export function buildSkillInstallPlan(args: {
   detections: SkillDetection[];
   installedSkills: string[];
   bundledFallbackEnabled: boolean;
+  zeroBundleReady: boolean;
+  projectSkillManifestPath?: string | null;
   now?: () => Date;
 }): SkillInstallPlan {
   const likelySkills = uniqueSorted(
@@ -96,6 +100,8 @@ export function buildSkillInstallPlan(args: {
     installedSkills,
     missingSkills,
     bundledFallbackEnabled: args.bundledFallbackEnabled,
+    zeroBundleReady: args.zeroBundleReady,
+    projectSkillManifestPath: args.projectSkillManifestPath ?? null,
     detections: [...args.detections].sort((a, b) =>
       a.skill.localeCompare(b.skill),
     ),
@@ -108,7 +114,18 @@ export function buildSkillInstallPlan(args: {
             ? "All detected skills are already cached."
             : `Install ${missingSkills.length} missing skill${missingSkills.length === 1 ? "" : "s"} into .skills/.`,
         command: installCommand,
-        default: true,
+        default: !args.zeroBundleReady,
+      },
+      {
+        id: "activate-cache-only",
+        label: "Use cache-only mode",
+        description: args.zeroBundleReady
+          ? "All detected skills are cached. This session can disable bundled fallback."
+          : "Cache-only mode is blocked until the missing skills are installed.",
+        command: args.zeroBundleReady
+          ? "export VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK=1"
+          : null,
+        default: args.zeroBundleReady,
       },
       {
         id: "explain",
@@ -116,14 +133,6 @@ export function buildSkillInstallPlan(args: {
         description:
           "Open the persisted install plan with full detection reasons.",
         command: "cat .skills/install-plan.json",
-      },
-      {
-        id: "offline",
-        label: "Work offline from cache",
-        description: args.bundledFallbackEnabled
-          ? "Disable bundled fallback and rely on cached skills only."
-          : "Bundled fallback is already disabled.",
-        command: "export VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK=1",
       },
     ],
   };
@@ -151,6 +160,8 @@ export function formatSkillInstallPalette(
     `- Detected: ${plan.likelySkills.join(", ")}`,
     `- Cached: ${plan.installedSkills.length > 0 ? plan.installedSkills.join(", ") : "none"}`,
     `- Missing: ${plan.missingSkills.length > 0 ? plan.missingSkills.join(", ") : "none"}`,
+    `- Zero-bundle ready: ${plan.zeroBundleReady ? "yes" : "no"}`,
+    `- Cache manifest: ${plan.projectSkillManifestPath ?? "none"}`,
   ];
 
   const installAction = plan.actions.find(
@@ -160,10 +171,14 @@ export function formatSkillInstallPalette(
     lines.push(`- [1] Install now: ${installAction.command}`);
   }
 
-  lines.push("- [2] Explain: cat .skills/install-plan.json");
-  lines.push(
-    "- [3] Offline cache only: export VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK=1",
+  const cacheOnlyAction = plan.actions.find(
+    (action) => action.id === "activate-cache-only",
   );
+  if (cacheOnlyAction?.command) {
+    lines.push(`- [2] Cache only: ${cacheOnlyAction.command}`);
+  }
+
+  lines.push("- [3] Explain: cat .skills/install-plan.json");
 
   if (plan.detections.length > 0) {
     lines.push("", "Detection reasons:");

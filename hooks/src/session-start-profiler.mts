@@ -48,6 +48,7 @@ import {
   createRegistryClient,
   type InstallSkillsResult,
 } from "./registry-client.mjs";
+import { writeProjectSkillManifest } from "./project-skill-manifest.mjs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -658,6 +659,8 @@ export function buildSessionStartProfilerEnvVars(args: {
   likelySkills: string[];
   installedSkills?: string[];
   missingSkills?: string[];
+  zeroBundleReady?: boolean;
+  projectSkillManifestPath?: string | null;
   setupSignals: BootstrapSignals;
 }): Record<string, string> {
   const envVars: Record<string, string> = {
@@ -675,6 +678,13 @@ export function buildSessionStartProfilerEnvVars(args: {
   }
   if (args.missingSkills && args.missingSkills.length > 0) {
     envVars.VERCEL_PLUGIN_MISSING_SKILLS = args.missingSkills.join(",");
+  }
+  if (args.zeroBundleReady) {
+    envVars.VERCEL_PLUGIN_ZERO_BUNDLE_READY = "1";
+    envVars.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK = "1";
+  }
+  if (args.projectSkillManifestPath) {
+    envVars.VERCEL_PLUGIN_PROJECT_SKILL_MANIFEST = args.projectSkillManifestPath;
   }
   if (args.setupSignals.bootstrapHints.length > 0) {
     envVars.VERCEL_PLUGIN_BOOTSTRAP_HINTS = args.setupSignals.bootstrapHints.join(",");
@@ -882,12 +892,27 @@ async function main(): Promise<void> {
     });
   }
 
+  // Write per-project skill manifest when skills are installed
+  let projectSkillManifestPath: string | null = null;
+  if (installedSkills.length > 0) {
+    try {
+      projectSkillManifestPath = writeProjectSkillManifest(join(projectRoot, ".skills"));
+    } catch (error) {
+      logCaughtError(log, "session-start-profiler:write-project-skill-manifest-failed", error, {
+        projectRoot,
+        installedSkillCount: installedSkills.length,
+      });
+    }
+  }
+
   // Build and persist the machine-readable install plan
   const installPlan = buildSkillInstallPlan({
     projectRoot,
     detections,
     installedSkills,
     bundledFallbackEnabled,
+    zeroBundleReady: skillCacheStatus.zeroBundleReady,
+    projectSkillManifestPath,
   });
 
   try {
@@ -909,6 +934,8 @@ async function main(): Promise<void> {
     likelySkills,
     installedSkills,
     missingSkills: skillCacheStatus.missingSkills,
+    zeroBundleReady: skillCacheStatus.zeroBundleReady,
+    projectSkillManifestPath,
     setupSignals,
   });
   envVars.VERCEL_PLUGIN_INSTALL_PLAN = serializeSkillInstallPlan(installPlan);
@@ -972,6 +999,7 @@ async function main(): Promise<void> {
         installedSkills,
         missingSkills: skillCacheStatus.missingSkills,
         zeroBundleReady: skillCacheStatus.zeroBundleReady,
+        projectSkillManifestPath,
         greenfield: greenfield !== null,
         bootstrapHints: setupSignals.bootstrapHints,
         resourceHints: setupSignals.resourceHints,
