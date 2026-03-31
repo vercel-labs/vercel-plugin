@@ -119,12 +119,30 @@ interface PromptMatchedSkill {
   priority: number;
 }
 
-function getPromptMatchedSkills(promptText: string): PromptMatchedSkill[] {
+/**
+ * Resolve the workspace root from profile cache (preferred) or env vars.
+ * Falls back to process.cwd() when nothing else is available.
+ */
+function resolveBootstrapProjectRoot(sessionId?: string): string {
+  if (sessionId) {
+    const cache = safeReadJson<ProfileCache>(profileCachePath(sessionId));
+    if (cache?.projectRoot && cache.projectRoot.trim() !== "") {
+      return cache.projectRoot;
+    }
+  }
+  return (
+    process.env.CLAUDE_PROJECT_ROOT ??
+    process.env.CURSOR_PROJECT_DIR ??
+    process.cwd()
+  );
+}
+
+function getPromptMatchedSkills(promptText: string, projectRoot: string): PromptMatchedSkill[] {
   const normalizedPrompt = normalizePromptText(promptText);
   if (!normalizedPrompt) return [];
 
   try {
-    const loaded = loadSkills(PLUGIN_ROOT, log);
+    const loaded = loadSkills(PLUGIN_ROOT, log, projectRoot);
     if (!loaded) return [];
 
     const matches: PromptMatchedSkill[] = [];
@@ -171,6 +189,7 @@ function resolveLikelySkillsFromPendingLaunch(
   sessionId: string | undefined,
   agentType: string,
   likelySkills: string[],
+  projectRoot: string,
 ): string[] {
   if (!sessionId) return likelySkills;
 
@@ -187,7 +206,7 @@ function resolveLikelySkillsFromPendingLaunch(
     }
 
     const promptText = `${pendingLaunch.description} ${pendingLaunch.prompt}`.trim();
-    const promptMatchedSkills = getPromptMatchedSkills(promptText);
+    const promptMatchedSkills = getPromptMatchedSkills(promptText, projectRoot);
     const effectiveLikelySkills = mergeLikelySkills(likelySkills, promptMatchedSkills);
 
     log.debug("subagent-start-bootstrap:pending-launch", {
@@ -233,7 +252,8 @@ function buildMinimalContext(agentType: string, likelySkills: string[]): string 
  * Build light context (~3KB): profile + skill summaries + deployment constraints.
  * Used for Plan agents that need enough context to architect solutions.
  */
-function buildLightContext(agentType: string, likelySkills: string[], budgetBytes: number): string {
+function buildLightContext(agentType: string, likelySkills: string[], budgetBytes: number, sessionId?: string): string {
+  const projectRoot = resolveBootstrapProjectRoot(sessionId);
   const parts: string[] = [];
   parts.push(`<!-- vercel-plugin:subagent-bootstrap agent_type="${agentType}" budget="light" -->`);
   parts.push(profileLine(agentType, likelySkills));
@@ -241,7 +261,7 @@ function buildLightContext(agentType: string, likelySkills: string[], budgetByte
   let usedBytes = Buffer.byteLength(parts.join("\n"), "utf8");
 
   // Add skill summaries
-  const loaded = loadSkills(PLUGIN_ROOT, log);
+  const loaded = loadSkills(PLUGIN_ROOT, log, projectRoot);
   if (loaded) {
     for (const skill of likelySkills) {
       const config = loaded.skillMap[skill];
@@ -277,7 +297,8 @@ function buildLightContext(agentType: string, likelySkills: string[], budgetByte
  * Build standard context (~8KB): profile + top skill full bodies.
  * Used for general-purpose agents that need actionable skill content.
  */
-function buildStandardContext(agentType: string, likelySkills: string[], budgetBytes: number): string {
+function buildStandardContext(agentType: string, likelySkills: string[], budgetBytes: number, sessionId?: string): string {
+  const projectRoot = resolveBootstrapProjectRoot(sessionId);
   const parts: string[] = [];
   parts.push(`<!-- vercel-plugin:subagent-bootstrap agent_type="${agentType}" budget="standard" -->`);
   parts.push(profileLine(agentType, likelySkills));
@@ -285,9 +306,9 @@ function buildStandardContext(agentType: string, likelySkills: string[], budgetB
   let usedBytes = Buffer.byteLength(parts.join("\n"), "utf8");
 
   // Load skill map once for summary fallbacks
-  const loaded = loadSkills(PLUGIN_ROOT, log);
+  const loaded = loadSkills(PLUGIN_ROOT, log, projectRoot);
   const store = createSkillStore({
-    projectRoot: process.cwd(),
+    projectRoot,
     pluginRoot: PLUGIN_ROOT,
     bundledFallback: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1",
   });
@@ -339,11 +360,13 @@ function main(): void {
 
   log.debug("subagent-start-bootstrap", { agentId, agentType, sessionId });
 
+  const projectRoot = resolveBootstrapProjectRoot(sessionId);
   const profilerLikelySkills = getLikelySkills(sessionId);
   const likelySkills = resolveLikelySkillsFromPendingLaunch(
     sessionId,
     agentType,
     profilerLikelySkills,
+    projectRoot,
   );
 
   const category = resolveBudgetCategory(agentType);
@@ -355,10 +378,10 @@ function main(): void {
       context = buildMinimalContext(agentType, likelySkills);
       break;
     case "light":
-      context = buildLightContext(agentType, likelySkills, maxBytes);
+      context = buildLightContext(agentType, likelySkills, maxBytes, sessionId);
       break;
     case "standard":
-      context = buildStandardContext(agentType, likelySkills, maxBytes);
+      context = buildStandardContext(agentType, likelySkills, maxBytes, sessionId);
       break;
   }
 
@@ -425,6 +448,7 @@ export {
   buildLightContext,
   buildStandardContext,
   getLikelySkills,
+  resolveBootstrapProjectRoot,
   main,
 };
 export type { SubagentStartInput, ProfileCache, BudgetCategory };

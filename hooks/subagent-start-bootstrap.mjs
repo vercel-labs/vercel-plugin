@@ -52,11 +52,20 @@ function budgetBytesForCategory(category) {
       return STANDARD_BUDGET_BYTES;
   }
 }
-function getPromptMatchedSkills(promptText) {
+function resolveBootstrapProjectRoot(sessionId) {
+  if (sessionId) {
+    const cache = safeReadJson(profileCachePath(sessionId));
+    if (cache?.projectRoot && cache.projectRoot.trim() !== "") {
+      return cache.projectRoot;
+    }
+  }
+  return process.env.CLAUDE_PROJECT_ROOT ?? process.env.CURSOR_PROJECT_DIR ?? process.cwd();
+}
+function getPromptMatchedSkills(promptText, projectRoot) {
   const normalizedPrompt = normalizePromptText(promptText);
   if (!normalizedPrompt) return [];
   try {
-    const loaded = loadSkills(PLUGIN_ROOT, log);
+    const loaded = loadSkills(PLUGIN_ROOT, log, projectRoot);
     if (!loaded) return [];
     const matches = [];
     for (const [skill, config] of Object.entries(loaded.skillMap)) {
@@ -92,7 +101,7 @@ function mergeLikelySkills(likelySkills, promptMatchedSkills) {
   const promptSkillNames = promptMatchedSkills.map((entry) => entry.skill);
   return [.../* @__PURE__ */ new Set([...promptSkillNames, ...likelySkills])];
 }
-function resolveLikelySkillsFromPendingLaunch(sessionId, agentType, likelySkills) {
+function resolveLikelySkillsFromPendingLaunch(sessionId, agentType, likelySkills, projectRoot) {
   if (!sessionId) return likelySkills;
   try {
     const pendingLaunch = claimPendingLaunch(sessionId, agentType);
@@ -106,7 +115,7 @@ function resolveLikelySkillsFromPendingLaunch(sessionId, agentType, likelySkills
       return likelySkills;
     }
     const promptText = `${pendingLaunch.description} ${pendingLaunch.prompt}`.trim();
-    const promptMatchedSkills = getPromptMatchedSkills(promptText);
+    const promptMatchedSkills = getPromptMatchedSkills(promptText, projectRoot);
     const effectiveLikelySkills = mergeLikelySkills(likelySkills, promptMatchedSkills);
     log.debug("subagent-start-bootstrap:pending-launch", {
       sessionId,
@@ -135,12 +144,13 @@ function buildMinimalContext(agentType, likelySkills) {
   parts.push("<!-- /vercel-plugin:subagent-bootstrap -->");
   return parts.join("\n");
 }
-function buildLightContext(agentType, likelySkills, budgetBytes) {
+function buildLightContext(agentType, likelySkills, budgetBytes, sessionId) {
+  const projectRoot = resolveBootstrapProjectRoot(sessionId);
   const parts = [];
   parts.push(`<!-- vercel-plugin:subagent-bootstrap agent_type="${agentType}" budget="light" -->`);
   parts.push(profileLine(agentType, likelySkills));
   let usedBytes = Buffer.byteLength(parts.join("\n"), "utf8");
-  const loaded = loadSkills(PLUGIN_ROOT, log);
+  const loaded = loadSkills(PLUGIN_ROOT, log, projectRoot);
   if (loaded) {
     for (const skill of likelySkills) {
       const config = loaded.skillMap[skill];
@@ -167,14 +177,15 @@ function buildLightContext(agentType, likelySkills, budgetBytes) {
   parts.push("<!-- /vercel-plugin:subagent-bootstrap -->");
   return parts.join("\n");
 }
-function buildStandardContext(agentType, likelySkills, budgetBytes) {
+function buildStandardContext(agentType, likelySkills, budgetBytes, sessionId) {
+  const projectRoot = resolveBootstrapProjectRoot(sessionId);
   const parts = [];
   parts.push(`<!-- vercel-plugin:subagent-bootstrap agent_type="${agentType}" budget="standard" -->`);
   parts.push(profileLine(agentType, likelySkills));
   let usedBytes = Buffer.byteLength(parts.join("\n"), "utf8");
-  const loaded = loadSkills(PLUGIN_ROOT, log);
+  const loaded = loadSkills(PLUGIN_ROOT, log, projectRoot);
   const store = createSkillStore({
-    projectRoot: process.cwd(),
+    projectRoot,
     pluginRoot: PLUGIN_ROOT,
     bundledFallback: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
   });
@@ -216,11 +227,13 @@ function main() {
   const agentType = input.agent_type ?? "unknown";
   const sessionId = input.session_id;
   log.debug("subagent-start-bootstrap", { agentId, agentType, sessionId });
+  const projectRoot = resolveBootstrapProjectRoot(sessionId);
   const profilerLikelySkills = getLikelySkills(sessionId);
   const likelySkills = resolveLikelySkillsFromPendingLaunch(
     sessionId,
     agentType,
-    profilerLikelySkills
+    profilerLikelySkills,
+    projectRoot
   );
   const category = resolveBudgetCategory(agentType);
   const maxBytes = budgetBytesForCategory(category);
@@ -230,10 +243,10 @@ function main() {
       context = buildMinimalContext(agentType, likelySkills);
       break;
     case "light":
-      context = buildLightContext(agentType, likelySkills, maxBytes);
+      context = buildLightContext(agentType, likelySkills, maxBytes, sessionId);
       break;
     case "standard":
-      context = buildStandardContext(agentType, likelySkills, maxBytes);
+      context = buildStandardContext(agentType, likelySkills, maxBytes, sessionId);
       break;
   }
   if (Buffer.byteLength(context, "utf8") > maxBytes) {
@@ -285,5 +298,6 @@ export {
   buildStandardContext,
   getLikelySkills,
   main,
-  parseInput
+  parseInput,
+  resolveBootstrapProjectRoot
 };

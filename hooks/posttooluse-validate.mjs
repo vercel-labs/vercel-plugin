@@ -126,16 +126,24 @@ function parseInput(raw, logger, env = process.env) {
   });
   return { toolName, filePath, filePaths, sessionId, cwd, platform };
 }
-function loadValidateRules(pluginRoot, logger, projectRoot, skillStore) {
+function loadValidateRules(pluginRoot, projectRoot, logger) {
   const l = logger || log;
-  const store = skillStore ?? createSkillStore({
-    projectRoot: projectRoot ?? process.cwd(),
+  const effectiveProjectRoot = projectRoot ?? process.cwd();
+  const store = createSkillStore({
+    projectRoot: effectiveProjectRoot,
     pluginRoot,
     bundledFallback: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
   });
   const loaded = store.loadSkillSet(l);
   if (!loaded) {
-    l.debug("posttooluse-validate-skip", { reason: "no_skills_loaded" });
+    l.debug("posttooluse-validate-skip", {
+      reason: "no_skills_loaded",
+      projectRoot: effectiveProjectRoot,
+      roots: store.roots.map((root) => ({
+        source: root.source,
+        rootDir: root.rootDir
+      }))
+    });
     return null;
   }
   const skillMap = loaded.skillMap;
@@ -150,16 +158,22 @@ function loadValidateRules(pluginRoot, logger, projectRoot, skillStore) {
     }
   }
   if (rulesMap.size === 0 && chainMap.size === 0) {
-    l.debug("posttooluse-validate-skip", { reason: "no_validate_rules" });
+    l.debug("posttooluse-validate-skip", {
+      reason: "no_validate_rules",
+      projectRoot: effectiveProjectRoot,
+      totalSkills: Object.keys(skillMap).length
+    });
     return null;
   }
   const compiledSkills = loaded.compiledSkills;
   l.debug("posttooluse-validate-loaded", {
+    projectRoot: effectiveProjectRoot,
     totalSkills: Object.keys(skillMap).length,
     skillsWithRules: rulesMap.size,
-    skillsWithChainTo: chainMap.size
+    skillsWithChainTo: chainMap.size,
+    usedManifest: loaded.usedManifest
   });
-  return { skillMap, compiledSkills, rulesMap, chainMap };
+  return { skillMap, compiledSkills, rulesMap, chainMap, skillStore: store, projectRoot: effectiveProjectRoot };
 }
 function matchFileToSkills(filePath, fileContent, compiledSkills, rulesMap, logger, chainMap) {
   const l = logger || log;
@@ -249,10 +263,15 @@ function runValidation(fileContent, matchedSkills, rulesMap, logger, filePath) {
   });
   return violations;
 }
-function runChainInjection(fileContent, matchedSkills, chainMap, sessionId, pluginRoot, logger, env = process.env, skillStore) {
+function runChainInjection(fileContent, matchedSkills, chainMap, sessionId, pluginRoot, logger, env = process.env, skillStore, projectRoot) {
   const l = logger || log;
   const result = { injected: [], totalBytes: 0 };
   const chainCap = Math.max(1, parseInt(env.VERCEL_PLUGIN_CHAIN_CAP || "", 10) || DEFAULT_CHAIN_CAP);
+  const store = skillStore ?? createSkillStore({
+    projectRoot: projectRoot ?? process.cwd(),
+    pluginRoot,
+    bundledFallback: env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
+  });
   const candidates = [];
   for (const skill of matchedSkills) {
     const rules = chainMap.get(skill);
@@ -308,16 +327,12 @@ function runChainInjection(fileContent, matchedSkills, chainMap, sessionId, plug
       });
       continue;
     }
-    const store = skillStore ?? createSkillStore({
-      projectRoot: process.cwd(),
-      pluginRoot,
-      bundledFallback: env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
-    });
     const resolved = store.resolveSkillBody(rule.targetSkill, l);
     if (!resolved) {
       l.debug("posttooluse-chain-skip-missing", {
         sourceSkill,
-        targetSkill: rule.targetSkill
+        targetSkill: rule.targetSkill,
+        projectRoot: projectRoot ?? process.cwd()
       });
       continue;
     }
@@ -532,15 +547,10 @@ function run() {
     return "{}";
   }
   const tLoad = log.active ? log.now() : 0;
-  const store = createSkillStore({
-    projectRoot: cwd,
-    pluginRoot: PLUGIN_ROOT,
-    bundledFallback: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
-  });
-  const data = loadValidateRules(PLUGIN_ROOT, log, cwd, store);
+  const data = loadValidateRules(PLUGIN_ROOT, cwd, log);
   if (!data) return "{}";
   if (log.active) timing.load = Math.round(log.now() - tLoad);
-  const { compiledSkills, rulesMap, chainMap } = data;
+  const { compiledSkills, rulesMap, chainMap, skillStore } = data;
   const tMatch = log.active ? log.now() : 0;
   const matchedSkills = matchFileToSkills(filePath, fileContent, compiledSkills, rulesMap, log, chainMap);
   if (log.active) timing.match = Math.round(log.now() - tMatch);
@@ -561,7 +571,8 @@ function run() {
     PLUGIN_ROOT,
     log,
     process.env,
-    store
+    skillStore,
+    cwd
   );
   if (log.active) timing.chain = Math.round(log.now() - tChain);
   const validatedFiles = markValidated(filePath, hash, sessionId);

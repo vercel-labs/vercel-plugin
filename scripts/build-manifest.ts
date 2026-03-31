@@ -17,10 +17,13 @@ import type { SkillEntry, ManifestSkill } from "../hooks/patterns.mjs";
 import type { ChainToRule, ValidationRule } from "../hooks/skill-map-frontmatter.mjs";
 import { loadValidatedSkillMap } from "../src/shared/skill-map-loader.ts";
 
-export { buildManifest, writeManifestFile, synthesizeChainToFromValidate };
+export { buildManifest, writeManifestFile, synthesizeChainToFromValidate, toBodyPath };
 
 const ROOT = resolve(import.meta.dir, "..");
 const SKILLS_DIR = join(ROOT, "skills");
+const INPUT_SKILLS_DIR = process.env.VERCEL_PLUGIN_SKILLS_DIR
+  ? resolve(process.env.VERCEL_PLUGIN_SKILLS_DIR)
+  : SKILLS_DIR;
 const OUT_DIR = join(ROOT, "generated");
 const OUT_FILE = join(OUT_DIR, "skill-manifest.json");
 
@@ -32,6 +35,20 @@ interface Manifest {
   generatedAt: string;
   version: 2;
   skills: Record<string, ManifestSkillWithBody>;
+}
+
+/**
+ * Compute the bodyPath for a skill given its source directory.
+ * When the skill lives under ROOT, return a ROOT-relative path with forward slashes.
+ * Otherwise return the absolute path (e.g. for external .skills/ directories).
+ */
+function toBodyPath(skillsDir: string, slug: string): string {
+  const abs = join(skillsDir, slug, "SKILL.md");
+  const rootPrefix = ROOT + "/";
+  const relativeFromRoot = abs.startsWith(rootPrefix)
+    ? abs.slice(rootPrefix.length)
+    : abs;
+  return relativeFromRoot.replaceAll("\\", "/");
 }
 
 /**
@@ -175,7 +192,7 @@ function buildManifest(skillsDir: string): { manifest: Manifest; warnings: strin
       pathPatterns,
       bashPatterns,
       importPatterns,
-      bodyPath: `skills/${slug}/SKILL.md`,
+      bodyPath: toBodyPath(skillsDir, slug),
       pathRegexSources,
       bashRegexSources,
       importRegexSources,
@@ -218,7 +235,7 @@ function isMain() {
 }
 
 if (isMain()) {
-  const { manifest, warnings, errors } = buildManifest(SKILLS_DIR);
+  const { manifest, warnings, errors } = buildManifest(INPUT_SKILLS_DIR);
 
   for (const w of warnings) console.warn(`[warn] ${w}`);
 

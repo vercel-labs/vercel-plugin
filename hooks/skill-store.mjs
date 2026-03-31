@@ -246,44 +246,51 @@ function loadRootSkillSet(root, logger) {
 }
 function createSkillStore(options) {
   const roots = defaultSkillStoreRoots(options);
+  let cachedSkillSet;
+  let cachedInstalled;
+  function loadCachedSkillSet(logger) {
+    if (cachedSkillSet !== void 0) return cachedSkillSet;
+    const rootResults = roots.map((root) => loadRootSkillSet(root, logger)).filter(
+      (entry) => entry !== null
+    );
+    if (rootResults.length === 0) {
+      cachedSkillSet = null;
+      return null;
+    }
+    const skillMap = {};
+    const compiledBySkill = /* @__PURE__ */ new Map();
+    const origins = {};
+    let usedManifest = false;
+    for (const result of rootResults) {
+      usedManifest = usedManifest || result.usedManifest;
+      for (const [skill, config] of Object.entries(result.skillMap)) {
+        if (!(skill in skillMap)) {
+          skillMap[skill] = config;
+          origins[skill] = result.root;
+        }
+      }
+      for (const entry of result.compiledSkills) {
+        if (!compiledBySkill.has(entry.skill)) {
+          compiledBySkill.set(entry.skill, entry);
+        }
+      }
+    }
+    cachedSkillSet = {
+      roots: rootResults.map((entry) => entry.root),
+      skillMap,
+      compiledSkills: [...compiledBySkill.values()],
+      origins,
+      usedManifest
+    };
+    return cachedSkillSet;
+  }
   return {
     roots,
     loadSkillSet(logger) {
-      const rootResults = roots.map((root) => loadRootSkillSet(root, logger)).filter(
-        (entry) => entry !== null
-      );
-      if (rootResults.length === 0) {
-        return null;
-      }
-      const skillMap = {};
-      const compiledBySkill = /* @__PURE__ */ new Map();
-      const origins = {};
-      let usedManifest = false;
-      for (const result of rootResults) {
-        usedManifest = usedManifest || result.usedManifest;
-        for (const [skill, config] of Object.entries(result.skillMap)) {
-          if (!(skill in skillMap)) {
-            skillMap[skill] = config;
-            origins[skill] = result.root;
-          }
-        }
-        for (const entry of result.compiledSkills) {
-          if (!compiledBySkill.has(entry.skill)) {
-            compiledBySkill.set(entry.skill, entry);
-          }
-        }
-      }
-      return {
-        roots: rootResults.map((entry) => entry.root),
-        skillMap,
-        compiledSkills: [...compiledBySkill.values()],
-        origins,
-        usedManifest
-      };
+      return loadCachedSkillSet(logger);
     },
     resolveSkill(name, logger) {
-      const loaded = this.loadSkillSet(logger);
-      return loaded?.skillMap[name] ?? null;
+      return loadCachedSkillSet(logger)?.skillMap[name] ?? null;
     },
     resolveSkillBody(name, _logger) {
       for (const root of roots) {
@@ -303,16 +310,14 @@ function createSkillStore(options) {
       return null;
     },
     listInstalledSkills(logger) {
-      const installed = /* @__PURE__ */ new Set();
-      for (const root of roots) {
-        if (root.source === "bundled") continue;
-        const loaded = loadRootSkillSet(root, logger);
-        if (!loaded) continue;
-        for (const skill of Object.keys(loaded.skillMap)) {
-          installed.add(skill);
-        }
+      if (cachedInstalled !== void 0) return [...cachedInstalled];
+      const loaded = loadCachedSkillSet(logger);
+      if (!loaded) {
+        cachedInstalled = [];
+        return [];
       }
-      return [...installed].sort();
+      cachedInstalled = Object.entries(loaded.origins).filter(([, root]) => root.source !== "bundled").map(([skill]) => skill).sort();
+      return [...cachedInstalled];
     }
   };
 }
