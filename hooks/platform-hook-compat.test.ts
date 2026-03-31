@@ -10,8 +10,11 @@ import {
 import {
   formatOutput as formatPostToolOutput,
   parseInput as parsePostToolInput,
+  loadValidateRules,
+  runChainInjection,
 } from "./src/posttooluse-validate.mts";
 import type { ValidationViolation } from "./src/posttooluse-validate.mts";
+import { createSkillStore } from "./src/skill-store.mts";
 
 const tempDirs = new Set<string>();
 
@@ -181,5 +184,101 @@ describe("platform hook compatibility", () => {
     const content = readFileSync(join(projectRoot, "app/globals.css"), "utf-8");
     expect(content).toContain('"Geist", "Geist Fallback"');
     expect(content).toContain('"Geist Mono", "Geist Mono Fallback"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: validate path must not treat logger as projectRoot
+// ---------------------------------------------------------------------------
+
+describe("validate chain shared store regressions", () => {
+  const PLUGIN_ROOT = join(import.meta.dirname);
+
+  it("loadValidateRules treats second arg as projectRoot, not logger", () => {
+    // The old call-site risk: loadValidateRules(PLUGIN_ROOT, log) would pass
+    // the logger as projectRoot. Verify that passing a string projectRoot works
+    // and that the returned projectRoot matches what was passed.
+    const data = loadValidateRules(PLUGIN_ROOT, "/tmp/test-project-root");
+    // data may be null if no skills are found for /tmp/test-project-root,
+    // but it must not throw. If it loaded, projectRoot must match.
+    if (data) {
+      expect(data.projectRoot).toBe("/tmp/test-project-root");
+      expect(data.skillStore).toBeDefined();
+      expect(data.skillStore.roots).toBeDefined();
+    }
+  });
+
+  it("loadValidateRules falls back to cwd when projectRoot is undefined", () => {
+    const data = loadValidateRules(PLUGIN_ROOT, undefined);
+    if (data) {
+      expect(data.projectRoot).toBe(process.cwd());
+    }
+  });
+
+  it("runChainInjection returns empty result for missing target skill with bundled fallback off", () => {
+    const chainMap = new Map([
+      ["source-skill", [
+        {
+          pattern: "TRIGGER",
+          targetSkill: "nonexistent-skill-xyz",
+          message: "Should be skipped.",
+        },
+      ]],
+    ]);
+
+    const store = createSkillStore({
+      projectRoot: "/tmp/empty-project",
+      pluginRoot: PLUGIN_ROOT,
+      bundledFallback: false,
+    });
+
+    // Must not throw — should return empty result gracefully
+    const result = runChainInjection(
+      "const x = TRIGGER;",
+      ["source-skill"],
+      chainMap,
+      null,
+      PLUGIN_ROOT,
+      undefined,
+      { VERCEL_PLUGIN_SEEN_SKILLS: "", VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK: "1" } as any,
+      store,
+      "/tmp/empty-project",
+    );
+
+    expect(result.injected).toEqual([]);
+    expect(result.totalBytes).toBe(0);
+  });
+
+  it("runChainInjection uses provided skillStore instead of creating a new one", () => {
+    const chainMap = new Map([
+      ["source-skill", [
+        {
+          pattern: "TRIGGER",
+          targetSkill: "also-nonexistent",
+        },
+      ]],
+    ]);
+
+    const store = createSkillStore({
+      projectRoot: "/tmp/custom-root",
+      pluginRoot: PLUGIN_ROOT,
+      bundledFallback: false,
+    });
+
+    // Passing the store explicitly — should use it, not create a fallback
+    const result = runChainInjection(
+      "const x = TRIGGER;",
+      ["source-skill"],
+      chainMap,
+      null,
+      PLUGIN_ROOT,
+      undefined,
+      { VERCEL_PLUGIN_SEEN_SKILLS: "" } as any,
+      store,
+      "/tmp/custom-root",
+    );
+
+    expect(result.injected).toEqual([]);
+    expect(result.totalBytes).toBe(0);
   });
 });

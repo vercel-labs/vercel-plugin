@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-31T10:30:30.481Z",
+  "generatedAt": "2026-03-31T11:49:29.510Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -447,6 +447,18 @@
         ],
         "examples": []
       }
+    },
+    "fake-banned-test-skill": {
+      "priority": 5,
+      "summary": "",
+      "docs": [],
+      "pathPatterns": [],
+      "bashPatterns": [],
+      "importPatterns": [],
+      "bodyPath": "skills/fake-banned-test-skill/SKILL.md",
+      "pathRegexSources": [],
+      "bashRegexSources": [],
+      "importRegexSources": []
     },
     "json-render": {
       "priority": 4,

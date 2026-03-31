@@ -269,7 +269,7 @@ export function loadValidateRules(
   logger?: Logger,
 ): LoadedValidateData | null {
   const l = logger || log;
-  const effectiveProjectRoot = projectRoot ?? process.cwd();
+  const effectiveProjectRoot = projectRoot || process.cwd();
   const store = createSkillStore({
     projectRoot: effectiveProjectRoot,
     pluginRoot,
@@ -581,6 +581,10 @@ export function runChainInjection(
         sourceSkill,
         targetSkill: rule.targetSkill,
         projectRoot: projectRoot ?? process.cwd(),
+        roots: store.roots.map((root) => ({
+          source: root.source,
+          rootDir: root.rootDir,
+        })),
       });
       continue;
     }
@@ -908,7 +912,7 @@ export function run(): string {
   if (!data) return "{}";
   if (log.active) timing.load = Math.round(log.now() - tLoad);
 
-  const { compiledSkills, rulesMap, chainMap, skillStore } = data;
+  const { compiledSkills, rulesMap, chainMap, skillStore, projectRoot } = data;
 
   // Stage 3: matchFileToSkills
   const tMatch = log.active ? log.now() : 0;
@@ -930,7 +934,7 @@ export function run(): string {
   const tChain = log.active ? log.now() : 0;
   const chainResult = runChainInjection(
     fileContent, matchedSkills, chainMap, sessionId, PLUGIN_ROOT, log,
-    process.env, skillStore, cwd,
+    process.env, skillStore, projectRoot,
   );
   if (log.active) timing.chain = Math.round(log.now() - tChain);
 

@@ -128,7 +128,7 @@ function parseInput(raw, logger, env = process.env) {
 }
 function loadValidateRules(pluginRoot, projectRoot, logger) {
   const l = logger || log;
-  const effectiveProjectRoot = projectRoot ?? process.cwd();
+  const effectiveProjectRoot = projectRoot || process.cwd();
   const store = createSkillStore({
     projectRoot: effectiveProjectRoot,
     pluginRoot,
@@ -332,7 +332,11 @@ function runChainInjection(fileContent, matchedSkills, chainMap, sessionId, plug
       l.debug("posttooluse-chain-skip-missing", {
         sourceSkill,
         targetSkill: rule.targetSkill,
-        projectRoot: projectRoot ?? process.cwd()
+        projectRoot: projectRoot ?? process.cwd(),
+        roots: store.roots.map((root) => ({
+          source: root.source,
+          rootDir: root.rootDir
+        }))
       });
       continue;
     }
@@ -550,7 +554,7 @@ function run() {
   const data = loadValidateRules(PLUGIN_ROOT, cwd, log);
   if (!data) return "{}";
   if (log.active) timing.load = Math.round(log.now() - tLoad);
-  const { compiledSkills, rulesMap, chainMap, skillStore } = data;
+  const { compiledSkills, rulesMap, chainMap, skillStore, projectRoot } = data;
   const tMatch = log.active ? log.now() : 0;
   const matchedSkills = matchFileToSkills(filePath, fileContent, compiledSkills, rulesMap, log, chainMap);
   if (log.active) timing.match = Math.round(log.now() - tMatch);
@@ -572,7 +576,7 @@ function run() {
     log,
     process.env,
     skillStore,
-    cwd
+    projectRoot
   );
   if (log.active) timing.chain = Math.round(log.now() - tChain);
   const validatedFiles = markValidated(filePath, hash, sessionId);
