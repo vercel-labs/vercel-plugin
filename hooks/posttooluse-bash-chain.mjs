@@ -12,6 +12,7 @@ import {
   syncSessionFileFromClaims
 } from "./hook-env.mjs";
 import { createLogger } from "./logger.mjs";
+import { buildSkillCacheBanner, buildSkillCacheStatus } from "./skill-cache-banner.mjs";
 import { createSkillStore } from "./skill-store.mjs";
 var PLUGIN_ROOT = resolvePluginRoot();
 var CHAIN_BUDGET_BYTES = 18e3;
@@ -244,7 +245,7 @@ function parseBashInput(raw, logger, env = process.env) {
 }
 function runBashChainInjection(packages, sessionId, projectRoot, pluginRoot, logger, env = process.env, skillStore) {
   const l = logger || log;
-  const result = { injected: [], totalBytes: 0 };
+  const result = { injected: [], missing: [], banners: [], totalBytes: 0 };
   if (packages.length === 0) return result;
   const chainCap = Math.max(
     1,
@@ -277,7 +278,8 @@ function runBashChainInjection(packages, sessionId, projectRoot, pluginRoot, log
     }
     const resolved = store.resolveSkillBody(skill, l);
     if (!resolved) {
-      l.debug("posttooluse-bash-chain-skip-missing", { pkg, skill });
+      result.missing.push(skill);
+      l.debug("posttooluse-bash-chain-skip-missing", { pkg, skill, projectRoot });
       continue;
     }
     const trimmedBody = resolved.body.trim();
@@ -314,6 +316,22 @@ function runBashChainInjection(packages, sessionId, projectRoot, pluginRoot, log
       targets: result.injected.map((i) => i.skill)
     });
   }
+  const uniqueMissing = [...new Set(result.missing)].sort();
+  if (uniqueMissing.length > 0) {
+    const installedSkillsRaw = typeof env.VERCEL_PLUGIN_INSTALLED_SKILLS === "string" ? env.VERCEL_PLUGIN_INSTALLED_SKILLS.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    const status = buildSkillCacheStatus({
+      likelySkills: uniqueMissing,
+      installedSkills: installedSkillsRaw,
+      bundledFallbackEnabled: env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
+    });
+    const banner = buildSkillCacheBanner({
+      ...status,
+      projectRoot
+    });
+    if (banner) {
+      result.banners.push(banner);
+    }
+  }
   return result;
 }
 function formatPlatformOutput(platform, additionalContext) {
@@ -329,25 +347,29 @@ function formatPlatformOutput(platform, additionalContext) {
   return JSON.stringify(output);
 }
 function formatBashChainOutput(chainResult, platform = "claude-code") {
-  if (chainResult.injected.length === 0) return "{}";
-  const parts = [];
+  if (chainResult.injected.length === 0 && chainResult.banners.length === 0) return "{}";
+  const contextParts = [...chainResult.banners];
   for (const chain of chainResult.injected) {
-    parts.push(
-      `<!-- posttooluse-bash-chain: ${chain.packageName} \u2192 ${chain.skill} -->`,
-      `**Skill context auto-loaded** (${chain.skill}): ${chain.message}`,
-      "",
-      chain.content,
-      `<!-- /posttooluse-bash-chain: ${chain.skill} -->`
+    contextParts.push(
+      [
+        `<!-- posttooluse-bash-chain: ${chain.packageName} \u2192 ${chain.skill} -->`,
+        `**Skill context auto-loaded** (${chain.skill}): ${chain.message}`,
+        "",
+        chain.content,
+        `<!-- /posttooluse-bash-chain: ${chain.skill} -->`
+      ].join("\n")
     );
   }
-  const metadata = {
-    version: 1,
-    hook: "posttooluse-bash-chain",
-    packages: chainResult.injected.map((i) => i.packageName),
-    chainedSkills: chainResult.injected.map((i) => i.skill)
-  };
-  parts.push(`<!-- postBashChain: ${JSON.stringify(metadata)} -->`);
-  return formatPlatformOutput(platform, parts.join("\n"));
+  if (chainResult.injected.length > 0) {
+    const metadata = {
+      version: 1,
+      hook: "posttooluse-bash-chain",
+      packages: chainResult.injected.map((i) => i.packageName),
+      chainedSkills: chainResult.injected.map((i) => i.skill)
+    };
+    contextParts.push(`<!-- postBashChain: ${JSON.stringify(metadata)} -->`);
+  }
+  return formatPlatformOutput(platform, contextParts.join("\n\n"));
 }
 function run() {
   const tStart = log.active ? log.now() : 0;

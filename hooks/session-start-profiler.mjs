@@ -19,6 +19,7 @@ import {
 import { pluginRoot, profileCachePath, safeReadJson, writeSessionFile } from "./hook-env.mjs";
 import { createLogger, logCaughtError } from "./logger.mjs";
 import { buildSkillMap } from "./skill-map-frontmatter.mjs";
+import { buildSkillCacheBanner, buildSkillCacheStatus } from "./skill-cache-banner.mjs";
 import { createSkillStore } from "./skill-store.mjs";
 import { trackBaseEvents, getOrCreateDeviceId } from "./telemetry.mjs";
 var FILE_MARKERS = [
@@ -388,6 +389,9 @@ function buildSessionStartProfilerEnvVars(args) {
   if (args.installedSkills && args.installedSkills.length > 0) {
     envVars.VERCEL_PLUGIN_INSTALLED_SKILLS = args.installedSkills.join(",");
   }
+  if (args.missingSkills && args.missingSkills.length > 0) {
+    envVars.VERCEL_PLUGIN_MISSING_SKILLS = args.missingSkills.join(",");
+  }
   if (args.setupSignals.bootstrapHints.length > 0) {
     envVars.VERCEL_PLUGIN_BOOTSTRAP_HINTS = args.setupSignals.bootstrapHints.join(",");
   }
@@ -449,17 +453,31 @@ async function main() {
   const greenfieldValue = greenfield ? "true" : "";
   const likelySkillsValue = likelySkills.join(",");
   const agentBrowserAvailable = checkAgentBrowser();
+  const bundledFallbackEnabled = process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1";
   const skillStore = createSkillStore({
     projectRoot,
     pluginRoot: pluginRoot(),
-    bundledFallback: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
+    bundledFallback: bundledFallbackEnabled
   });
   const installedSkills = skillStore.listInstalledSkills(log);
+  const skillCacheStatus = buildSkillCacheStatus({
+    likelySkills,
+    installedSkills,
+    bundledFallbackEnabled
+  });
+  const skillCacheBanner = buildSkillCacheBanner({
+    ...skillCacheStatus,
+    projectRoot
+  });
+  if (skillCacheBanner) {
+    userMessages.unshift(skillCacheBanner);
+  }
   const envVars = buildSessionStartProfilerEnvVars({
     agentBrowserAvailable,
     greenfield: greenfield !== null,
     likelySkills,
     installedSkills,
+    missingSkills: skillCacheStatus.missingSkills,
     setupSignals
   });
   const cursorOutput = platform === "cursor" ? formatSessionStartProfilerCursorOutput(envVars, userMessages) : null;
@@ -510,6 +528,8 @@ async function main() {
         projectRoot,
         likelySkills,
         installedSkills,
+        missingSkills: skillCacheStatus.missingSkills,
+        zeroBundleReady: skillCacheStatus.zeroBundleReady,
         greenfield: greenfield !== null,
         bootstrapHints: setupSignals.bootstrapHints,
         resourceHints: setupSignals.resourceHints,

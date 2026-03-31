@@ -25,6 +25,7 @@ import {
 } from "./hook-env.mjs";
 import { createLogger, logCaughtError } from "./logger.mjs";
 import type { Logger } from "./logger.mjs";
+import { buildSkillCacheBanner, buildSkillCacheStatus } from "./skill-cache-banner.mjs";
 import { createSkillStore, type SkillStore } from "./skill-store.mjs";
 
 const PLUGIN_ROOT = resolvePluginRoot();
@@ -362,6 +363,8 @@ export interface BashChainInjection {
 
 export interface BashChainResult {
   injected: BashChainInjection[];
+  missing: string[];
+  banners: string[];
   totalBytes: number;
 }
 
@@ -379,7 +382,7 @@ export function runBashChainInjection(
   skillStore?: SkillStore,
 ): BashChainResult {
   const l = logger || log;
-  const result: BashChainResult = { injected: [], totalBytes: 0 };
+  const result: BashChainResult = { injected: [], missing: [], banners: [], totalBytes: 0 };
 
   if (packages.length === 0) return result;
 
@@ -430,7 +433,8 @@ export function runBashChainInjection(
     // Read target SKILL.md via skill store (cache-first resolution)
     const resolved = store.resolveSkillBody(skill, l);
     if (!resolved) {
-      l.debug("posttooluse-bash-chain-skip-missing", { pkg, skill });
+      result.missing.push(skill);
+      l.debug("posttooluse-bash-chain-skip-missing", { pkg, skill, projectRoot });
       continue;
     }
 
@@ -477,6 +481,26 @@ export function runBashChainInjection(
     });
   }
 
+  // Build a cache-status banner for any missing skills
+  const uniqueMissing = [...new Set(result.missing)].sort();
+  if (uniqueMissing.length > 0) {
+    const installedSkillsRaw = typeof env.VERCEL_PLUGIN_INSTALLED_SKILLS === "string"
+      ? env.VERCEL_PLUGIN_INSTALLED_SKILLS.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+    const status = buildSkillCacheStatus({
+      likelySkills: uniqueMissing,
+      installedSkills: installedSkillsRaw,
+      bundledFallbackEnabled: env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1",
+    });
+    const banner = buildSkillCacheBanner({
+      ...status,
+      projectRoot,
+    });
+    if (banner) {
+      result.banners.push(banner);
+    }
+  }
+
   return result;
 }
 
@@ -505,28 +529,33 @@ export function formatBashChainOutput(
   chainResult: BashChainResult,
   platform: HookPlatform = "claude-code",
 ): string {
-  if (chainResult.injected.length === 0) return "{}";
+  if (chainResult.injected.length === 0 && chainResult.banners.length === 0) return "{}";
 
-  const parts: string[] = [];
+  const contextParts: string[] = [...chainResult.banners];
+
   for (const chain of chainResult.injected) {
-    parts.push(
-      `<!-- posttooluse-bash-chain: ${chain.packageName} → ${chain.skill} -->`,
-      `**Skill context auto-loaded** (${chain.skill}): ${chain.message}`,
-      "",
-      chain.content,
-      `<!-- /posttooluse-bash-chain: ${chain.skill} -->`,
+    contextParts.push(
+      [
+        `<!-- posttooluse-bash-chain: ${chain.packageName} → ${chain.skill} -->`,
+        `**Skill context auto-loaded** (${chain.skill}): ${chain.message}`,
+        "",
+        chain.content,
+        `<!-- /posttooluse-bash-chain: ${chain.skill} -->`,
+      ].join("\n"),
     );
   }
 
-  const metadata = {
-    version: 1,
-    hook: "posttooluse-bash-chain",
-    packages: chainResult.injected.map((i) => i.packageName),
-    chainedSkills: chainResult.injected.map((i) => i.skill),
-  };
-  parts.push(`<!-- postBashChain: ${JSON.stringify(metadata)} -->`);
+  if (chainResult.injected.length > 0) {
+    const metadata = {
+      version: 1,
+      hook: "posttooluse-bash-chain",
+      packages: chainResult.injected.map((i) => i.packageName),
+      chainedSkills: chainResult.injected.map((i) => i.skill),
+    };
+    contextParts.push(`<!-- postBashChain: ${JSON.stringify(metadata)} -->`);
+  }
 
-  return formatPlatformOutput(platform, parts.join("\n"));
+  return formatPlatformOutput(platform, contextParts.join("\n\n"));
 }
 
 // ---------------------------------------------------------------------------

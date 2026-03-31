@@ -107,6 +107,40 @@ describe("session-start-profiler env export contract", () => {
     expect(exportedKeys).toContain("VERCEL_PLUGIN_AGENT_BROWSER_AVAILABLE");
   });
 
+  test("buildSessionStartProfilerEnvVars includes MISSING_SKILLS when present", () => {
+    const envVars = buildSessionStartProfilerEnvVars({
+      agentBrowserAvailable: false,
+      greenfield: false,
+      likelySkills: ["ai-sdk", "nextjs", "shadcn"],
+      installedSkills: ["nextjs"],
+      missingSkills: ["ai-sdk", "shadcn"],
+      setupSignals: { bootstrapHints: [], resourceHints: [], setupMode: false },
+    });
+    expect(envVars.VERCEL_PLUGIN_MISSING_SKILLS).toBe("ai-sdk,shadcn");
+  });
+
+  test("buildSessionStartProfilerEnvVars omits MISSING_SKILLS when empty", () => {
+    const envVars = buildSessionStartProfilerEnvVars({
+      agentBrowserAvailable: false,
+      greenfield: false,
+      likelySkills: ["nextjs"],
+      installedSkills: ["nextjs"],
+      missingSkills: [],
+      setupSignals: { bootstrapHints: [], resourceHints: [], setupMode: false },
+    });
+    expect(envVars).not.toHaveProperty("VERCEL_PLUGIN_MISSING_SKILLS");
+  });
+
+  test("buildSessionStartProfilerEnvVars omits MISSING_SKILLS when undefined", () => {
+    const envVars = buildSessionStartProfilerEnvVars({
+      agentBrowserAvailable: false,
+      greenfield: false,
+      likelySkills: ["nextjs"],
+      setupSignals: { bootstrapHints: [], resourceHints: [], setupMode: false },
+    });
+    expect(envVars).not.toHaveProperty("VERCEL_PLUGIN_MISSING_SKILLS");
+  });
+
   test("cursor output includes LIKELY_SKILLS and INSTALLED_SKILLS in env", () => {
     const envVars = buildSessionStartProfilerEnvVars({
       agentBrowserAvailable: true,
