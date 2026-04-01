@@ -13,7 +13,7 @@ function buildActionCommand(args) {
 }
 function formatOrchestratorActionPalette(args) {
   const specs = getOrchestratorActionSpecs(args.plan).filter(
-    (entry) => entry.visible
+    (entry) => entry.discoverable
   );
   if (specs.length === 0) {
     return null;

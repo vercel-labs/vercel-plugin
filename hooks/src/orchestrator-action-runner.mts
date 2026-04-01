@@ -9,9 +9,6 @@
  * or agent Bash execution.
  */
 
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-
 import {
   createRegistryClient,
   type InstallSkillsResult,
@@ -43,6 +40,11 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
+export type OrchestratorUnmetPostcondition =
+  | "vercel-link"
+  | "vercel-env-pull"
+  | "install-missing";
+
 export interface OrchestratorActionRunResult {
   schemaVersion: 1;
   type: "vercel-plugin-orchestrator-action-result";
@@ -52,6 +54,7 @@ export interface OrchestratorActionRunResult {
   commands: string[];
   installResult: InstallSkillsResult | null;
   vercelResults: VercelCliRunResult[];
+  unmetPostconditions: OrchestratorUnmetPostcondition[];
   refreshedPlan: SkillInstallPlan;
 }
 
@@ -130,6 +133,34 @@ export function buildOrchestratorActionError(args: {
     actionId: args.actionId,
     projectRoot: args.projectRoot,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Postcondition helpers
+// ---------------------------------------------------------------------------
+
+function collectUnmetPostconditions(args: {
+  refreshedPlan: SkillInstallPlan;
+  vercelResults: VercelCliRunResult[];
+  installResult: InstallSkillsResult | null;
+}): OrchestratorUnmetPostcondition[] {
+  const unmet: OrchestratorUnmetPostcondition[] = [];
+  const attempted = new Set(
+    args.vercelResults.map((entry) => entry.subcommand),
+  );
+  if (attempted.has("link") && !args.refreshedPlan.vercelLinked) {
+    unmet.push("vercel-link");
+  }
+  if (attempted.has("env-pull") && !args.refreshedPlan.hasEnvLocal) {
+    unmet.push("vercel-env-pull");
+  }
+  if (
+    args.installResult !== null &&
+    args.refreshedPlan.missingSkills.length > 0
+  ) {
+    unmet.push("install-missing");
+  }
+  return unmet;
 }
 
 // ---------------------------------------------------------------------------
@@ -214,6 +245,10 @@ export function formatOrchestratorActionHumanOutput(
         : "none"
     }`,
   ];
+
+  if (result.unmetPostconditions.length > 0) {
+    lines.push(`- Unmet: ${result.unmetPostconditions.join(", ")}`);
+  }
 
   if (result.commands.length > 0) {
     lines.push(`- Commands run: ${result.commands.length}`);
@@ -333,30 +368,26 @@ export async function runOrchestratorAction(args: {
   }
 
   async function runStep(stepSpec: OrchestratorStepSpec): Promise<void> {
+    await refreshPlan();
     switch (stepSpec.step) {
-      case "vercel-link": {
-        const alreadyLinked = existsSync(join(args.projectRoot, ".vercel"));
-        if (stepSpec.mode === "if-needed" && alreadyLinked) {
-          return;
-        }
+      case "vercel-link":
+        if (stepSpec.mode === "if-needed" && plan.vercelLinked) return;
         await runVercel("link");
         return;
-      }
-      case "vercel-env-pull": {
-        const linked = existsSync(join(args.projectRoot, ".vercel"));
-        const hasEnvLocal = existsSync(
-          join(args.projectRoot, ".env.local"),
-        );
-        if (stepSpec.mode === "if-needed" && (!linked || hasEnvLocal)) {
+      case "vercel-env-pull":
+        if (
+          stepSpec.mode === "if-needed" &&
+          (!plan.vercelLinked || plan.hasEnvLocal)
+        ) {
           return;
         }
         await runVercel("env-pull");
         return;
-      }
       case "install-missing":
         await runInstallMissing();
         return;
       case "vercel-deploy":
+        if (stepSpec.mode === "if-needed" && !plan.vercelLinked) return;
         await runVercel("deploy");
         return;
     }
@@ -368,9 +399,16 @@ export async function runOrchestratorAction(args: {
 
   const refreshedPlan = await refreshPlan();
 
+  const unmetPostconditions = collectUnmetPostconditions({
+    refreshedPlan,
+    vercelResults: state.vercelResults,
+    installResult: state.installResult,
+  });
+
   const ok =
     state.vercelResults.every((result) => result.ok) &&
-    (state.installResult ? state.installResult.missing.length === 0 : true);
+    (state.installResult ? state.installResult.missing.length === 0 : true) &&
+    unmetPostconditions.length === 0;
 
   return {
     schemaVersion: 1,
@@ -381,6 +419,7 @@ export async function runOrchestratorAction(args: {
     commands: state.commands,
     installResult: state.installResult,
     vercelResults: state.vercelResults,
+    unmetPostconditions,
     refreshedPlan,
   };
 }

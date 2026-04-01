@@ -26,6 +26,7 @@ export interface OrchestratorActionSpec {
   id: OrchestratorRunnerActionId;
   label: string;
   description: string;
+  discoverable: boolean;
   visible: boolean;
   runnable: boolean;
   blockedReason: string | null;
@@ -90,6 +91,10 @@ export function getOrchestratorActionSpecs(
       label: "Bootstrap project (link + env + skills)",
       description:
         "Link the project if needed, pull `.env.local` if missing, then install detected skills.",
+      discoverable:
+        !plan.vercelLinked ||
+        !plan.hasEnvLocal ||
+        plan.missingSkills.length > 0,
       visible:
         !plan.vercelLinked ||
         !plan.hasEnvLocal ||
@@ -105,6 +110,7 @@ export function getOrchestratorActionSpecs(
       label: "Install missing skills into .skills",
       description:
         installMissing?.description ?? "Install detected skills into `.skills/`.",
+      discoverable: plan.missingSkills.length > 0,
       visible: plan.missingSkills.length > 0,
       steps: [{ step: "install-missing", mode: "always" }],
     }),
@@ -113,6 +119,7 @@ export function getOrchestratorActionSpecs(
       label: vercelLink?.label ?? "Link Vercel project",
       description:
         vercelLink?.description ?? "Link this project to a Vercel project.",
+      discoverable: !plan.vercelLinked,
       visible: !plan.vercelLinked,
       steps: [{ step: "vercel-link", mode: "always" }],
     }),
@@ -122,6 +129,7 @@ export function getOrchestratorActionSpecs(
       description:
         vercelEnvPull?.description ??
         "Pull `.env.local` from the linked Vercel project.",
+      discoverable: !plan.hasEnvLocal,
       visible: plan.vercelLinked && !plan.hasEnvLocal,
       steps: [{ step: "vercel-env-pull", mode: "always" }],
     }),
@@ -131,6 +139,7 @@ export function getOrchestratorActionSpecs(
       description:
         vercelDeploy?.description ??
         "Deploy the current project to Vercel.",
+      discoverable: plan.vercelLinked,
       visible: plan.vercelLinked,
       steps: [{ step: "vercel-deploy", mode: "always" }],
     }),

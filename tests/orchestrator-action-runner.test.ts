@@ -11,6 +11,7 @@ import {
   type OrchestratorActionRunResult,
   type OrchestratorActionRunError,
   type OrchestratorActionRunErrorCode,
+  type OrchestratorUnmetPostcondition,
 } from "../hooks/src/orchestrator-action-runner.mts";
 import {
   getOrchestratorActionSpec,
@@ -499,12 +500,18 @@ describe("runOrchestratorAction with real filesystem", () => {
     // Verify delegation calls happened
     const vercelCalls = delegator.run.mock.calls;
     // link is if-needed and project is not linked, so it should run
-    // env-pull is if-needed; after link the .vercel dir doesn't actually
-    // exist on mock fs, so it will be skipped (mode: if-needed, !linked)
+    // env-pull is if-needed; refreshed plan still shows !vercelLinked so
+    // env-pull is skipped (mode: if-needed, !linked)
     // install-missing should run because missingSkills is non-empty
     expect(vercelCalls.length).toBeGreaterThanOrEqual(1);
     expect(vercelCalls[0][0].subcommand).toBe("link");
     expect(registry.installSkills).toHaveBeenCalled();
+
+    // Since refreshed plan still shows vercelLinked=false (mock doesn't
+    // change state), ok should be false with unmet postconditions.
+    expect(result.ok).toBe(false);
+    expect(result.unmetPostconditions).toContain("vercel-link");
+    expect(result.unmetPostconditions).toContain("install-missing");
   });
 
   test("install-missing no-ops when missingSkills is empty", async () => {
@@ -525,9 +532,49 @@ describe("runOrchestratorAction with real filesystem", () => {
     });
 
     expect(result.ok).toBe(true);
+    expect(result.unmetPostconditions).toEqual([]);
     expect(result.installResult).toBeNull();
     expect(registry.installSkills).not.toHaveBeenCalled();
     expect(delegator.run).not.toHaveBeenCalled();
+  });
+
+  test("bootstrap returns ok=false when delegated commands succeed but refreshed plan shows unmet state", async () => {
+    // Simulate: vercel link exits ok but .vercel never appears on disk,
+    // so refreshed plan still has vercelLinked=false, hasEnvLocal=false.
+    const plan = makePlan({
+      vercelLinked: false,
+      hasEnvLocal: false,
+      missingSkills: ["nextjs"],
+    });
+    setupMockedRunner(plan);
+
+    const runner = await import(
+      `${RUNNER_MODULE}?t=${Date.now()}-${Math.random()}`
+    );
+    // Delegator returns ok: true for all commands
+    const delegator = makeMockVercelDelegator();
+    // Registry returns installed: ["nextjs"], missing: [] — but refresh
+    // still sees missingSkills: ["nextjs"] because mock doesn't change state
+    const registry = makeMockRegistryClient({ installed: ["nextjs"], missing: [] });
+
+    const result = await runner.runOrchestratorAction({
+      projectRoot: "/repo",
+      actionId: "bootstrap-project",
+      registryClient: registry,
+      vercelDelegator: delegator,
+    });
+
+    // All delegated commands exited ok…
+    expect(result.vercelResults.every((r: any) => r.ok)).toBe(true);
+    // …but the refreshed plan still shows unmet state
+    expect(result.refreshedPlan.vercelLinked).toBe(false);
+    expect(result.refreshedPlan.hasEnvLocal).toBe(false);
+    expect(result.refreshedPlan.missingSkills).toContain("nextjs");
+
+    // Therefore ok must be false and unmetPostconditions populated
+    expect(result.ok).toBe(false);
+    expect(result.unmetPostconditions).toContain("vercel-link");
+    expect(result.unmetPostconditions).toContain("install-missing");
   });
 });
 
@@ -557,6 +604,7 @@ describe("formatOrchestratorActionHumanOutput — next-step guidance", () => {
           changed: true,
         },
       ],
+      unmetPostconditions: [],
       refreshedPlan: makePlan({
         vercelLinked: true,
         hasEnvLocal: false,
@@ -614,6 +662,32 @@ describe("formatOrchestratorActionHumanOutput — next-step guidance", () => {
     // link not visible (linked). env-pull not visible (hasEnvLocal). deploy is current.
     // → no next action → zeroBundleReady message
     expect(output).toContain("cache-only mode");
+  });
+
+  test("unmet postconditions appear in human output", () => {
+    const result = makeRunResult({
+      ok: false,
+      actionId: "bootstrap-project",
+      unmetPostconditions: ["vercel-link", "install-missing"],
+      refreshedPlan: makePlan({
+        vercelLinked: false,
+        hasEnvLocal: false,
+        missingSkills: ["nextjs"],
+      }),
+    });
+    const output = formatOrchestratorActionHumanOutput(result);
+
+    expect(output).toContain("- Unmet: vercel-link, install-missing");
+    expect(output).toContain("Status: partial");
+  });
+
+  test("no unmet line when postconditions are all met", () => {
+    const result = makeRunResult({
+      ok: true,
+      unmetPostconditions: [],
+    });
+    const output = formatOrchestratorActionHumanOutput(result);
+    expect(output).not.toContain("- Unmet:");
   });
 
   test("next-step command includes correct project-root", () => {

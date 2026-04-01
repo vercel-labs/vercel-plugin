@@ -39,6 +39,7 @@ function getOrchestratorActionSpecs(plan) {
       id: "bootstrap-project",
       label: "Bootstrap project (link + env + skills)",
       description: "Link the project if needed, pull `.env.local` if missing, then install detected skills.",
+      discoverable: !plan.vercelLinked || !plan.hasEnvLocal || plan.missingSkills.length > 0,
       visible: !plan.vercelLinked || !plan.hasEnvLocal || plan.missingSkills.length > 0,
       steps: [
         { step: "vercel-link", mode: "if-needed" },
@@ -50,6 +51,7 @@ function getOrchestratorActionSpecs(plan) {
       id: "install-missing",
       label: "Install missing skills into .skills",
       description: installMissing?.description ?? "Install detected skills into `.skills/`.",
+      discoverable: plan.missingSkills.length > 0,
       visible: plan.missingSkills.length > 0,
       steps: [{ step: "install-missing", mode: "always" }]
     }),
@@ -57,6 +59,7 @@ function getOrchestratorActionSpecs(plan) {
       id: "vercel-link",
       label: vercelLink?.label ?? "Link Vercel project",
       description: vercelLink?.description ?? "Link this project to a Vercel project.",
+      discoverable: !plan.vercelLinked,
       visible: !plan.vercelLinked,
       steps: [{ step: "vercel-link", mode: "always" }]
     }),
@@ -64,6 +67,7 @@ function getOrchestratorActionSpecs(plan) {
       id: "vercel-env-pull",
       label: "Pull .env.local from Vercel",
       description: vercelEnvPull?.description ?? "Pull `.env.local` from the linked Vercel project.",
+      discoverable: !plan.hasEnvLocal,
       visible: plan.vercelLinked && !plan.hasEnvLocal,
       steps: [{ step: "vercel-env-pull", mode: "always" }]
     }),
@@ -71,6 +75,7 @@ function getOrchestratorActionSpecs(plan) {
       id: "vercel-deploy",
       label: vercelDeploy?.label ?? "Deploy to Vercel",
       description: vercelDeploy?.description ?? "Deploy the current project to Vercel.",
+      discoverable: plan.vercelLinked,
       visible: plan.vercelLinked,
       steps: [{ step: "vercel-deploy", mode: "always" }]
     })

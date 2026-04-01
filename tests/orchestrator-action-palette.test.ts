@@ -38,40 +38,33 @@ describe("formatOrchestratorActionPalette — sections", () => {
     expect(output).toContain("Run now:");
   });
 
-  test("renders 'Unlock next' section for blocked actions", () => {
-    // Unlinked project → vercel-env-pull and vercel-deploy are not visible,
-    // but if linked with missing env, env-pull is blocked when we contrive
-    // a scenario. Let's use: linked=false so env-pull is not visible.
-    // Better: linked=true, hasEnvLocal=false, missingSkills=["nextjs"]
-    // → env-pull is visible and runnable (linked + no env)
-    // To get a blocked action visible, we need vercel-deploy with linked=false
-    // But deploy is only visible when linked=true. So blocked scenario:
-    // Actually vercel-env-pull is blocked when not linked but visible is
-    // plan.vercelLinked && !plan.hasEnvLocal. So it's NOT visible when unlinked.
-    //
-    // The only way to get a blocked+visible action is vercel-env-pull with
-    // hasEnvLocal=true (blocked: "already exists") and vercelLinked=true.
-    // But then visible = plan.vercelLinked && !plan.hasEnvLocal = false.
-    //
-    // Actually, looking at the spec: env-pull visible = linked && !hasEnvLocal.
-    // When visible, blocked if !linked (impossible since visible requires linked).
-    // When visible, blocked if hasEnvLocal (impossible since visible requires !hasEnvLocal).
-    // So env-pull is never both visible AND blocked.
-    //
-    // vercel-deploy: visible = linked, blocked = !linked. Same — never both.
-    //
-    // So the "Unlock next" section only appears for actions that the spec can
-    // make visible+blocked. Looking at the spec code, none of the current actions
-    // can be simultaneously visible AND blocked. "Unlock next" is a defensive
-    // section. Let's verify it returns no Unlock section for standard plans.
+  test("renders 'Unlock next' section for blocked discoverable actions", () => {
+    // Unlinked project missing .env.local: vercel-env-pull is discoverable
+    // (hasEnvLocal=false) but blocked (not linked). The palette now filters
+    // by discoverable, so env-pull appears in the "Unlock next" section.
     const output = formatOrchestratorActionPalette({
       pluginRoot: "/plugin",
-      plan: makePlan(),
-    });
-    expect(output).not.toContain("Unlock next:");
+      plan: makePlan({ vercelLinked: false, hasEnvLocal: false, missingSkills: ["nextjs"] }),
+    })!;
+    expect(output).toContain("Run now:");
+    expect(output).toContain("Unlock next:");
+    expect(output).toContain("Pull .env.local from Vercel");
+    expect(output).toContain("Link the project first");
   });
 
-  test("all visible actions in a fresh unlinked plan are in 'Run now'", () => {
+  test("Unlock next includes bootstrap command suggestion for blocked actions", () => {
+    const output = formatOrchestratorActionPalette({
+      pluginRoot: "/plugin",
+      plan: makePlan({ vercelLinked: false, hasEnvLocal: false, missingSkills: ["nextjs"] }),
+    })!;
+    // bootstrap-project is runnable, so blocked entries should get a "Use:" hint
+    const unlockSection = output.split("Unlock next:")[1];
+    expect(unlockSection).toBeDefined();
+    expect(unlockSection).toContain("Use:");
+    expect(unlockSection).toContain("--action bootstrap-project");
+  });
+
+  test("fresh unlinked plan shows runnable actions in 'Run now' and blocked in 'Unlock next'", () => {
     const output = formatOrchestratorActionPalette({
       pluginRoot: "/plugin",
       plan: makePlan(),
@@ -80,6 +73,9 @@ describe("formatOrchestratorActionPalette — sections", () => {
     expect(output).toContain("[1] Bootstrap project");
     expect(output).toContain("[2] Install missing skills");
     expect(output).toContain("[3] Link Vercel project");
+    // env-pull is discoverable but blocked (not linked)
+    expect(output).toContain("Unlock next:");
+    expect(output).toContain("Pull .env.local from Vercel");
   });
 
   test("returns null when no actions are visible", () => {
@@ -155,20 +151,21 @@ describe("formatOrchestratorActionPalette — JSON commands", () => {
 
 describe("formatOrchestratorActionPalette — blocked rendering", () => {
   test("blocked entries show blockedReason text", () => {
-    // To get a blocked entry visible, we need a custom spec scenario.
-    // With the current spec, visible+blocked is not naturally achievable.
-    // We verify the code path by checking that the palette renders correctly
-    // when there ARE blocked entries.
-    //
-    // The formatOrchestratorActionPalette function filters by visible, then
-    // splits into runnable and blocked. If all visible actions are runnable,
-    // there's no "Unlock next" section. This is correct behavior.
+    // Unlinked + missing env: env-pull is discoverable but blocked
+    const output = formatOrchestratorActionPalette({
+      pluginRoot: "/plugin",
+      plan: makePlan({ vercelLinked: false, hasEnvLocal: false }),
+    })!;
+    expect(output).toContain("Unlock next:");
+    expect(output).toContain("Link the project first");
+  });
+
+  test("linked project with missing env has no blocked section", () => {
+    // linked=true, hasEnvLocal=false: env-pull is discoverable AND runnable
     const output = formatOrchestratorActionPalette({
       pluginRoot: "/plugin",
       plan: makePlan({ vercelLinked: true, hasEnvLocal: false }),
     })!;
-    // vercel-env-pull is visible and runnable (linked=true, no env)
-    // So still no blocked section
     expect(output).not.toContain("Unlock next:");
     expect(output).toContain("Run now:");
   });

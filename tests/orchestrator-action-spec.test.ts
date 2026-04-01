@@ -177,6 +177,50 @@ describe("getOrchestratorActionSpecs", () => {
     expect(spec.blockedReason).toBeNull();
   });
 
+  // -------------------------------------------------------------------------
+  // discoverable — broader than visible
+  // -------------------------------------------------------------------------
+
+  test("vercel-env-pull is discoverable but not visible when unlinked and missing env", () => {
+    const spec = getOrchestratorActionSpec(
+      makePlan({ vercelLinked: false, hasEnvLocal: false }),
+      "vercel-env-pull",
+    );
+    expect(spec.discoverable).toBe(true);
+    expect(spec.visible).toBe(false);
+    expect(spec.runnable).toBe(false);
+    expect(spec.blockedReason).not.toBeNull();
+  });
+
+  test("vercel-env-pull is discoverable and visible when linked and missing env", () => {
+    const spec = getOrchestratorActionSpec(
+      makePlan({ vercelLinked: true, hasEnvLocal: false }),
+      "vercel-env-pull",
+    );
+    expect(spec.discoverable).toBe(true);
+    expect(spec.visible).toBe(true);
+    expect(spec.runnable).toBe(true);
+  });
+
+  test("vercel-env-pull is not discoverable when env already exists", () => {
+    const spec = getOrchestratorActionSpec(
+      makePlan({ vercelLinked: true, hasEnvLocal: true }),
+      "vercel-env-pull",
+    );
+    expect(spec.discoverable).toBe(false);
+    expect(spec.visible).toBe(false);
+  });
+
+  test("unlinked project: discoverable includes env-pull even though visible does not", () => {
+    const specs = getOrchestratorActionSpecs(
+      makePlan({ vercelLinked: false, hasEnvLocal: false, missingSkills: ["nextjs"] }),
+    );
+    const discoverable = specs.filter((s) => s.discoverable).map((s) => s.id);
+    const visible = specs.filter((s) => s.visible).map((s) => s.id);
+    expect(discoverable).toContain("vercel-env-pull");
+    expect(visible).not.toContain("vercel-env-pull");
+  });
+
   test("throws for invalid action ID", () => {
     expect(() =>
       getOrchestratorActionSpec(makePlan(), "bogus" as OrchestratorRunnerActionId),
@@ -242,7 +286,7 @@ describe("buildOrchestratorRunnerCommand", () => {
 // ---------------------------------------------------------------------------
 
 describe("formatOrchestratorActionPalette", () => {
-  test("renders visible actions with numbered labels", () => {
+  test("renders discoverable actions with numbered labels and unlock section", () => {
     const output = formatOrchestratorActionPalette({
       pluginRoot: "/plugin",
       plan: makePlan(),
@@ -252,9 +296,10 @@ describe("formatOrchestratorActionPalette", () => {
     expect(output).toContain("[1] Bootstrap project");
     expect(output).toContain("[2] Install missing skills");
     expect(output).toContain("[3] Link Vercel project");
-    // Unlinked → no deploy or env-pull
+    // Unlinked → no deploy, but env-pull appears in Unlock next
     expect(output).not.toContain("Deploy");
-    expect(output).not.toContain("env-pull");
+    expect(output).toContain("Unlock next:");
+    expect(output).toContain("Pull .env.local from Vercel");
   });
 
   test("returns null when no actions are visible", () => {
@@ -294,9 +339,11 @@ describe("formatOrchestratorActionPalette", () => {
     expect(output).toContain("/plugin/hooks/orchestrator-action-runner.mjs");
   });
 
-  test("palette order matches spec order", () => {
+  test("palette runnable order matches spec order", () => {
     const plan = makePlan();
-    const specs = getOrchestratorActionSpecs(plan).filter((s) => s.visible);
+    const specs = getOrchestratorActionSpecs(plan).filter(
+      (s) => s.discoverable && s.runnable,
+    );
     const output = formatOrchestratorActionPalette({
       pluginRoot: "/plugin",
       plan,
@@ -458,26 +505,25 @@ describe("drift detection", () => {
     }
   });
 
-  test("palette rendering is driven by spec visibility, not independent logic", () => {
-    // Confirm that if we make all specs invisible, palette returns null
+  test("palette rendering is driven by spec discoverability, not independent logic", () => {
+    // Fully set up project → only deploy is discoverable
     const plan = makePlan({
       vercelLinked: true,
       hasEnvLocal: true,
       missingSkills: [],
       installedSkills: ["nextjs"],
     });
-    const allVisible = getOrchestratorActionSpecs(plan).filter(
-      (s) => s.visible,
+    const allDiscoverable = getOrchestratorActionSpecs(plan).filter(
+      (s) => s.discoverable,
     );
-    // Fully set up → only deploy is visible
-    expect(allVisible.length).toBe(1);
-    expect(allVisible[0].id).toBe("vercel-deploy");
+    expect(allDiscoverable.length).toBe(1);
+    expect(allDiscoverable[0].id).toBe("vercel-deploy");
 
     const palette = formatOrchestratorActionPalette({
       pluginRoot: "/plugin",
       plan,
     });
-    // Palette should show exactly the one visible action
+    // Palette should show exactly the one discoverable action
     expect(palette).toContain("[1] Deploy to Vercel");
     expect(palette).not.toContain("[2]");
   });

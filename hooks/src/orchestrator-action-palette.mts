@@ -32,7 +32,7 @@ export function formatOrchestratorActionPalette(args: {
   plan: SkillInstallPlan;
 }): string | null {
   const specs = getOrchestratorActionSpecs(args.plan).filter(
-    (entry) => entry.visible,
+    (entry) => entry.discoverable,
   );
 
   if (specs.length === 0) {

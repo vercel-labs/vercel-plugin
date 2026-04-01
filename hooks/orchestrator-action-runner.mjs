@@ -1,6 +1,4 @@
 // hooks/src/orchestrator-action-runner.mts
-import { existsSync } from "fs";
-import { join } from "path";
 import {
   createRegistryClient
 } from "./registry-client.mjs";
@@ -57,6 +55,22 @@ function buildOrchestratorActionError(args) {
     projectRoot: args.projectRoot
   };
 }
+function collectUnmetPostconditions(args) {
+  const unmet = [];
+  const attempted = new Set(
+    args.vercelResults.map((entry) => entry.subcommand)
+  );
+  if (attempted.has("link") && !args.refreshedPlan.vercelLinked) {
+    unmet.push("vercel-link");
+  }
+  if (attempted.has("env-pull") && !args.refreshedPlan.hasEnvLocal) {
+    unmet.push("vercel-env-pull");
+  }
+  if (args.installResult !== null && args.refreshedPlan.missingSkills.length > 0) {
+    unmet.push("install-missing");
+  }
+  return unmet;
+}
 function deriveHumanStatus(result) {
   if (result.ok) return "success";
   const hasPartialProgress = result.vercelResults.some((entry) => entry.ok) || (result.installResult ? result.installResult.installed.length > 0 || result.installResult.reused.length > 0 : false);
@@ -105,6 +119,9 @@ function formatOrchestratorActionHumanOutput(result) {
     `- .env.local: ${result.refreshedPlan.hasEnvLocal ? "present" : "missing"}`,
     `- Missing skills: ${result.refreshedPlan.missingSkills.length > 0 ? result.refreshedPlan.missingSkills.join(", ") : "none"}`
   ];
+  if (result.unmetPostconditions.length > 0) {
+    lines.push(`- Unmet: ${result.unmetPostconditions.join(", ")}`);
+  }
   if (result.commands.length > 0) {
     lines.push(`- Commands run: ${result.commands.length}`);
   }
@@ -190,30 +207,23 @@ async function runOrchestratorAction(args) {
     return result;
   }
   async function runStep(stepSpec) {
+    await refreshPlan();
     switch (stepSpec.step) {
-      case "vercel-link": {
-        const alreadyLinked = existsSync(join(args.projectRoot, ".vercel"));
-        if (stepSpec.mode === "if-needed" && alreadyLinked) {
-          return;
-        }
+      case "vercel-link":
+        if (stepSpec.mode === "if-needed" && plan.vercelLinked) return;
         await runVercel("link");
         return;
-      }
-      case "vercel-env-pull": {
-        const linked = existsSync(join(args.projectRoot, ".vercel"));
-        const hasEnvLocal = existsSync(
-          join(args.projectRoot, ".env.local")
-        );
-        if (stepSpec.mode === "if-needed" && (!linked || hasEnvLocal)) {
+      case "vercel-env-pull":
+        if (stepSpec.mode === "if-needed" && (!plan.vercelLinked || plan.hasEnvLocal)) {
           return;
         }
         await runVercel("env-pull");
         return;
-      }
       case "install-missing":
         await runInstallMissing();
         return;
       case "vercel-deploy":
+        if (stepSpec.mode === "if-needed" && !plan.vercelLinked) return;
         await runVercel("deploy");
         return;
     }
@@ -222,7 +232,12 @@ async function runOrchestratorAction(args) {
     await runStep(step);
   }
   const refreshedPlan = await refreshPlan();
-  const ok = state.vercelResults.every((result) => result.ok) && (state.installResult ? state.installResult.missing.length === 0 : true);
+  const unmetPostconditions = collectUnmetPostconditions({
+    refreshedPlan,
+    vercelResults: state.vercelResults,
+    installResult: state.installResult
+  });
+  const ok = state.vercelResults.every((result) => result.ok) && (state.installResult ? state.installResult.missing.length === 0 : true) && unmetPostconditions.length === 0;
   return {
     schemaVersion: 1,
     type: "vercel-plugin-orchestrator-action-result",
@@ -232,6 +247,7 @@ async function runOrchestratorAction(args) {
     commands: state.commands,
     installResult: state.installResult,
     vercelResults: state.vercelResults,
+    unmetPostconditions,
     refreshedPlan
   };
 }
