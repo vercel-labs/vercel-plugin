@@ -50,30 +50,30 @@ async function matchFile(filePath: string): Promise<string[]> {
 describe("notion clone patterns", () => {
   test("notion-clone app/layout.tsx injects observability before nextjs", async () => {
     const injectedSkills = await matchFile("/Users/me/notion-clone/app/layout.tsx");
-    expect(injectedSkills).toEqual(["observability", "nextjs"]);
+    expect(injectedSkills).toEqual(["next-cache-components", "observability", "nextjs"]);
   });
 
   test("notion-clone middleware.ts injects routing-middleware", async () => {
     const injectedSkills = await matchFile("/Users/me/notion-clone/middleware.ts");
-    expect(injectedSkills).toEqual(["auth", "routing-middleware"]);
+    expect(injectedSkills).toEqual(["investigation-mode", "auth", "routing-middleware"]);
   });
 
   test("notion-clone components/ui/dialog.tsx injects shadcn", async () => {
     const injectedSkills = await matchFile(
       "/Users/me/notion-clone/components/ui/dialog.tsx",
     );
-    expect(injectedSkills).toEqual(["shadcn"]);
+    expect(injectedSkills).toEqual(["shadcn", "react-best-practices"]);
   });
 
   test("notion-clone app/(marketing)/(routes)/page.tsx injects nextjs", async () => {
     const injectedSkills = await matchFile(
       "/Users/me/notion-clone/app/(marketing)/(routes)/page.tsx",
     );
-    expect(injectedSkills).toEqual(["nextjs"]);
+    expect(injectedSkills).toEqual(["next-cache-components", "nextjs"]);
   });
 
   test("notion-clone next.config.ts injects nextjs then turbopack", async () => {
     const injectedSkills = await matchFile("/Users/me/notion-clone/next.config.ts");
-    expect(injectedSkills).toEqual(["nextjs", "turbopack"]);
+    expect(injectedSkills).toEqual(["next-cache-components", "next-upgrade", "nextjs"]);
   });
 });

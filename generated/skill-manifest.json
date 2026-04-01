@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-01T15:08:04.281Z",
+  "generatedAt": "2026-04-01T22:19:43.936Z",
   "version": 2,
   "skills": {
     "vercel-agent": {
@@ -350,6 +350,37 @@
         ],
         "examples": []
       }
+    },
+    "micro": {
+      "priority": 5,
+      "summary": "Micro-frontend guidance for module federation, shared dependencies, and cross-app communication on Vercel.",
+      "docs": [
+        "https://webpack.js.org/concepts/module-federation/"
+      ],
+      "pathPatterns": [
+        "**/micro-frontend/**",
+        "**/module-federation/**"
+      ],
+      "bashPatterns": [
+        "\\bmodule-federation\\b"
+      ],
+      "importPatterns": [
+        "@module-federation/nextjs-mf"
+      ],
+      "bodyPath": "skills/micro/SKILL.md",
+      "pathRegexSources": [
+        "^(?:[^/]+\\/)*micro-frontend\\/.*$",
+        "^(?:[^/]+\\/)*module-federation\\/.*$"
+      ],
+      "bashRegexSources": [
+        "\\bmodule-federation\\b"
+      ],
+      "importRegexSources": [
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]@module-federation\\/nextjs-mf(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        }
+      ]
     },
     "agent-browser": {
       "priority": 3,

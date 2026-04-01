@@ -55,13 +55,13 @@ describe("react-best-practices SKILL.md", () => {
     expect(content).toContain("components/**/*.tsx");
   });
 
-  test("contains review checklist content", () => {
+  test("contains performance optimization content", () => {
     const content = readFileSync(skillPath, "utf-8");
-    expect(content).toContain("Component Structure");
-    expect(content).toContain("Hooks");
-    expect(content).toContain("Accessibility");
-    expect(content).toContain("Performance");
-    expect(content).toContain("TypeScript");
+    expect(content).toContain("React Best Practices");
+    expect(content).toContain("Rule Categories by Priority");
+    expect(content).toContain("Bundle Size Optimization");
+    expect(content).toContain("Re-render Optimization");
+    expect(content).toContain("Quick Reference");
   });
 });
 

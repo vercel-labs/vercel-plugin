@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 import type { InstallSkillsResult, RegistryClient } from "../hooks/src/registry-client.mts";
+import { resolveProjectStatePaths } from "../hooks/project-state-paths.mjs";
 
 const {
   buildSkillCacheStatus,
@@ -229,16 +230,18 @@ describe("resolveSkillCacheBanner", () => {
   });
 
   test("auto-install success updates status via filesystem readback", async () => {
-    // Create a temp project; the mock client will create .skills/<slug>/SKILL.md
+    // Create a temp project; the mock client writes to the default global state dir
     const projectDir = join(tmpdir(), `banner-auto-install-${Date.now()}`);
     mkdirSync(projectDir, { recursive: true });
+    // Compute the actual state paths (uses ~/.vercel-plugin/ by default)
+    const statePaths = resolveProjectStatePaths(projectDir);
 
     try {
       const mockClient: RegistryClient = {
         async installSkills(args) {
-          // Simulate CLI writing skill files
+          // Simulate CLI writing skill files to the global state dir
           for (const skill of args.skillNames) {
-            const dir = join(args.projectRoot, ".skills", skill);
+            const dir = join(statePaths.skillsDir, skill);
             mkdirSync(dir, { recursive: true });
             writeFileSync(
               join(dir, "SKILL.md"),
@@ -274,20 +277,22 @@ describe("resolveSkillCacheBanner", () => {
       expect(result.outcome).toBe("installed");
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
+      rmSync(statePaths.stateRoot, { recursive: true, force: true });
     }
   });
 
   test("auto-install partial success reflects remaining missing", async () => {
     const projectDir = join(tmpdir(), `banner-partial-${Date.now()}`);
     mkdirSync(projectDir, { recursive: true });
+    const statePaths = resolveProjectStatePaths(projectDir);
 
     try {
       const mockClient: RegistryClient = {
         async installSkills(args) {
-          // Only install the first skill
+          // Only install the first skill — write to global state dir
           const installed = args.skillNames.slice(0, 1);
           for (const skill of installed) {
-            const dir = join(args.projectRoot, ".skills", skill);
+            const dir = join(statePaths.skillsDir, skill);
             mkdirSync(dir, { recursive: true });
             writeFileSync(
               join(dir, "SKILL.md"),
@@ -321,6 +326,7 @@ describe("resolveSkillCacheBanner", () => {
       expect(result.banner).toContain("Missing: nextjs");
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
+      rmSync(statePaths.stateRoot, { recursive: true, force: true });
     }
   });
 

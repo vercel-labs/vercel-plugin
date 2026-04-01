@@ -14,6 +14,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { safeReadJson } from "./hook-env.mjs";
+import { resolveProjectStatePaths } from "./project-state-paths.mjs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -128,8 +129,9 @@ function readProjectSkillLock(
  *    have been installed
  */
 export function readProjectSkillState(projectRoot: string): ProjectSkillState {
-  const skillsDir = resolve(projectRoot, ".skills");
-  const lockfilePath = join(projectRoot, "skills-lock.json");
+  const statePaths = resolveProjectStatePaths(projectRoot);
+  const skillsDir = statePaths.skillsDir;
+  const lockfilePath = statePaths.lockfilePath;
 
   // 1. skills-lock.json (canonical CLI output)
   if (existsSync(lockfilePath)) {

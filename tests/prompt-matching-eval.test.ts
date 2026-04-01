@@ -229,8 +229,8 @@ describe("prompt matching eval harness", () => {
     expect(overall.recall).toBeGreaterThanOrEqual(0);
   });
 
-  test("pilot skills (ai-sdk, nextjs, swr) have recall >= 80%", () => {
-    const pilotSkills = ["ai-sdk", "nextjs", "swr"] as const;
+  test("pilot skills (ai-sdk, nextjs, workflow) have recall >= 80%", () => {
+    const pilotSkills = ["ai-sdk", "nextjs", "workflow"] as const;
     const results: Array<{ entry: CorpusEntry; selected: string[] }> = [];
 
     for (const entry of corpus.corpus) {

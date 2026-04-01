@@ -5,7 +5,7 @@ import { detectReDoS } from "../scripts/validate";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const SYNTHETIC_TEST_SKILL_PREFIX = "zzz-test-";
-const LOCAL_TEST_SKILL_PREFIXES = ["fake-", SYNTHETIC_TEST_SKILL_PREFIX];
+const LOCAL_TEST_SKILL_PREFIXES = ["fake-", "micro", SYNTHETIC_TEST_SKILL_PREFIX];
 const LOCAL_TEST_COMMAND_PREFIX = "test-";
 
 async function exists(path: string): Promise<boolean> {

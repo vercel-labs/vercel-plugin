@@ -2376,29 +2376,9 @@ describe("upgradeToSkill rules: nextjs", () => {
 });
 
 describe("upgradeToSkill rules: react-best-practices", () => {
-  test("axios import flags upgradeToSkill: swr", () => {
-    const data = loadRealRules();
-    const violations = runValidation(
-      `import axios from 'axios';\naxios.get('/api/users');\n`,
-      ["react-best-practices"],
-      data!.rulesMap,
-    );
-    const match = violations.find((v) => v.skill === "react-best-practices" && v.upgradeToSkill === "swr");
-    expect(match).toBeDefined();
-    expect(match!.severity).toBe("recommended");
-  });
-
-  test("axios upgradeToSkill is suppressed when useSWR present (skipIfFileContains)", () => {
-    const data = loadRealRules();
-    const violations = runValidation(
-      `import useSWR from 'swr';\nimport axios from 'axios';\naxios.get('/api/old');\n`,
-      ["react-best-practices"],
-      data!.rulesMap,
-    );
-    const match = violations.find((v) => v.skill === "react-best-practices" && v.upgradeToSkill === "swr"
-      && v.matchedText.includes("axios"));
-    expect(match).toBeUndefined();
-  });
+  // swr skill was removed — axios→swr upgrade rule no longer exists
+  test.skip("axios import flags upgradeToSkill: swr", () => {});
+  test.skip("axios upgradeToSkill is suppressed when useSWR present (skipIfFileContains)", () => {});
 
   test("styled-components import flags upgradeToSkill: shadcn (warn)", () => {
     const data = loadRealRules();
@@ -2426,17 +2406,8 @@ describe("upgradeToSkill rules: react-best-practices", () => {
 });
 
 describe("upgradeToSkill rules: routing-middleware", () => {
-  test("IP blocklist flags upgradeToSkill: vercel-firewall", () => {
-    const data = loadRealRules();
-    const violations = runValidation(
-      `const blockedIps = ['1.2.3.4', '5.6.7.8'];\n`,
-      ["routing-middleware"],
-      data!.rulesMap,
-    );
-    const match = violations.find((v) => v.skill === "routing-middleware" && v.upgradeToSkill === "vercel-firewall");
-    expect(match).toBeDefined();
-    expect(match!.severity).toBe("recommended");
-  });
+  // vercel-firewall skill was removed — IP blocklist→vercel-firewall upgrade rule no longer exists
+  test.skip("IP blocklist flags upgradeToSkill: vercel-firewall", () => {});
 
   test("NextResponse import flags upgradeToSkill: nextjs", () => {
     const data = loadRealRules();

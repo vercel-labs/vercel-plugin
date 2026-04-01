@@ -1,7 +1,8 @@
 // hooks/src/project-skill-manifest.mts
 import { existsSync, readdirSync } from "fs";
-import { join, resolve } from "path";
+import { join } from "path";
 import { safeReadJson } from "./hook-env.mjs";
+import { resolveProjectStatePaths } from "./project-state-paths.mjs";
 function listSkillSlugs(skillsDir) {
   try {
     return readdirSync(skillsDir, { withFileTypes: true }).filter(
@@ -28,8 +29,9 @@ function readProjectSkillLock(lockfilePath) {
   };
 }
 function readProjectSkillState(projectRoot) {
-  const skillsDir = resolve(projectRoot, ".skills");
-  const lockfilePath = join(projectRoot, "skills-lock.json");
+  const statePaths = resolveProjectStatePaths(projectRoot);
+  const skillsDir = statePaths.skillsDir;
+  const lockfilePath = statePaths.lockfilePath;
   if (existsSync(lockfilePath)) {
     const parsedLock = readProjectSkillLock(lockfilePath);
     const scannedSlugs = listSkillSlugs(skillsDir);

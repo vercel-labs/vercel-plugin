@@ -40,7 +40,7 @@ async function matchFile(filePath: string): Promise<string[]> {
   return si.injectedSkills ?? [];
 }
 
-const EXPECTED_SLACK_ROUTE_SKILLS = ["chat-sdk", "vercel-functions", "nextjs"] as const;
+const EXPECTED_SLACK_ROUTE_SKILLS = ["chat-sdk", "vercel-functions", "next-cache-components"] as const;
 
 describe("slack clone patterns", () => {
   test("slack-clone app/api/slack/route.ts injects chat-sdk, vercel-functions, nextjs", async () => {
@@ -65,9 +65,11 @@ describe("slack clone patterns", () => {
     expect(await matchFile("/Users/me/slack-clone/lib/bot/slack.ts")).toEqual(["chat-sdk"]);
   });
 
-  test("slack-clone components/chat/message-list.tsx injects json-render", async () => {
+  test("slack-clone components/chat/message-list.tsx injects ai-elements, json-render, react-best-practices", async () => {
     expect(await matchFile("/Users/me/slack-clone/components/chat/message-list.tsx")).toEqual([
+      "ai-elements",
       "json-render",
+      "react-best-practices",
     ]);
   });
 });

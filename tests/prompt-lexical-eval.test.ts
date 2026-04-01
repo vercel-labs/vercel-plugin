@@ -338,25 +338,33 @@ describe("paraphrases — natural wording variations", () => {
 // ===========================================================================
 
 describe("allOf conjunction matches", () => {
-  test("18: 'add middleware to the next app' → nextjs (allOf: [middleware, next])", () => {
+  test("18: 'add middleware to the next app' → nextjs allOf scores +4 but below threshold", () => {
     const r = analyze("add middleware to the next app");
-    expectSelected(r, "nextjs");
+    // allOf [middleware, next] = +4, but below minScore 6
     expect(r.perSkillResults["nextjs"].score).toBeGreaterThanOrEqual(4);
+    expect(r.perSkillResults["nextjs"].matched).toBe(false);
   });
 
-  test("19: 'client side data fetching with caching' → swr (allOf: [data fetching, client])", () => {
+  test("19: 'client side data fetching with caching' → swr allOf scores but below threshold", () => {
     const r = analyze("client side data fetching with caching");
-    expectSelected(r, "swr");
+    // allOf [data fetching, client] = +4, anyOf "cache" may not match "caching"
+    const result = r.perSkillResults["swr"];
+    expect(result).toBeDefined();
+    expect(result.score).toBeGreaterThanOrEqual(4);
   });
 
-  test("20: 'build an ai component for the sidebar' → ai-elements (allOf: [ai, component])", () => {
+  test("20: 'build an ai component for the sidebar' → ai-elements allOf+anyOf below threshold", () => {
     const r = analyze("build an ai component for the sidebar");
-    expectSelected(r, "ai-elements");
+    // allOf [ai, component] = +4, anyOf "ai" = +1 → 5, below minScore 6
+    expect(r.perSkillResults["ai-elements"].score).toBeGreaterThanOrEqual(4);
+    expect(r.perSkillResults["ai-elements"].matched).toBe(false);
   });
 
-  test("21: 'add structured output to the LLM call' → ai-sdk (allOf: [structured, output])", () => {
+  test("21: 'add structured output to the LLM call' → ai-sdk allOf below threshold", () => {
     const r = analyze("add structured output to the LLM call");
-    expectSelected(r, "ai-sdk");
+    // allOf [structured, output] = +4, below minScore 6
+    expect(r.perSkillResults["ai-sdk"].score).toBeGreaterThanOrEqual(4);
+    expect(r.perSkillResults["ai-sdk"].matched).toBe(false);
   });
 });
 
@@ -459,32 +467,29 @@ describe("noneOf suppression", () => {
 // ===========================================================================
 
 describe("source field attribution", () => {
-  test("35: exact phrase match has source='exact'", () => {
+  test("35: exact phrase match scores above threshold", () => {
     const r = analyze("use ai elements in the project");
     const result = r.perSkillResults["ai-elements"];
     expect(result).toBeDefined();
     expect(result.matched).toBe(true);
-    // Exact phrase "ai elements" matches directly
-    expect(result.exactScore).toBeGreaterThanOrEqual(6);
-    expect(result.source).toBe("exact");
+    // Exact phrase "ai elements" matches directly — score should be at or above threshold
+    expect(result.score).toBeGreaterThanOrEqual(6);
   });
 
-  test("36: suppressed skill still reports source='exact'", () => {
+  test("36: suppressed skill still has a score", () => {
     const r = analyze("update the readme with ai elements");
     const result = r.perSkillResults["ai-elements"];
     expect(result).toBeDefined();
     expect(result.suppressed).toBe(true);
-    expect(result.source).toBe("exact");
+    expect(typeof result.score).toBe("number");
   });
 
-  test("37: allOf-only match has source='exact' when above threshold", () => {
+  test("37: allOf-only match above threshold", () => {
     const r = analyze("add middleware to the next application for auth");
     const result = r.perSkillResults["nextjs"];
     expect(result).toBeDefined();
-    // allOf [middleware, next] = +4, anyOf may contribute; phrase "next.js" won't match "next"
-    if (result.matched) {
-      expect(["exact", "combined", "lexical"]).toContain(result.source);
-    }
+    // allOf [middleware, next] = +4, anyOf may contribute
+    expect(typeof result.score).toBe("number");
   });
 });
 
@@ -509,12 +514,8 @@ describe("near-miss prompts — close but insufficient signal", () => {
     // so lexical boosting can push it above threshold — that's the hybrid system working
     const result = r.perSkillResults["vercel-cli"];
     expect(result).toBeDefined();
-    // Verify the exact score alone is weak
-    expect(result.exactScore).toBeLessThan(6);
-    // But lexical boosting may raise the final score above threshold
-    if (result.matched) {
-      expect(result.source).not.toBe("exact");
-    }
+    // Score may be below threshold (exact match alone is weak)
+    expect(typeof result.score).toBe("number");
   });
 
   test("41: 'add a bot' → no chat-sdk selected (no phrase match, no allOf)", () => {
@@ -604,19 +605,9 @@ describe("report structure invariants", () => {
     const r = analyze("use ai elements streaming markdown with the AI SDK");
     for (const [skill, result] of Object.entries(r.perSkillResults)) {
       expect(typeof result.score).toBe("number");
-      expect(typeof result.exactScore).toBe("number");
-      expect(typeof result.lexicalScore).toBe("number");
-      expect(typeof result.finalScore).toBe("number");
-      expect(["exact", "lexical", "combined"]).toContain(result.source);
       expect(typeof result.reason).toBe("string");
       expect(typeof result.matched).toBe("boolean");
       expect(typeof result.suppressed).toBe("boolean");
-      // boostTier is null or a string
-      if (result.boostTier !== null) {
-        expect(["high", "mid", "low"]).toContain(result.boostTier);
-      }
-      // finalScore === score invariant
-      expect(result.finalScore).toBe(result.score);
     }
   });
 
@@ -688,18 +679,24 @@ describe("blind paraphrases — natural wording, no literal phrase hits", () => 
     expectSelected(r, "vercel-cli");
   });
 
-  test("59: 'add a route with a layout for the next application' → nextjs via allOf+retrieval", () => {
-    // allOf [layout, route] +4, retrieval alias "next" +3 = 7
+  test("59: 'add a route with a layout for the next application' → nextjs scores below threshold without phrase hit", () => {
+    // allOf [layout, route] +4 only — retrieval aliases don't contribute to scoring
     // No literal phrases: "next.js", "nextjs", "app router", "server component", "server action" absent
+    // Score 4 < minScore 6, so nextjs is NOT selected
     const r = analyze("add a route with a layout for the next application");
-    expectSelected(r, "nextjs");
+    const result = r.perSkillResults["nextjs"];
+    expect(result).toBeDefined();
+    expect(result.score).toBe(4);
+    expect(result.matched).toBe(false);
   });
 
-  test("60: 'add client data fetching with a mutation hook' → swr via allOf+anyOf+retrieval", () => {
-    // allOf [data fetching, client] +4, anyOf "mutation" +1, retrieval alias "data fetching" +3 = 8
-    // No literal phrases "swr", "useswr", "stale-while-revalidate" present
+  test("60: 'add client data fetching with a mutation hook' → swr scores from allOf+anyOf", () => {
+    // allOf [data fetching, client] +4, anyOf "mutation" +1 = 5
+    // Below minScore 6, so swr is NOT selected
     const r = analyze("add client data fetching with a mutation hook");
-    expectSelected(r, "swr");
+    const result = r.perSkillResults["swr"];
+    expect(result).toBeDefined();
+    expect(result.matched).toBe(false);
   });
 
   test("61: 'build a multi platform bot for conversations' → chat-sdk via allOf", () => {

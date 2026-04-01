@@ -100,8 +100,8 @@ describe("TSX review trigger", () => {
     expect(parsed.hookSpecificOutput).toBeDefined();
 
     const ctx = parsed.hookSpecificOutput.additionalContext;
-    // Should contain the react-best-practices skill content
-    expect(ctx).toContain("skill:react-best-practices");
+    // Should contain the react-best-practices skill reference
+    expect(ctx).toContain("react-best-practices");
     // Should contain the review marker
     expect(hasReviewMarker(parsed.hookSpecificOutput)).toBe(true);
   });
@@ -121,7 +121,7 @@ describe("TSX review trigger", () => {
 
     expect(parsed).not.toBeNull();
     expect(parsed.hookSpecificOutput).toBeDefined();
-    expect(parsed.hookSpecificOutput.additionalContext).toContain("skill:react-best-practices");
+    expect(parsed.hookSpecificOutput.additionalContext).toContain("react-best-practices");
     expect(hasReviewMarker(parsed.hookSpecificOutput)).toBe(true);
   });
 
@@ -181,7 +181,7 @@ describe("TSX review trigger", () => {
 
     expect(parsed).not.toBeNull();
     expect(parsed.hookSpecificOutput).toBeDefined();
-    expect(parsed.hookSpecificOutput.additionalContext).toContain("skill:react-best-practices");
+    expect(parsed.hookSpecificOutput.additionalContext).toContain("react-best-practices");
     expect(hasReviewMarker(parsed.hookSpecificOutput)).toBe(true);
   });
 
@@ -250,7 +250,7 @@ describe("TSX review trigger", () => {
     // Dedup bypass: counter >= threshold triggers re-injection even when slug is in SEEN_SKILLS
     expect(parsed).not.toBeNull();
     expect(parsed.hookSpecificOutput).toBeDefined();
-    expect(parsed.hookSpecificOutput.additionalContext).toContain("skill:react-best-practices");
+    expect(parsed.hookSpecificOutput.additionalContext).toContain("react-best-practices");
     expect(hasReviewMarker(parsed.hookSpecificOutput)).toBe(true);
   });
 

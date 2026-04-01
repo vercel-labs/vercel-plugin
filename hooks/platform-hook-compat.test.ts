@@ -6,15 +6,15 @@ import { join } from "node:path";
 import {
   formatOutput as formatPreToolOutput,
   parseInput as parsePreToolInput,
-} from "./src/pretooluse-skill-inject.mts";
+} from "./pretooluse-skill-inject.mjs";
 import {
   formatOutput as formatPostToolOutput,
   parseInput as parsePostToolInput,
   loadValidateRules,
   runChainInjection,
-} from "./src/posttooluse-validate.mts";
+} from "./posttooluse-validate.mjs";
 import type { ValidationViolation } from "./src/posttooluse-validate.mts";
-import { createSkillStore } from "./src/skill-store.mts";
+import { createSkillStore } from "./skill-store.mjs";
 
 const tempDirs = new Set<string>();
 

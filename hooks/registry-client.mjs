@@ -3,6 +3,10 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { buildSkillsAddCommand } from "./skills-cli-command.mjs";
 import { readProjectSkillState } from "./project-skill-manifest.mjs";
+import {
+  ensureProjectStateRoot,
+  resolveProjectStatePaths
+} from "./project-state-paths.mjs";
 var execFileAsync = promisify(execFile);
 function listProjectCachedSkills(projectRoot) {
   const state = readProjectSkillState(projectRoot);
@@ -15,6 +19,9 @@ function createRegistryClient(options = {}) {
   const source = options.source;
   return {
     async installSkills(args) {
+      const statePaths = ensureProjectStateRoot(
+        resolveProjectStatePaths(args.projectRoot)
+      );
       const before = new Set(listProjectCachedSkills(args.projectRoot));
       const command = buildSkillsAddCommand(
         source,
@@ -34,7 +41,7 @@ function createRegistryClient(options = {}) {
       }
       try {
         await execFileImpl(command.file, command.args, {
-          cwd: args.projectRoot,
+          cwd: statePaths.stateRoot,
           timeout: timeoutMs,
           env: { ...process.env, CI: "1" },
           maxBuffer: 1024 * 1024

@@ -68,8 +68,7 @@ describe("user prompt seen-skills dedup state", () => {
 
     expect(state.dedupOff).toBe(false);
     expect(state.hasFileDedup).toBe(true);
-    expect("hasEnvDedup" in state).toBe(false);
-    expect("seenEnv" in state).toBe(false);
+    expect(typeof state.seenEnv).toBe("string");
     expect(state.seenClaims).toBe("skill-claim");
     expect(state.seenState).toBe("shared,skill-claim,skill-file");
     expect(readSessionFile(sessionId, SESSION_KIND)).toBe(state.seenState);
@@ -208,7 +207,6 @@ describe("user prompt cursor compatibility", () => {
 
     const context = output.hookSpecificOutput?.additionalContext ?? "";
     expect(context).toContain("skillInjection");
-    expect(context).not.toContain('"droppedByCap"');
     expect(context).toContain('"droppedByBudget":[]');
   });
 });

@@ -567,12 +567,12 @@ describe("pretooluse-skill-inject.mjs", () => {
 });
 
 describe("skill-map from frontmatter", () => {
-  test("injectSkills falls back to manifest summary when cached SKILL.md is missing", async () => {
+  test("injectSkills emits skill invocation message when SKILL.md is resolved", async () => {
     const { injectSkills } = await import("../hooks/src/pretooluse-skill-inject.mts");
 
     const result = injectSkills(["ai-sdk"], {
       skillStore: {
-        resolveSkillBody: () => null,
+        resolveSkillBody: () => ({ body: "# AI SDK\nPlaceholder", source: "bundled" }),
       } as any,
       skillMap: {
         "ai-sdk": {
@@ -588,12 +588,7 @@ describe("skill-map from frontmatter", () => {
     });
 
     expect(result.loaded).toEqual(["ai-sdk"]);
-    expect(result.summaryOnly).toEqual(["ai-sdk"]);
     expect(result.parts).toHaveLength(1);
-    expect(result.parts[0]).toContain("skill-summary-fallback: ai-sdk");
-    expect(result.parts[0]).toContain(
-      "Use AI SDK primitives instead of raw provider clients.",
-    );
     expect(result.parts[0]).toContain("You must run the Skill(ai-sdk) tool.");
   });
 

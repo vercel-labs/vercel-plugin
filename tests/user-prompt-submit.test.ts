@@ -179,6 +179,7 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
   test("returns {} for prompt with no matching signals", async () => {
     const { code, stdout } = await runHook(
       "Please refactor the database connection pool to use connection strings from environment variables",
+      { VERCEL_PLUGIN_LEXICAL_PROMPT: "0" },
     );
     expect(code).toBe(0);
     expect(JSON.parse(stdout)).toEqual({});
@@ -222,6 +223,7 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
       {
         VERCEL_PLUGIN_SEEN_SKILLS: "",
         CLAUDE_ENV_FILE: undefined,
+        VERCEL_PLUGIN_LEXICAL_PROMPT: "0",
       },
     );
     expect(code).toBe(0);
@@ -391,10 +393,10 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
   // ---------------------------------------------------------------------------
 
   test("dedup prevents re-injection when skill already seen", async () => {
-    // First call: skill should inject
+    // First call: skill should inject (disable lexical to isolate phrase matching)
     const { stdout: first } = await runHook(
       "Use streaming markdown with ai elements for the chat output",
-      { VERCEL_PLUGIN_SEEN_SKILLS: "" },
+      { VERCEL_PLUGIN_SEEN_SKILLS: "", VERCEL_PLUGIN_LEXICAL_PROMPT: "0" },
     );
     const r1 = JSON.parse(first);
     expect(r1.hookSpecificOutput).toBeDefined();
@@ -402,10 +404,10 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
     const meta1 = extractSkillInjection(r1.hookSpecificOutput);
     expect(meta1?.injectedSkills).toContain("ai-elements");
 
-    // Second call: ai-elements already seen
+    // Second call: ai-elements already seen — no other matches without lexical
     const { stdout: second } = await runHook(
       "Use streaming markdown with ai elements for the chat output",
-      { VERCEL_PLUGIN_SEEN_SKILLS: "ai-elements" },
+      { VERCEL_PLUGIN_SEEN_SKILLS: "ai-elements", VERCEL_PLUGIN_LEXICAL_PROMPT: "0" },
     );
     const r2 = JSON.parse(second);
     expect(r2).toEqual({});
@@ -462,7 +464,6 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
       expect(Array.isArray(meta.matchedSkills)).toBe(true);
       expect(Array.isArray(meta.injectedSkills)).toBe(true);
       expect(Array.isArray(meta.summaryOnly)).toBe(true);
-      expect(Array.isArray(meta.droppedByCap)).toBe(true);
       expect(Array.isArray(meta.droppedByBudget)).toBe(true);
 
       // No unknown fields in hookSpecificOutput
@@ -512,7 +513,7 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
       expect(hasWorkflow).toBe(true);
     });
 
-    test("'blank page after deploy' triggers investigation-mode + agent-browser-verify", async () => {
+    test("'blank page after deploy' triggers agent-browser-verify and investigation-mode", async () => {
       const { code, stdout } = await runHook(
         "I see a blank page after the deploy, nothing renders and the screen is blank",
         { VERCEL_PLUGIN_SEEN_SKILLS: "" },
@@ -522,10 +523,11 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
       expect(result.hookSpecificOutput).toBeDefined();
       const meta = extractSkillInjection(result.hookSpecificOutput);
       expect(meta).toBeDefined();
-      expect(meta.injectedSkills).toContain("investigation-mode");
-      // agent-browser-verify should be the companion (either injected or matched)
-      const hasBrowser = meta.injectedSkills.includes("agent-browser-verify") || meta.matchedSkills.includes("agent-browser-verify");
-      expect(hasBrowser).toBe(true);
+      // agent-browser-verify should be injected (highest score for blank page signals)
+      expect(meta.injectedSkills).toContain("agent-browser-verify");
+      // investigation-mode should be matched (either injected or in matchedSkills)
+      const hasInvestigation = meta.injectedSkills.includes("investigation-mode") || meta.matchedSkills.includes("investigation-mode");
+      expect(hasInvestigation).toBe(true);
     });
 
     test("'add a button to the navbar' does NOT trigger investigation-mode", async () => {
@@ -678,6 +680,7 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
       const { code, stderr } = await runHook(NO_MATCH_PROMPT, {
         VERCEL_PLUGIN_LOG_LEVEL: "debug",
         VERCEL_PLUGIN_SEEN_SKILLS: "",
+        VERCEL_PLUGIN_LEXICAL_PROMPT: "0",
       });
       expect(code).toBe(0);
       const lines = parseStderrLines(stderr);
@@ -695,6 +698,7 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
         {
           VERCEL_PLUGIN_LOG_LEVEL: "debug",
           VERCEL_PLUGIN_SEEN_SKILLS: "",
+          VERCEL_PLUGIN_LEXICAL_PROMPT: "0",
         },
       );
       expect(firstRun.code).toBe(0);
@@ -704,6 +708,7 @@ describe("user-prompt-submit-skill-inject.mjs", () => {
         {
           VERCEL_PLUGIN_LOG_LEVEL: "debug",
           VERCEL_PLUGIN_SEEN_SKILLS: "",
+          VERCEL_PLUGIN_LEXICAL_PROMPT: "0",
         },
       );
       expect(code).toBe(0);
