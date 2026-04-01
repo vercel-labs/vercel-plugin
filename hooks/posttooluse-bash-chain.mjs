@@ -14,7 +14,9 @@ import {
 } from "./hook-env.mjs";
 import { createLogger, logCaughtError } from "./logger.mjs";
 import { loadProjectInstalledSkillState } from "./project-installed-skill-state.mjs";
+import { readProjectSkillState } from "./project-skill-manifest.mjs";
 import {
+  buildSkillCacheStatus,
   formatProjectSkillStateLine,
   resolveSkillCacheBanner
 } from "./skill-cache-banner.mjs";
@@ -247,6 +249,9 @@ function parseBashInput(raw, logger, env = process.env) {
   const cwd = typeof cwdCandidate === "string" && cwdCandidate.trim() !== "" ? cwdCandidate : process.cwd();
   return { command, sessionId, platform, cwd };
 }
+function filterDeferredByPhase(deferred, phase) {
+  return deferred.filter((entry) => entry.phase === phase);
+}
 function tryInjectResolvedBashSkill(args) {
   const {
     packageName,
@@ -307,17 +312,19 @@ function tryInjectResolvedBashSkill(args) {
 }
 function buildDeferredSkills(args) {
   const { remainingResolvedSkills, missingCandidates, reason } = args;
-  return remainingResolvedSkills.map((skill) => {
+  const results = [];
+  for (const skill of remainingResolvedSkills) {
     const candidate = missingCandidates.get(skill);
-    if (!candidate) return null;
-    return {
+    if (!candidate) continue;
+    results.push({
       packageName: candidate.packageName,
       skill: candidate.skill,
       message: candidate.message,
       reason,
       phase: "after-install"
-    };
-  }).filter((value) => value !== null);
+    });
+  }
+  return results;
 }
 function applyAfterInstallAttempt(args) {
   const {
@@ -424,17 +431,17 @@ async function runBashChainInjection(packages, sessionId, projectRoot, pluginRoo
   }
   const uniqueMissing = [...new Set(result.missing)].sort();
   if (uniqueMissing.length > 0) {
-    const bundledFallbackEnabled2 = env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1";
-    const missingState = loadProjectInstalledSkillState({
-      projectRoot,
-      pluginRoot: pluginRoot ?? PLUGIN_ROOT,
+    const installedBeforeInstall = store.listInstalledSkills(l);
+    const projectStateBeforeInstall = readProjectSkillState(projectRoot);
+    const cacheStatusBeforeInstall = buildSkillCacheStatus({
       likelySkills: uniqueMissing,
-      bundledFallbackEnabled: bundledFallbackEnabled2,
-      logger: l
+      installedSkills: installedBeforeInstall,
+      bundledFallbackEnabled
     });
     const resolvedBanner = await resolveSkillCacheBanner({
-      ...missingState.cacheStatus,
+      ...cacheStatusBeforeInstall,
       projectRoot,
+      projectState: projectStateBeforeInstall,
       autoInstall: env.VERCEL_PLUGIN_SKILL_AUTO_INSTALL === "1",
       timeoutMs: 4e3,
       registryClient,
@@ -450,7 +457,7 @@ async function runBashChainInjection(packages, sessionId, projectRoot, pluginRoo
         projectRoot,
         pluginRoot: pluginRoot ?? PLUGIN_ROOT,
         likelySkills: uniqueMissing,
-        bundledFallbackEnabled: bundledFallbackEnabled2,
+        bundledFallbackEnabled,
         logger: l
       });
       const refreshedStore = refreshedState.skillStore;
@@ -505,13 +512,14 @@ async function runBashChainInjection(packages, sessionId, projectRoot, pluginRoo
       const deferredSkillSet = new Set(result.deferred.map((d) => d.skill));
       result.missing = [...new Set(stillMissing)].filter((s) => !deferredSkillSet.has(s));
       const afterInstallInjected = result.injected.slice(injectedCountBeforeInstall);
+      const afterInstallDeferred = filterDeferredByPhase(result.deferred, "after-install");
       const delegatedOutcomeBanner = buildDelegatedInstallOutcomeBanner({
         installResult: resolvedBanner.installResult,
         injectedAfterInstall: afterInstallInjected,
-        deferredAfterInstall: result.deferred,
+        deferredAfterInstall: afterInstallDeferred,
         remainingMissing: result.missing,
-        projectStateSource: refreshedState.projectState.source,
-        projectStatePath: refreshedState.projectState.projectSkillStatePath
+        projectStateSource: resolvedBanner.projectState.source,
+        projectStatePath: resolvedBanner.projectState.projectSkillStatePath
       });
       if (delegatedOutcomeBanner) {
         result.banners.unshift(delegatedOutcomeBanner);
@@ -520,7 +528,7 @@ async function runBashChainInjection(packages, sessionId, projectRoot, pluginRoo
   }
   const nextActionPalette = buildPostInstallActionPalette({
     projectRoot,
-    deferred: result.deferred,
+    deferred: filterDeferredByPhase(result.deferred, "after-install"),
     env
   });
   if (nextActionPalette) {

@@ -33,6 +33,7 @@ export interface ResolveSkillCacheBannerArgs extends SkillCacheBannerInput {
   timeoutMs?: number;
   registryClient?: RegistryClient;
   logger?: Logger;
+  projectState?: ProjectSkillState;
 }
 
 export type SkillCacheBannerOutcome =
@@ -47,6 +48,7 @@ export interface ResolveSkillCacheBannerResult {
   banner: string | null;
   installResult: InstallSkillsResult | null;
   outcome: SkillCacheBannerOutcome;
+  projectState: ProjectSkillState;
 }
 
 function uniqueSorted(values: string[] | undefined): string[] {
@@ -246,7 +248,8 @@ export function buildSkillCacheBanner(
 export async function resolveSkillCacheBanner(
   args: ResolveSkillCacheBannerArgs,
 ): Promise<ResolveSkillCacheBannerResult> {
-  const initialProjectState = readProjectSkillState(args.projectRoot);
+  const initialProjectState =
+    args.projectState ?? readProjectSkillState(args.projectRoot);
   const initialStatus = buildSkillCacheStatus({
     likelySkills: args.likelySkills,
     installedSkills: args.installedSkills,
@@ -269,6 +272,7 @@ export async function resolveSkillCacheBanner(
       }),
       installResult: null,
       outcome,
+      projectState: initialProjectState,
     };
   }
 
@@ -311,6 +315,7 @@ export async function resolveSkillCacheBanner(
       }),
       installResult: null,
       outcome: "failed",
+      projectState: initialProjectState,
     };
   }
 
@@ -343,5 +348,6 @@ export async function resolveSkillCacheBanner(
     }),
     installResult,
     outcome,
+    projectState,
   };
 }

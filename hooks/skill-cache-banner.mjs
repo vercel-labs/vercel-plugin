@@ -106,7 +106,7 @@ function buildSkillCacheBanner(input) {
   });
 }
 async function resolveSkillCacheBanner(args) {
-  const initialProjectState = readProjectSkillState(args.projectRoot);
+  const initialProjectState = args.projectState ?? readProjectSkillState(args.projectRoot);
   const initialStatus = buildSkillCacheStatus({
     likelySkills: args.likelySkills,
     installedSkills: args.installedSkills,
@@ -126,7 +126,8 @@ async function resolveSkillCacheBanner(args) {
         projectStatePath: initialProjectState.projectSkillStatePath
       }),
       installResult: null,
-      outcome: outcome2
+      outcome: outcome2,
+      projectState: initialProjectState
     };
   }
   const client = args.registryClient ?? createRegistryClient({
@@ -164,7 +165,8 @@ async function resolveSkillCacheBanner(args) {
         projectStatePath: initialProjectState.projectSkillStatePath
       }),
       installResult: null,
-      outcome: "failed"
+      outcome: "failed",
+      projectState: initialProjectState
     };
   }
   const projectState = readProjectSkillState(args.projectRoot);
@@ -187,7 +189,8 @@ async function resolveSkillCacheBanner(args) {
       projectStatePath: projectState.projectSkillStatePath
     }),
     installResult,
-    outcome
+    outcome,
+    projectState
   };
 }
 export {

@@ -28,9 +28,10 @@ import { createLogger, logCaughtError } from "./logger.mjs";
 import type { Logger } from "./logger.mjs";
 import { loadProjectInstalledSkillState } from "./project-installed-skill-state.mjs";
 import type { InstallSkillsResult, RegistryClient } from "./registry-client.mjs";
-import type { ProjectSkillState } from "./project-skill-manifest.mjs";
+import { readProjectSkillState, type ProjectSkillState } from "./project-skill-manifest.mjs";
 import type { SkillInstallPlan, SkillInstallAction } from "./orchestrator-install-plan.mjs";
 import {
+  buildSkillCacheStatus,
   formatProjectSkillStateLine,
   resolveSkillCacheBanner,
 } from "./skill-cache-banner.mjs";
@@ -379,7 +380,14 @@ export interface DeferredBashSkill {
   skill: string;
   message: string;
   reason: "cap-reached" | "budget-exceeded";
-  phase: "after-install";
+  phase: InjectionPhase;
+}
+
+function filterDeferredByPhase(
+  deferred: DeferredBashSkill[],
+  phase: DeferredBashSkill["phase"],
+): DeferredBashSkill[] {
+  return deferred.filter((entry) => entry.phase === phase);
 }
 
 export interface BashChainResult {
@@ -492,19 +500,19 @@ function buildDeferredSkills(args: {
   reason: "cap-reached" | "budget-exceeded";
 }): DeferredBashSkill[] {
   const { remainingResolvedSkills, missingCandidates, reason } = args;
-  return remainingResolvedSkills
-    .map((skill) => {
-      const candidate = missingCandidates.get(skill);
-      if (!candidate) return null;
-      return {
-        packageName: candidate.packageName,
-        skill: candidate.skill,
-        message: candidate.message,
-        reason,
-        phase: "after-install" as const,
-      };
-    })
-    .filter((value): value is DeferredBashSkill => value !== null);
+  const results: DeferredBashSkill[] = [];
+  for (const skill of remainingResolvedSkills) {
+    const candidate = missingCandidates.get(skill);
+    if (!candidate) continue;
+    results.push({
+      packageName: candidate.packageName,
+      skill: candidate.skill,
+      message: candidate.message,
+      reason,
+      phase: "after-install",
+    });
+  }
+  return results;
 }
 
 function applyAfterInstallAttempt(args: {
@@ -650,20 +658,22 @@ export async function runBashChainInjection(
     });
   }
 
-  // Build a cache-status banner for any missing skills, optionally auto-installing
+  // Build a cache-status banner for any missing skills, optionally auto-installing.
+  // Reuse the already-open store for pre-install cache status instead of building
+  // a fresh loadProjectInstalledSkillState — saves one full store + project-state read.
   const uniqueMissing = [...new Set(result.missing)].sort();
   if (uniqueMissing.length > 0) {
-    const bundledFallbackEnabled = env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1";
-    const missingState = loadProjectInstalledSkillState({
-      projectRoot,
-      pluginRoot: pluginRoot ?? PLUGIN_ROOT,
+    const installedBeforeInstall = store.listInstalledSkills(l);
+    const projectStateBeforeInstall = readProjectSkillState(projectRoot);
+    const cacheStatusBeforeInstall = buildSkillCacheStatus({
       likelySkills: uniqueMissing,
+      installedSkills: installedBeforeInstall,
       bundledFallbackEnabled,
-      logger: l,
     });
     const resolvedBanner = await resolveSkillCacheBanner({
-      ...missingState.cacheStatus,
+      ...cacheStatusBeforeInstall,
       projectRoot,
+      projectState: projectStateBeforeInstall,
       autoInstall: env.VERCEL_PLUGIN_SKILL_AUTO_INSTALL === "1",
       timeoutMs: 4_000,
       registryClient,
@@ -749,13 +759,14 @@ export async function runBashChainInjection(
 
       // Wire delegation outcome banner
       const afterInstallInjected = result.injected.slice(injectedCountBeforeInstall);
+      const afterInstallDeferred = filterDeferredByPhase(result.deferred, "after-install");
       const delegatedOutcomeBanner = buildDelegatedInstallOutcomeBanner({
         installResult: resolvedBanner.installResult,
         injectedAfterInstall: afterInstallInjected,
-        deferredAfterInstall: result.deferred,
+        deferredAfterInstall: afterInstallDeferred,
         remainingMissing: result.missing,
-        projectStateSource: refreshedState.projectState.source,
-        projectStatePath: refreshedState.projectState.projectSkillStatePath,
+        projectStateSource: resolvedBanner.projectState.source,
+        projectStatePath: resolvedBanner.projectState.projectSkillStatePath,
       });
       if (delegatedOutcomeBanner) {
         result.banners.unshift(delegatedOutcomeBanner);
@@ -766,7 +777,7 @@ export async function runBashChainInjection(
   // Append a next-action palette when deferred skills exist
   const nextActionPalette = buildPostInstallActionPalette({
     projectRoot,
-    deferred: result.deferred,
+    deferred: filterDeferredByPhase(result.deferred, "after-install"),
     env,
   });
   if (nextActionPalette) {
