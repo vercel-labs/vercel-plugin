@@ -311,7 +311,12 @@ function buildDeferredSkills(args) {
   }).filter((value) => value !== null);
 }
 function applyAfterInstallAttempt(args) {
-  const { injectResult, stillMissing, deferred, missingCandidates, remainingResolvedSkills } = args;
+  const {
+    injectResult,
+    deferred,
+    missingCandidates,
+    remainingResolvedSkills
+  } = args;
   switch (injectResult) {
     case "injected":
     case "skip":
@@ -452,7 +457,6 @@ async function runBashChainInjection(packages, sessionId, projectRoot, pluginRoo
         });
         const disposition = applyAfterInstallAttempt({
           injectResult,
-          stillMissing,
           deferred: result.deferred,
           missingCandidates,
           remainingResolvedSkills: uniqueMissing.slice(currentIndex).filter((entry) => resolvedAfterInstall.has(entry))

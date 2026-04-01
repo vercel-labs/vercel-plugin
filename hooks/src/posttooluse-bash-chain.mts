@@ -492,14 +492,12 @@ function buildDeferredSkills(args: {
 
 function applyAfterInstallAttempt(args: {
   injectResult: InjectionAttemptResult;
-  stillMissing: string[];
   deferred: DeferredBashSkill[];
   missingCandidates: Map<string, MissingInjectionCandidate>;
   remainingResolvedSkills: string[];
 }): AfterInstallDisposition {
   const {
     injectResult,
-    stillMissing,
     deferred,
     missingCandidates,
     remainingResolvedSkills,
@@ -688,7 +686,6 @@ export async function runBashChainInjection(
         });
         const disposition = applyAfterInstallAttempt({
           injectResult,
-          stillMissing,
           deferred: result.deferred,
           missingCandidates,
           remainingResolvedSkills: uniqueMissing
