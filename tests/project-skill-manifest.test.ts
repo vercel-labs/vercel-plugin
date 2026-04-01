@@ -1,12 +1,20 @@
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { readProjectSkillState } from "../hooks/src/project-skill-manifest.mts";
+import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 
 const TMP = join(tmpdir(), `vercel-plugin-project-state-${Date.now()}`);
 const PROJECT_ROOT = TMP;
-const SKILLS_DIR = join(TMP, ".skills");
+const TEST_HOME = join(tmpdir(), `vercel-plugin-home-${Date.now()}`);
+const STATE_PATHS = resolveProjectStatePaths(PROJECT_ROOT, TEST_HOME);
+const SKILLS_DIR = STATE_PATHS.skillsDir;
+const LOCKFILE_PATH = STATE_PATHS.lockfilePath;
+
+beforeAll(() => {
+  process.env.VERCEL_PLUGIN_HOME_DIR = TEST_HOME;
+});
 
 function writeSkill(slug: string, body = `# ${slug}\n\nUse ${slug}.`): void {
   const dir = join(SKILLS_DIR, slug);
@@ -16,18 +24,22 @@ function writeSkill(slug: string, body = `# ${slug}\n\nUse ${slug}.`): void {
 
 function writeLockfile(
   content: Record<string, unknown>,
-  path = join(PROJECT_ROOT, "skills-lock.json"),
+  path = LOCKFILE_PATH,
 ): void {
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(content), "utf-8");
 }
 
 beforeEach(() => {
   rmSync(TMP, { recursive: true, force: true });
+  rmSync(TEST_HOME, { recursive: true, force: true });
   mkdirSync(TMP, { recursive: true });
 });
 
 afterAll(() => {
   rmSync(TMP, { recursive: true, force: true });
+  rmSync(TEST_HOME, { recursive: true, force: true });
+  delete process.env.VERCEL_PLUGIN_HOME_DIR;
 });
 
 // ---------------------------------------------------------------------------
@@ -41,7 +53,7 @@ describe("readProjectSkillState", () => {
     expect(state.source).toBe("none");
     expect(state.projectSkillStatePath).toBeNull();
     expect(state.installedSlugs).toEqual([]);
-    expect(state.skillsDir).toBe(resolve(PROJECT_ROOT, ".skills"));
+    expect(state.skillsDir).toBe(STATE_PATHS.skillsDir);
     expect(state.lockVersion).toBeNull();
     expect(state.lockSkills).toEqual({});
   });
@@ -65,7 +77,7 @@ describe("readProjectSkillState", () => {
     const state = readProjectSkillState(PROJECT_ROOT);
 
     expect(state.source).toBe("directory");
-    expect(state.projectSkillStatePath).toBe(resolve(PROJECT_ROOT, ".skills"));
+    expect(state.projectSkillStatePath).toBe(STATE_PATHS.skillsDir);
     expect(state.installedSlugs).toEqual(["ai-sdk", "nextjs"]);
     expect(state.lockVersion).toBeNull();
     expect(state.lockSkills).toEqual({});
@@ -82,7 +94,7 @@ describe("readProjectSkillState", () => {
     const state = readProjectSkillState(PROJECT_ROOT);
 
     expect(state.source).toBe("manifest.json");
-    expect(state.projectSkillStatePath).toBe(join(SKILLS_DIR, "manifest.json"));
+    expect(state.projectSkillStatePath).toBe(STATE_PATHS.manifestPath);
     expect(state.installedSlugs).toEqual(["nextjs"]);
     expect(state.lockVersion).toBeNull();
     expect(state.lockSkills).toEqual({});
@@ -121,9 +133,7 @@ describe("readProjectSkillState", () => {
     const state = readProjectSkillState(PROJECT_ROOT);
 
     expect(state.source).toBe("skills-lock.json");
-    expect(state.projectSkillStatePath).toBe(
-      join(PROJECT_ROOT, "skills-lock.json"),
-    );
+    expect(state.projectSkillStatePath).toBe(LOCKFILE_PATH);
     // Canonical: slugs come from lockfile keys, sorted
     expect(state.installedSlugs).toEqual(["ai-sdk", "nextjs"]);
     expect(state.lockVersion).toBe(3);
@@ -194,7 +204,7 @@ describe("readProjectSkillState", () => {
   test("malformed lockfile (not valid JSON) falls back to directory scan", () => {
     writeSkill("nextjs");
     writeFileSync(
-      join(PROJECT_ROOT, "skills-lock.json"),
+      LOCKFILE_PATH,
       "not valid json",
       "utf-8",
     );
@@ -263,6 +273,6 @@ describe("readProjectSkillState", () => {
   test("skillsDir is always the resolved .skills/ path", () => {
     const state = readProjectSkillState(PROJECT_ROOT);
 
-    expect(state.skillsDir).toBe(resolve(PROJECT_ROOT, ".skills"));
+    expect(state.skillsDir).toBe(STATE_PATHS.skillsDir);
   });
 });

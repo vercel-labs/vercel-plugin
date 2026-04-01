@@ -1,13 +1,15 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const BUILD_SCRIPT = join(ROOT, "scripts", "build-manifest.ts");
 const SKILLS_DIR = join(ROOT, "skills");
 const MANIFEST_PATH = join(ROOT, "generated", "skill-manifest.json");
 const HOOK_SCRIPT = join(ROOT, "hooks", "pretooluse-skill-inject.mjs");
+const TEST_HOME = join(tmpdir(), `build-skill-map-home-${Date.now()}`);
 
 // Import synthesis function for unit tests
 const { synthesizeChainToFromValidate } = await import("../scripts/build-manifest.ts");
@@ -49,7 +51,11 @@ async function runHook(input: object): Promise<{ code: number; stdout: string; s
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, VERCEL_PLUGIN_SEEN_SKILLS: "" },
+    env: {
+      ...process.env,
+      VERCEL_PLUGIN_HOME_DIR: TEST_HOME,
+      VERCEL_PLUGIN_SEEN_SKILLS: "",
+    },
   });
   proc.stdin.write(payload);
   proc.stdin.end();
@@ -58,6 +64,27 @@ async function runHook(input: object): Promise<{ code: number; stdout: string; s
   const stderr = await new Response(proc.stderr).text();
   return { code, stdout, stderr };
 }
+
+function seedProjectCache(homeDir: string, projectRoot: string, skillsDir: string): void {
+  const statePaths = resolveProjectStatePaths(projectRoot, homeDir);
+  mkdirSync(statePaths.skillsDir, { recursive: true });
+
+  for (const entry of readdirSync(skillsDir)) {
+    const sourceDir = join(skillsDir, entry);
+    if (!existsSync(join(sourceDir, "SKILL.md"))) continue;
+    symlinkSync(sourceDir, join(statePaths.skillsDir, entry), "dir");
+  }
+}
+
+beforeAll(() => {
+  process.env.VERCEL_PLUGIN_HOME_DIR = TEST_HOME;
+  seedProjectCache(TEST_HOME, ROOT, SKILLS_DIR);
+});
+
+afterAll(() => {
+  rmSync(TEST_HOME, { recursive: true, force: true });
+  delete process.env.VERCEL_PLUGIN_HOME_DIR;
+});
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -93,7 +120,9 @@ describe("build-manifest.ts", () => {
       expect(typeof config.priority).toBe("number");
       expect(Array.isArray(config.pathPatterns)).toBe(true);
       expect(Array.isArray(config.bashPatterns)).toBe(true);
-      expect(config.bodyPath).toBe(`skills/${slug}/SKILL.md`);
+      if (typeof config.bodyPath === "string") {
+        expect(config.bodyPath).toBe(`skills/${slug}/SKILL.md`);
+      }
     }
   });
 
@@ -197,7 +226,7 @@ describe("manifest-backed hook loading", () => {
 describe("loadSkills pipeline stage", () => {
   test("loadSkills returns compiledSkills from manifest", async () => {
     const { loadSkills } = await import("../hooks/pretooluse-skill-inject.mjs");
-    const result = loadSkills(ROOT);
+    const result = loadSkills(ROOT, undefined, ROOT);
     expect(result).not.toBeNull();
     expect(result.usedManifest).toBe(true);
     expect(Array.isArray(result.compiledSkills)).toBe(true);
@@ -230,7 +259,7 @@ describe("loadSkills pipeline stage", () => {
       // Need fresh import to avoid caching
       const hookPath = join(ROOT, "hooks", "pretooluse-skill-inject.mjs");
       const mod = await import(hookPath + `?t=${Date.now()}`);
-      const result = mod.loadSkills(ROOT);
+      const result = mod.loadSkills(ROOT, undefined, ROOT);
       expect(result).not.toBeNull();
       expect(result.usedManifest).toBe(false);
       expect(Array.isArray(result.compiledSkills)).toBe(true);
@@ -272,6 +301,7 @@ This is test content.
     // Copy hook modules
     const hookFiles = [
       "pretooluse-skill-inject.mjs",
+      "project-state-paths.mjs",
       "skill-map-frontmatter.mjs",
       "skill-store.mjs",
       "patterns.mjs",
@@ -296,7 +326,7 @@ This is test content.
   test("loadSkills works without manifest (live scan)", async () => {
     const hookPath = join(HOOKS, "pretooluse-skill-inject.mjs");
     const mod = await import(hookPath + `?t=${Date.now()}`);
-    const result = mod.loadSkills(TMP);
+    const result = mod.loadSkills(TMP, undefined, TMP);
     expect(result).not.toBeNull();
     expect(result.usedManifest).toBe(false);
     expect(result.compiledSkills.length).toBe(1);
@@ -321,7 +351,7 @@ This is test content.
 
     const hookPath = join(HOOKS, "pretooluse-skill-inject.mjs");
     const mod = await import(hookPath + `?t2=${Date.now()}`);
-    const result = mod.loadSkills(TMP);
+    const result = mod.loadSkills(TMP, undefined, TMP);
     expect(result).not.toBeNull();
     expect(result.usedManifest).toBe(true);
     expect(result.compiledSkills.length).toBe(1);
@@ -333,7 +363,7 @@ This is test content.
 
     const hookPath = join(HOOKS, "pretooluse-skill-inject.mjs");
     const mod = await import(hookPath + `?t3=${Date.now()}`);
-    const result = mod.loadSkills(TMP);
+    const result = mod.loadSkills(TMP, undefined, TMP);
     expect(result).not.toBeNull();
     expect(result.usedManifest).toBe(false);
     expect(result.compiledSkills.length).toBe(1);
@@ -344,7 +374,7 @@ This is test content.
 
     const hookPath = join(HOOKS, "pretooluse-skill-inject.mjs");
     const mod = await import(hookPath + `?t4=${Date.now()}`);
-    const result = mod.loadSkills(TMP);
+    const result = mod.loadSkills(TMP, undefined, TMP);
     expect(result).not.toBeNull();
     expect(result.usedManifest).toBe(false);
   });

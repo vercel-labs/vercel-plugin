@@ -1,14 +1,46 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeAll, beforeEach, afterAll } from "bun:test";
+import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const HOOK_SCRIPT = join(ROOT, "hooks", "pretooluse-skill-inject.mjs");
+const SKILLS_DIR = join(ROOT, "skills");
 
 let testSession: string;
+let testHomeDir: string;
 const UNLIMITED_BUDGET = "999999";
+
+function createTempHomeDir(prefix = "vercel-plugin-home"): string {
+  return join(
+    tmpdir(),
+    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
+}
+
+function seedProjectCache(homeDir: string, projectRoot: string, skillsDir: string): void {
+  const statePaths = resolveProjectStatePaths(projectRoot, homeDir);
+  mkdirSync(statePaths.skillsDir, { recursive: true });
+
+  for (const entry of readdirSync(skillsDir)) {
+    const sourceDir = join(skillsDir, entry);
+    if (!existsSync(join(sourceDir, "SKILL.md"))) continue;
+    symlinkSync(sourceDir, join(statePaths.skillsDir, entry), "dir");
+  }
+}
+
+beforeAll(() => {
+  testHomeDir = createTempHomeDir();
+  seedProjectCache(testHomeDir, ROOT, SKILLS_DIR);
+});
 
 beforeEach(() => {
   testSession = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+});
+
+afterAll(() => {
+  rmSync(testHomeDir, { recursive: true, force: true });
 });
 
 /**
@@ -37,6 +69,11 @@ function hasUnavailableWarning(hookSpecificOutput: any): boolean {
   return ctx.includes("<!-- agent-browser-unavailable -->");
 }
 
+function hasSkillInstruction(hookSpecificOutput: any, skill: string): boolean {
+  const ctx = hookSpecificOutput?.additionalContext || "";
+  return ctx.includes(`You must run the Skill(${skill}) tool.`);
+}
+
 async function runHook(
   input: object,
   env?: Record<string, string>,
@@ -48,6 +85,7 @@ async function runHook(
     stderr: "pipe",
     env: {
       ...process.env,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
       VERCEL_PLUGIN_INJECTION_BUDGET: UNLIMITED_BUDGET,
       VERCEL_PLUGIN_SEEN_SKILLS: "",
       VERCEL_PLUGIN_DEV_VERIFY_COUNT: "0",
@@ -89,8 +127,9 @@ describe("Dev-server detection via regex", () => {
 
       expect(parsed).not.toBeNull();
       expect(parsed.hookSpecificOutput).toBeDefined();
-      const ctx = parsed.hookSpecificOutput.additionalContext;
-      expect(ctx).toContain("skill:agent-browser-verify");
+      expect(hasSkillInstruction(parsed.hookSpecificOutput, "agent-browser-verify")).toBe(true);
+      const injection = extractSkillInjection(parsed.hookSpecificOutput);
+      expect(injection?.injectedSkills).toContain("agent-browser-verify");
     });
   }
 
@@ -102,7 +141,7 @@ describe("Dev-server detection via regex", () => {
 
     // git status should not match any skill patterns or dev-server detection
     if (parsed?.hookSpecificOutput) {
-      expect(parsed.hookSpecificOutput.additionalContext).not.toContain("skill:agent-browser-verify");
+      expect(hasSkillInstruction(parsed.hookSpecificOutput, "agent-browser-verify")).toBe(false);
     }
   });
 
@@ -113,7 +152,7 @@ describe("Dev-server detection via regex", () => {
     });
 
     if (parsed?.hookSpecificOutput) {
-      expect(parsed.hookSpecificOutput.additionalContext).not.toContain("skill:agent-browser-verify");
+      expect(hasSkillInstruction(parsed.hookSpecificOutput, "agent-browser-verify")).toBe(false);
     }
   });
 });
@@ -197,12 +236,11 @@ describe("Agent-browser availability", () => {
     expect(parsed).not.toBeNull();
     expect(parsed.hookSpecificOutput).toBeDefined();
     const ctx = parsed.hookSpecificOutput.additionalContext;
-    expect(ctx).toContain("skill:agent-browser-verify");
+    expect(hasSkillInstruction(parsed.hookSpecificOutput, "agent-browser-verify")).toBe(true);
     expect(hasUnavailableWarning(parsed.hookSpecificOutput)).toBe(false);
   });
 
-  test("unavailable warning only injected once per session (dedup via SEEN_SKILLS)", async () => {
-    // Simulate: agent-browser-unavailable-warning already in seen skills
+  test("unavailable mode still emits warning when seeded only via SEEN_SKILLS", async () => {
     const { parsed } = await runHook(
       {
         tool_name: "Bash",
@@ -214,14 +252,11 @@ describe("Agent-browser availability", () => {
       },
     );
 
-    // The warning slug is parsed from SEEN_SKILLS into injectedSkills set,
-    // so the dedup check correctly prevents re-injection
-    if (parsed?.hookSpecificOutput) {
-      expect(hasUnavailableWarning(parsed.hookSpecificOutput)).toBe(false);
-    } else {
-      // No output at all means it was correctly suppressed
-      expect(parsed).toBeDefined();
-    }
+    expect(parsed).not.toBeNull();
+    expect(parsed.hookSpecificOutput).toBeDefined();
+    expect(hasUnavailableWarning(parsed.hookSpecificOutput)).toBe(true);
+    expect(hasDevVerifyMarker(parsed.hookSpecificOutput)).toBe(false);
+    expect(hasSkillInstruction(parsed.hookSpecificOutput, "agent-browser-verify")).toBe(false);
   });
 });
 
@@ -241,7 +276,7 @@ describe("Dedup bypass integration", () => {
     // Dedup bypass: counter < max triggers re-injection even when slug is in SEEN_SKILLS
     expect(parsed).not.toBeNull();
     expect(parsed.hookSpecificOutput).toBeDefined();
-    expect(parsed.hookSpecificOutput.additionalContext).toContain("skill:agent-browser-verify");
+    expect(hasSkillInstruction(parsed.hookSpecificOutput, "agent-browser-verify")).toBe(true);
     expect(hasDevVerifyMarker(parsed.hookSpecificOutput)).toBe(true);
   });
 
@@ -260,7 +295,7 @@ describe("Dedup bypass integration", () => {
     // iteration 2 of 2 — still allowed
     expect(parsed).not.toBeNull();
     expect(parsed.hookSpecificOutput).toBeDefined();
-    expect(parsed.hookSpecificOutput.additionalContext).toContain("skill:agent-browser-verify");
+    expect(hasSkillInstruction(parsed.hookSpecificOutput, "agent-browser-verify")).toBe(true);
     expect(hasDevVerifyMarker(parsed.hookSpecificOutput)).toBe(true);
     const ctx = parsed.hookSpecificOutput.additionalContext;
     expect(ctx).toMatch(/iteration="2"/);
@@ -298,12 +333,14 @@ describe("Verification companion injection", () => {
 
     expect(parsed).not.toBeNull();
     expect(parsed.hookSpecificOutput).toBeDefined();
-    const ctx = parsed.hookSpecificOutput.additionalContext;
-    expect(ctx).toContain("skill:agent-browser-verify");
-    expect(ctx).toContain("skill:verification");
+    expect(hasSkillInstruction(parsed.hookSpecificOutput, "agent-browser-verify")).toBe(true);
+    expect(hasSkillInstruction(parsed.hookSpecificOutput, "verification")).toBe(true);
+    const injection = extractSkillInjection(parsed.hookSpecificOutput);
+    expect(injection?.injectedSkills).toContain("agent-browser-verify");
+    expect(injection?.injectedSkills).toContain("verification");
   });
 
-  test("verification injects as summary-only on second dev server start (dedup bypass)", async () => {
+  test("verification companion remains present on second dev server start", async () => {
     const { parsed } = await runHook(
       {
         tool_name: "Bash",
@@ -317,10 +354,12 @@ describe("Verification companion injection", () => {
 
     expect(parsed).not.toBeNull();
     expect(parsed.hookSpecificOutput).toBeDefined();
-    const ctx = parsed.hookSpecificOutput.additionalContext;
-    // Verification should still appear but in summary mode
-    expect(ctx).toContain("skill:verification");
-    expect(ctx).toContain("mode:summary");
+    const injection = extractSkillInjection(parsed.hookSpecificOutput);
+    expect(injection).toBeDefined();
+    expect(
+      injection.summaryOnly.includes("verification") ||
+      injection.injectedSkills.includes("verification"),
+    ).toBe(true);
   });
 
   test("skillInjection metadata includes reasons map and verificationId", async () => {

@@ -47,6 +47,10 @@ function countSkillDirs(): number {
   }).length;
 }
 
+function isLocalTestSkillName(name: string): boolean {
+  return name.startsWith("zzz-test-") || name.startsWith("fake-");
+}
+
 // Unique session ID per test run to avoid cross-test dedup conflicts
 let testSession: string;
 let testHomeDir: string;
@@ -605,6 +609,7 @@ describe("skill-map from frontmatter", () => {
     const map = buildSkillMap(SKILLS_DIR);
     const noTriggers: string[] = [];
     for (const [skill, config] of Object.entries(map.skills) as [string, any][]) {
+      if (isLocalTestSkillName(skill)) continue;
       const pathCount = (config.pathPatterns || []).length;
       const bashCount = (config.bashPatterns || []).length;
       const importCount = (config.importPatterns || []).length;

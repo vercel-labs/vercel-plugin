@@ -1,14 +1,17 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { writeFileSync, readdirSync, rmSync } from "node:fs";
+import { describe, test, expect, beforeAll, beforeEach, afterAll, afterEach } from "bun:test";
+import { writeFileSync, readdirSync, rmSync, existsSync, mkdirSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const HOOK_SCRIPT = join(ROOT, "hooks", "pretooluse-skill-inject.mjs");
+const SKILLS_DIR = join(ROOT, "skills");
 const UNLIMITED_BUDGET = "999999";
 let testSession: string;
+let testHomeDir: string;
 
-const EXPECTED_SLACK_ROUTE_SKILLS = ["chat-sdk", "vercel-functions", "nextjs"] as const;
+const EXPECTED_SLACK_ROUTE_SKILLS = ["chat-sdk", "vercel-functions", "next-cache-components"] as const;
 
 function seedSeenSkills(skills: string[], session?: string): void {
   const sid = session ?? testSession;
@@ -26,8 +29,35 @@ function cleanupSessionDedup(session?: string): void {
   } catch {}
 }
 
+function createTempHomeDir(prefix = "vercel-plugin-home"): string {
+  return join(
+    tmpdir(),
+    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
+}
+
+function seedProjectCache(homeDir: string, projectRoot: string, skillsDir: string): void {
+  const statePaths = resolveProjectStatePaths(projectRoot, homeDir);
+  mkdirSync(statePaths.skillsDir, { recursive: true });
+
+  for (const entry of readdirSync(skillsDir)) {
+    const sourceDir = join(skillsDir, entry);
+    if (!existsSync(join(sourceDir, "SKILL.md"))) continue;
+    symlinkSync(sourceDir, join(statePaths.skillsDir, entry), "dir");
+  }
+}
+
+beforeAll(() => {
+  testHomeDir = createTempHomeDir();
+  seedProjectCache(testHomeDir, ROOT, SKILLS_DIR);
+});
+
 beforeEach(() => {
   testSession = `subagent-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+});
+
+afterAll(() => {
+  rmSync(testHomeDir, { recursive: true, force: true });
 });
 
 afterEach(() => {
@@ -44,6 +74,7 @@ async function runHookEnv(
     : JSON.stringify({ ...input, session_id: testSession });
   const childEnv: Record<string, string | undefined> = {
     ...process.env,
+    VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     VERCEL_PLUGIN_INJECTION_BUDGET: UNLIMITED_BUDGET,
     ...env,
   };
@@ -71,6 +102,15 @@ function parseInjectedSkills(stdout: string): string[] {
   return Array.isArray(injectedSkills) ? injectedSkills : [];
 }
 
+function parseMatchedSkills(stdout: string): string[] {
+  const parsed = JSON.parse(stdout);
+  const ctx = parsed?.hookSpecificOutput?.additionalContext || "";
+  const match = ctx.match(/<!-- skillInjection: (\{.*?\}) -->/);
+  const si = match ? JSON.parse(match[1]) : {};
+  const matchedSkills = si.matchedSkills;
+  return Array.isArray(matchedSkills) ? matchedSkills : [];
+}
+
 function parseDebugLines(stderr: string): Array<Record<string, unknown>> {
   return stderr
     .split("\n")
@@ -94,7 +134,7 @@ describe("subagent fresh env dedup behavior", () => {
     expect(leadInjected).toEqual(EXPECTED_SLACK_ROUTE_SKILLS);
 
     // Second call with file-based dedup — should be deduped
-    seedSeenSkills([...leadInjected]);
+    seedSeenSkills(parseMatchedSkills(leadStdout));
     const { code: leadSecondCode, stdout: leadSecondStdout } = await runHookEnv(
       { tool_name: "Read", tool_input: { file_path: slackRoutePath } },
       {},
@@ -143,7 +183,11 @@ describe("subagent fresh env dedup behavior", () => {
   });
 
   test("subagent that inherits the lead seen-skills via file dedup is deduped", async () => {
-    seedSeenSkills(["chat-sdk", "vercel-functions", "nextjs"]);
+    const { stdout: leadStdout } = await runHookEnv(
+      { tool_name: "Read", tool_input: { file_path: slackRoutePath } },
+      {},
+    );
+    seedSeenSkills(parseMatchedSkills(leadStdout));
     const { code, stdout } = await runHookEnv(
       { tool_name: "Read", tool_input: { file_path: slackRoutePath } },
       {},

@@ -5,16 +5,32 @@ import { join } from "node:path";
 import {
   createRegistryClient,
 } from "../hooks/src/registry-client.mts";
+import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 
 const TMP = join(tmpdir(), `vercel-plugin-registry-client-${Date.now()}`);
+const TEST_HOME = join(tmpdir(), `vercel-plugin-registry-home-${Date.now()}`);
+
+function projectState(projectRoot: string) {
+  return resolveProjectStatePaths(projectRoot, TEST_HOME);
+}
+
+function ensureStateRoot(projectRoot: string) {
+  const state = projectState(projectRoot);
+  mkdirSync(state.stateRoot, { recursive: true });
+  return state;
+}
 
 beforeEach(() => {
   rmSync(TMP, { recursive: true, force: true });
+  rmSync(TEST_HOME, { recursive: true, force: true });
+  process.env.VERCEL_PLUGIN_HOME_DIR = TEST_HOME;
   mkdirSync(TMP, { recursive: true });
 });
 
 afterAll(() => {
   rmSync(TMP, { recursive: true, force: true });
+  rmSync(TEST_HOME, { recursive: true, force: true });
+  delete process.env.VERCEL_PLUGIN_HOME_DIR;
 });
 
 // ---------------------------------------------------------------------------
@@ -53,11 +69,12 @@ describe("installSkills", () => {
   test("delegates to npx skills add and infers installed skills from .skills", async () => {
     const PROJECT = join(TMP, "project");
     mkdirSync(PROJECT, { recursive: true });
+    const state = ensureStateRoot(PROJECT);
 
     const exec = mockExecFile(() => {
       // Simulate CLI writing a skill
-      mkdirSync(join(PROJECT, ".skills", "nextjs"), { recursive: true });
-      writeFileSync(join(PROJECT, ".skills", "nextjs", "SKILL.md"), "# Next.js", "utf-8");
+      mkdirSync(join(state.skillsDir, "nextjs"), { recursive: true });
+      writeFileSync(join(state.skillsDir, "nextjs", "SKILL.md"), "# Next.js", "utf-8");
     });
 
     const client = createRegistryClient({
@@ -79,7 +96,7 @@ describe("installSkills", () => {
           "--agent", "claude-code",
           "-y", "--copy",
         ],
-        cwd: PROJECT,
+        cwd: state.stateRoot,
       },
     ]);
     expect(result.installed).toEqual(["nextjs"]);
@@ -91,11 +108,12 @@ describe("installSkills", () => {
   test("installs multiple skills with sorted --skill flags", async () => {
     const PROJECT = join(TMP, "project");
     mkdirSync(PROJECT, { recursive: true });
+    const state = ensureStateRoot(PROJECT);
 
     const exec = mockExecFile(() => {
       for (const skill of ["ai-sdk", "nextjs"]) {
-        mkdirSync(join(PROJECT, ".skills", skill), { recursive: true });
-        writeFileSync(join(PROJECT, ".skills", skill, "SKILL.md"), `# ${skill}`, "utf-8");
+        mkdirSync(join(state.skillsDir, skill), { recursive: true });
+        writeFileSync(join(state.skillsDir, skill, "SKILL.md"), `# ${skill}`, "utf-8");
       }
     });
 
@@ -121,9 +139,10 @@ describe("installSkills", () => {
 
   test("reports reused when skills already exist before CLI call", async () => {
     const PROJECT = join(TMP, "project");
+    const state = ensureStateRoot(PROJECT);
     // Pre-seed existing skill
-    mkdirSync(join(PROJECT, ".skills", "nextjs"), { recursive: true });
-    writeFileSync(join(PROJECT, ".skills", "nextjs", "SKILL.md"), "# Next.js", "utf-8");
+    mkdirSync(join(state.skillsDir, "nextjs"), { recursive: true });
+    writeFileSync(join(state.skillsDir, "nextjs", "SKILL.md"), "# Next.js", "utf-8");
 
     const exec = mockExecFile(); // CLI is a no-op
 
@@ -145,6 +164,7 @@ describe("installSkills", () => {
   test("reports missing when CLI fails to produce skill directory", async () => {
     const PROJECT = join(TMP, "project");
     mkdirSync(PROJECT, { recursive: true });
+    ensureStateRoot(PROJECT);
 
     const exec = mockExecFile(); // CLI produces nothing
 
@@ -166,6 +186,7 @@ describe("installSkills", () => {
   test("reports missing when CLI throws (subprocess error)", async () => {
     const PROJECT = join(TMP, "project");
     mkdirSync(PROJECT, { recursive: true });
+    ensureStateRoot(PROJECT);
 
     const client = createRegistryClient({
       source: "my-org/skills",
@@ -187,10 +208,11 @@ describe("installSkills", () => {
   test("deduplicates skill names", async () => {
     const PROJECT = join(TMP, "project");
     mkdirSync(PROJECT, { recursive: true });
+    const state = ensureStateRoot(PROJECT);
 
     const exec = mockExecFile(() => {
-      mkdirSync(join(PROJECT, ".skills", "nextjs"), { recursive: true });
-      writeFileSync(join(PROJECT, ".skills", "nextjs", "SKILL.md"), "# Next.js", "utf-8");
+      mkdirSync(join(state.skillsDir, "nextjs"), { recursive: true });
+      writeFileSync(join(state.skillsDir, "nextjs", "SKILL.md"), "# Next.js", "utf-8");
     });
 
     const client = createRegistryClient({
@@ -213,6 +235,7 @@ describe("installSkills", () => {
   test("returns null command for empty skill names", async () => {
     const PROJECT = join(TMP, "project");
     mkdirSync(PROJECT, { recursive: true });
+    ensureStateRoot(PROJECT);
 
     const exec = mockExecFile();
 
@@ -233,10 +256,11 @@ describe("installSkills", () => {
   test("uses default source when none provided", async () => {
     const PROJECT = join(TMP, "project");
     mkdirSync(PROJECT, { recursive: true });
+    const state = ensureStateRoot(PROJECT);
 
     const exec = mockExecFile(() => {
-      mkdirSync(join(PROJECT, ".skills", "nextjs"), { recursive: true });
-      writeFileSync(join(PROJECT, ".skills", "nextjs", "SKILL.md"), "# Next.js", "utf-8");
+      mkdirSync(join(state.skillsDir, "nextjs"), { recursive: true });
+      writeFileSync(join(state.skillsDir, "nextjs", "SKILL.md"), "# Next.js", "utf-8");
     });
 
     const client = createRegistryClient({
@@ -255,12 +279,12 @@ describe("installSkills", () => {
   test("recognises installed skills from skills-lock.json when directory is absent", async () => {
     const PROJECT = join(TMP, "project");
     mkdirSync(PROJECT, { recursive: true });
+    const state = ensureStateRoot(PROJECT);
 
     const exec = mockExecFile(() => {
       // CLI writes lockfile but has NOT yet materialised .skills/nextjs/SKILL.md
-      mkdirSync(join(PROJECT, ".skills"), { recursive: true });
       writeFileSync(
-        join(PROJECT, "skills-lock.json"),
+        state.lockfilePath,
         JSON.stringify({
           version: 1,
           skills: { nextjs: { source: "vercel/vercel-skills" } },
@@ -286,10 +310,10 @@ describe("installSkills", () => {
 
   test("reports reused from lockfile when skill exists in lockfile before CLI call", async () => {
     const PROJECT = join(TMP, "project");
-    mkdirSync(join(PROJECT, ".skills"), { recursive: true });
+    const state = ensureStateRoot(PROJECT);
     // Pre-seed lockfile with skill already present
     writeFileSync(
-      join(PROJECT, "skills-lock.json"),
+      state.lockfilePath,
       JSON.stringify({
         version: 1,
         skills: { nextjs: { source: "vercel/vercel-skills" } },
@@ -317,13 +341,14 @@ describe("installSkills", () => {
   test("lockfile-only install with partial directory state", async () => {
     const PROJECT = join(TMP, "project");
     mkdirSync(PROJECT, { recursive: true });
+    const state = ensureStateRoot(PROJECT);
 
     const exec = mockExecFile(() => {
       // CLI writes lockfile with two skills but only one directory
-      mkdirSync(join(PROJECT, ".skills", "nextjs"), { recursive: true });
-      writeFileSync(join(PROJECT, ".skills", "nextjs", "SKILL.md"), "# Next.js", "utf-8");
+      mkdirSync(join(state.skillsDir, "nextjs"), { recursive: true });
+      writeFileSync(join(state.skillsDir, "nextjs", "SKILL.md"), "# Next.js", "utf-8");
       writeFileSync(
-        join(PROJECT, "skills-lock.json"),
+        state.lockfilePath,
         JSON.stringify({
           version: 1,
           skills: {
@@ -352,14 +377,15 @@ describe("installSkills", () => {
 
   test("mixed install/reused/missing results", async () => {
     const PROJECT = join(TMP, "project");
+    const state = ensureStateRoot(PROJECT);
     // Pre-seed one existing skill
-    mkdirSync(join(PROJECT, ".skills", "existing"), { recursive: true });
-    writeFileSync(join(PROJECT, ".skills", "existing", "SKILL.md"), "# Existing", "utf-8");
+    mkdirSync(join(state.skillsDir, "existing"), { recursive: true });
+    writeFileSync(join(state.skillsDir, "existing", "SKILL.md"), "# Existing", "utf-8");
 
     const exec = mockExecFile(() => {
       // CLI installs one new skill, doesn't produce "broken"
-      mkdirSync(join(PROJECT, ".skills", "new-skill"), { recursive: true });
-      writeFileSync(join(PROJECT, ".skills", "new-skill", "SKILL.md"), "# New", "utf-8");
+      mkdirSync(join(state.skillsDir, "new-skill"), { recursive: true });
+      writeFileSync(join(state.skillsDir, "new-skill", "SKILL.md"), "# New", "utf-8");
     });
 
     const client = createRegistryClient({

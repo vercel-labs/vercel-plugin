@@ -172,9 +172,9 @@ describe("extractSkillSection", () => {
   });
 
   test("works with real skills directory", () => {
-    // ai-sdk has an "Installation" section
-    const result = extractSkillSection("ai-sdk", "Installation", SKILLS_DIR);
-    expect(result).toContain("npm install");
+    // ai-elements has an "Installation" section
+    const result = extractSkillSection("ai-elements", "Installation", SKILLS_DIR);
+    expect(result).toContain("npx ai-elements@latest add");
   });
 });
 
