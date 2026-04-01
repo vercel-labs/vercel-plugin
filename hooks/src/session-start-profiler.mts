@@ -47,6 +47,11 @@ import {
   createRegistryClient,
   type InstallSkillsResult,
 } from "./registry-client.mjs";
+import {
+  createVercelCliDelegator,
+  type VercelCliDelegator,
+  type VercelCliRunResult,
+} from "./vercel-cli-delegator.mjs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -795,6 +800,43 @@ export async function autoInstallDetectedSkills(args: {
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Vercel CLI delegation — auto env pull
+// ---------------------------------------------------------------------------
+
+export async function autoPullProjectEnv(args: {
+  projectRoot: string;
+  vercelLinked: boolean;
+  hasEnvLocal: boolean;
+  logger?: Logger;
+  delegator?: VercelCliDelegator;
+}): Promise<VercelCliRunResult | null> {
+  if (
+    process.env.VERCEL_PLUGIN_VERCEL_AUTO_ENV_PULL !== "1" ||
+    !args.vercelLinked ||
+    args.hasEnvLocal
+  ) {
+    return null;
+  }
+
+  const delegator = args.delegator ?? createVercelCliDelegator();
+  const result = await delegator.run({
+    projectRoot: args.projectRoot,
+    subcommand: "env-pull",
+  });
+
+  if (!result.ok) {
+    logCaughtError(
+      args.logger ?? log,
+      "session-start-profiler:auto-env-pull-failed",
+      new Error(result.stderr || "vercel env pull failed"),
+      { projectRoot: args.projectRoot, command: result.command },
+    );
+  }
+
+  return result;
+}
+
 function writeInstallPlanFile(
   projectRoot: string,
   plan: SkillInstallPlan,
@@ -923,8 +965,31 @@ async function main(): Promise<void> {
   const projectSkillManifestPath = installedState.projectState.projectSkillStatePath;
 
   // Detect Vercel project state for CLI delegation actions
-  const vercelLinked = existsSync(join(projectRoot, ".vercel"));
-  const hasEnvLocal = existsSync(join(projectRoot, ".env.local"));
+  let vercelLinked = existsSync(join(projectRoot, ".vercel"));
+  let hasEnvLocal = existsSync(join(projectRoot, ".env.local"));
+
+  // Optional real Vercel CLI delegation for the safest SessionStart action.
+  const envPullResult = await autoPullProjectEnv({
+    projectRoot,
+    vercelLinked,
+    hasEnvLocal,
+    logger: log,
+  });
+
+  // Re-read after delegation so the install plan reflects reality.
+  vercelLinked = existsSync(join(projectRoot, ".vercel"));
+  hasEnvLocal = existsSync(join(projectRoot, ".env.local"));
+
+  if (envPullResult?.ok && envPullResult.changed) {
+    userMessages.unshift(
+      [
+        "### Vercel CLI delegation",
+        "- Delegated: vercel env pull",
+        `- Command: \`${envPullResult.command}\``,
+        `- Created: ${join(projectRoot, ".env.local")}`,
+      ].join("\n"),
+    );
+  }
 
   // Build and persist the machine-readable install plan
   const installPlan = buildSkillInstallPlan({

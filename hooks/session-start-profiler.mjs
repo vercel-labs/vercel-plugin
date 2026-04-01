@@ -30,6 +30,9 @@ import {
 import {
   createRegistryClient
 } from "./registry-client.mjs";
+import {
+  createVercelCliDelegator
+} from "./vercel-cli-delegator.mjs";
 var FILE_MARKERS = [
   { file: "next.config.js", skills: ["nextjs", "turbopack"] },
   { file: "next.config.mjs", skills: ["nextjs", "turbopack"] },
@@ -538,6 +541,25 @@ async function autoInstallDetectedSkills(args) {
   });
   return result;
 }
+async function autoPullProjectEnv(args) {
+  if (process.env.VERCEL_PLUGIN_VERCEL_AUTO_ENV_PULL !== "1" || !args.vercelLinked || args.hasEnvLocal) {
+    return null;
+  }
+  const delegator = args.delegator ?? createVercelCliDelegator();
+  const result = await delegator.run({
+    projectRoot: args.projectRoot,
+    subcommand: "env-pull"
+  });
+  if (!result.ok) {
+    logCaughtError(
+      args.logger ?? log,
+      "session-start-profiler:auto-env-pull-failed",
+      new Error(result.stderr || "vercel env pull failed"),
+      { projectRoot: args.projectRoot, command: result.command }
+    );
+  }
+  return result;
+}
 function writeInstallPlanFile(projectRoot, plan) {
   const skillsDir = join(projectRoot, ".skills");
   mkdirSync(skillsDir, { recursive: true });
@@ -628,8 +650,26 @@ async function main() {
     }
   }
   const projectSkillManifestPath = installedState.projectState.projectSkillStatePath;
-  const vercelLinked = existsSync(join(projectRoot, ".vercel"));
-  const hasEnvLocal = existsSync(join(projectRoot, ".env.local"));
+  let vercelLinked = existsSync(join(projectRoot, ".vercel"));
+  let hasEnvLocal = existsSync(join(projectRoot, ".env.local"));
+  const envPullResult = await autoPullProjectEnv({
+    projectRoot,
+    vercelLinked,
+    hasEnvLocal,
+    logger: log
+  });
+  vercelLinked = existsSync(join(projectRoot, ".vercel"));
+  hasEnvLocal = existsSync(join(projectRoot, ".env.local"));
+  if (envPullResult?.ok && envPullResult.changed) {
+    userMessages.unshift(
+      [
+        "### Vercel CLI delegation",
+        "- Delegated: vercel env pull",
+        `- Command: \`${envPullResult.command}\``,
+        `- Created: ${join(projectRoot, ".env.local")}`
+      ].join("\n")
+    );
+  }
   const installPlan = buildSkillInstallPlan({
     projectRoot,
     detections,
@@ -752,6 +792,7 @@ if (isSessionStartProfilerEntrypoint) {
 }
 export {
   autoInstallDetectedSkills,
+  autoPullProjectEnv,
   buildSessionStartProfilerEnvVars,
   buildSessionStartProfilerUserMessages,
   checkAgentBrowser,

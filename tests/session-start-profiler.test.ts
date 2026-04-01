@@ -1049,3 +1049,147 @@ describe("checkGreenfield (unit)", () => {
     expect(result).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// autoPullProjectEnv
+// ---------------------------------------------------------------------------
+
+describe("autoPullProjectEnv", () => {
+  test("runs env pull when linked and missing .env.local", async () => {
+    process.env.VERCEL_PLUGIN_VERCEL_AUTO_ENV_PULL = "1";
+    try {
+      const { autoPullProjectEnv } = await import(
+        "../hooks/src/session-start-profiler.mts"
+      );
+      const projectDir = join(tempDir, "auto-env-pull");
+      mkdirSync(projectDir);
+      mkdirSync(join(projectDir, ".vercel"));
+
+      const result = await autoPullProjectEnv({
+        projectRoot: projectDir,
+        vercelLinked: true,
+        hasEnvLocal: false,
+        delegator: {
+          async run() {
+            writeFileSync(join(projectDir, ".env.local"), "TOKEN=1\n");
+            return {
+              ok: true,
+              subcommand: "env-pull" as const,
+              command: "vercel env pull --yes",
+              stdout: "",
+              stderr: "",
+              changed: true,
+            };
+          },
+        },
+      });
+
+      expect(result?.ok).toBe(true);
+      expect(result?.command).toBe("vercel env pull --yes");
+      expect(existsSync(join(projectDir, ".env.local"))).toBe(true);
+    } finally {
+      delete process.env.VERCEL_PLUGIN_VERCEL_AUTO_ENV_PULL;
+    }
+  });
+
+  test("skips when project is not linked", async () => {
+    process.env.VERCEL_PLUGIN_VERCEL_AUTO_ENV_PULL = "1";
+    try {
+      const { autoPullProjectEnv } = await import(
+        "../hooks/src/session-start-profiler.mts"
+      );
+
+      const result = await autoPullProjectEnv({
+        projectRoot: "/repo",
+        vercelLinked: false,
+        hasEnvLocal: false,
+        delegator: {
+          async run() {
+            throw new Error("should not run");
+          },
+        },
+      });
+
+      expect(result).toBeNull();
+    } finally {
+      delete process.env.VERCEL_PLUGIN_VERCEL_AUTO_ENV_PULL;
+    }
+  });
+
+  test("skips when .env.local already exists", async () => {
+    process.env.VERCEL_PLUGIN_VERCEL_AUTO_ENV_PULL = "1";
+    try {
+      const { autoPullProjectEnv } = await import(
+        "../hooks/src/session-start-profiler.mts"
+      );
+
+      const result = await autoPullProjectEnv({
+        projectRoot: "/repo",
+        vercelLinked: true,
+        hasEnvLocal: true,
+        delegator: {
+          async run() {
+            throw new Error("should not run");
+          },
+        },
+      });
+
+      expect(result).toBeNull();
+    } finally {
+      delete process.env.VERCEL_PLUGIN_VERCEL_AUTO_ENV_PULL;
+    }
+  });
+
+  test("skips when env var is not set", async () => {
+    delete process.env.VERCEL_PLUGIN_VERCEL_AUTO_ENV_PULL;
+
+    const { autoPullProjectEnv } = await import(
+      "../hooks/src/session-start-profiler.mts"
+    );
+
+    const result = await autoPullProjectEnv({
+      projectRoot: "/repo",
+      vercelLinked: true,
+      hasEnvLocal: false,
+      delegator: {
+        async run() {
+          throw new Error("should not run");
+        },
+      },
+    });
+
+    expect(result).toBeNull();
+  });
+
+  test("returns failed result on CLI error without throwing", async () => {
+    process.env.VERCEL_PLUGIN_VERCEL_AUTO_ENV_PULL = "1";
+    try {
+      const { autoPullProjectEnv } = await import(
+        "../hooks/src/session-start-profiler.mts"
+      );
+
+      const result = await autoPullProjectEnv({
+        projectRoot: "/repo",
+        vercelLinked: true,
+        hasEnvLocal: false,
+        delegator: {
+          async run() {
+            return {
+              ok: false,
+              subcommand: "env-pull" as const,
+              command: "vercel env pull --yes",
+              stdout: "",
+              stderr: "Error: not authenticated",
+              changed: false,
+            };
+          },
+        },
+      });
+
+      expect(result?.ok).toBe(false);
+      expect(result?.changed).toBe(false);
+    } finally {
+      delete process.env.VERCEL_PLUGIN_VERCEL_AUTO_ENV_PULL;
+    }
+  });
+});
