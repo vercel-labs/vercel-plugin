@@ -50,7 +50,7 @@ function buildOrchestratorActionError(args) {
     ok: false,
     code,
     message,
-    hint: code === "MISSING_INSTALL_PLAN" ? "Run SessionStart first so .skills/install-plan.json exists before calling the wrapper." : code === "INVALID_ACTION" ? `Use one of: ${ORCHESTRATOR_ACTION_IDS.join(", ")}` : code === "ACTION_BLOCKED" ? blockedActionHint(args.actionId) : "Inspect the delegated CLI output, fix the failing step, then rerun this wrapper action.",
+    hint: code === "MISSING_INSTALL_PLAN" ? "Run SessionStart first so the install plan exists before calling the wrapper." : code === "INVALID_ACTION" ? `Use one of: ${ORCHESTRATOR_ACTION_IDS.join(", ")}` : code === "ACTION_BLOCKED" ? blockedActionHint(args.actionId) : "Inspect the delegated CLI output, fix the failing step, then rerun this wrapper action.",
     actionId: args.actionId,
     projectRoot: args.projectRoot
   };

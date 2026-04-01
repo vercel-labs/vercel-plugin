@@ -1,6 +1,9 @@
 // hooks/src/skill-store.mts
-import { homedir } from "os";
 import { join, resolve } from "path";
+import {
+  resolveProjectStatePaths,
+  resolveVercelPluginHome
+} from "./project-state-paths.mjs";
 import {
   buildSkillMap,
   extractFrontmatter,
@@ -16,33 +19,31 @@ function toStringArray(value) {
   ) : [];
 }
 function defaultSkillStoreRoots(options) {
-  const projectCacheDir = resolve(options.projectRoot, ".skills");
+  const statePaths = resolveProjectStatePaths(options.projectRoot);
   const globalCacheDir = resolve(
-    options.globalCacheDir ?? join(homedir(), ".vercel-plugin", "skills")
+    options.globalCacheDir ?? join(resolveVercelPluginHome(), "skills")
   );
   const pluginRoot = resolve(options.pluginRoot);
   const roots = [
     {
       source: "project-cache",
-      rootDir: projectCacheDir,
-      skillsDir: projectCacheDir,
-      manifestPath: join(projectCacheDir, "manifest.json")
+      rootDir: statePaths.stateRoot,
+      skillsDir: statePaths.skillsDir,
+      manifestPath: statePaths.manifestPath
     },
     {
       source: "global-cache",
       rootDir: globalCacheDir,
       skillsDir: globalCacheDir,
       manifestPath: join(globalCacheDir, "manifest.json")
+    },
+    {
+      source: "rules-manifest",
+      rootDir: pluginRoot,
+      skillsDir: "",
+      manifestPath: join(pluginRoot, "generated", "skill-rules.json")
     }
   ];
-  if (options.bundledFallback !== false) {
-    roots.push({
-      source: "bundled",
-      rootDir: pluginRoot,
-      skillsDir: join(pluginRoot, "skills"),
-      manifestPath: join(pluginRoot, "generated", "skill-manifest.json")
-    });
-  }
   return roots;
 }
 function normalizeManifestSkill(raw) {
@@ -178,6 +179,7 @@ function loadRootSkillSet(root, logger) {
       usedManifest: true
     };
   }
+  if (!root.skillsDir) return null;
   const built = buildSkillMap(root.skillsDir);
   if (built.diagnostics?.length) {
     for (const diagnostic of built.diagnostics) {
@@ -244,13 +246,21 @@ function loadRootSkillSet(root, logger) {
     usedManifest: false
   };
 }
-function createSkillStore(options) {
+function createSkillStore(options, logger) {
   const roots = defaultSkillStoreRoots(options);
+  logger?.debug?.("skill-store-roots-resolved", {
+    roots: roots.map((r) => ({
+      source: r.source,
+      rootDir: r.rootDir,
+      skillsDir: r.skillsDir,
+      manifestPath: r.manifestPath
+    }))
+  });
   let cachedSkillSet;
   let cachedInstalled;
-  function loadCachedSkillSet(logger) {
+  function loadCachedSkillSet(logger2) {
     if (cachedSkillSet !== void 0) return cachedSkillSet;
-    const rootResults = roots.map((root) => loadRootSkillSet(root, logger)).filter(
+    const rootResults = roots.map((root) => loadRootSkillSet(root, logger2)).filter(
       (entry) => entry !== null
     );
     if (rootResults.length === 0) {
@@ -286,14 +296,15 @@ function createSkillStore(options) {
   }
   return {
     roots,
-    loadSkillSet(logger) {
-      return loadCachedSkillSet(logger);
+    loadSkillSet(logger2) {
+      return loadCachedSkillSet(logger2);
     },
-    resolveSkill(name, logger) {
-      return loadCachedSkillSet(logger)?.skillMap[name] ?? null;
+    resolveSkill(name, logger2) {
+      return loadCachedSkillSet(logger2)?.skillMap[name] ?? null;
     },
     resolveSkillBody(name, _logger) {
       for (const root of roots) {
+        if (!root.skillsDir) continue;
         const path = join(root.skillsDir, name, "SKILL.md");
         const raw = safeReadFile(path);
         if (raw === null) continue;
@@ -309,14 +320,63 @@ function createSkillStore(options) {
       }
       return null;
     },
-    listInstalledSkills(logger) {
+    resolveSkillPayload(name, payloadLogger) {
+      const loaded = loadCachedSkillSet(payloadLogger);
+      const config = loaded?.skillMap[name];
+      const root = loaded?.origins[name];
+      if (!config || !root) return null;
+      if (root.skillsDir) {
+        const path = join(root.skillsDir, name, "SKILL.md");
+        const raw = safeReadFile(path);
+        if (raw !== null) {
+          const { body } = extractFrontmatter(raw);
+          const trimmedBody = body.trimStart();
+          const mode = trimmedBody === "" ? "summary" : "body";
+          payloadLogger?.debug?.("skill-store-payload-resolved", {
+            skill: name,
+            source: root.source,
+            mode,
+            path
+          });
+          return {
+            skill: name,
+            source: root.source,
+            root,
+            mode,
+            path,
+            raw,
+            body: trimmedBody === "" ? null : trimmedBody,
+            summary: config.summary ?? "",
+            docs: config.docs ?? []
+          };
+        }
+      }
+      payloadLogger?.debug?.("skill-store-payload-resolved", {
+        skill: name,
+        source: root.source,
+        mode: "summary",
+        path: null
+      });
+      return {
+        skill: name,
+        source: root.source,
+        root,
+        mode: "summary",
+        path: null,
+        raw: null,
+        body: null,
+        summary: config.summary ?? "",
+        docs: config.docs ?? []
+      };
+    },
+    listInstalledSkills(logger2) {
       if (cachedInstalled !== void 0) return [...cachedInstalled];
-      const loaded = loadCachedSkillSet(logger);
+      const loaded = loadCachedSkillSet(logger2);
       if (!loaded) {
         cachedInstalled = [];
         return [];
       }
-      cachedInstalled = Object.entries(loaded.origins).filter(([, root]) => root.source !== "bundled").map(([skill]) => skill).sort();
+      cachedInstalled = Object.entries(loaded.origins).filter(([, root]) => root.source !== "rules-manifest").map(([skill]) => skill).sort();
       return [...cachedInstalled];
     }
   };

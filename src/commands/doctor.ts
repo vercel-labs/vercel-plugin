@@ -47,7 +47,7 @@ export interface DoctorResult {
 export function doctor(projectRoot: string): DoctorResult {
   const issues: DoctorIssue[] = [];
   const skillsDir = join(projectRoot, "skills");
-  const manifestPath = join(projectRoot, "generated", "skill-manifest.json");
+  const manifestPath = join(projectRoot, "generated", "skill-rules.json");
 
   // --- Live scan ---
   const { validation, skills: loadedSkills, buildDiagnostics } = loadValidatedSkillMap(skillsDir);
@@ -96,7 +96,7 @@ export function doctor(projectRoot: string): DoctorResult {
     issues.push({
       severity: "warning",
       check: "manifest-exists",
-      message: "No generated/skill-manifest.json found",
+      message: "No generated/skill-rules.json found",
       hint: "Run `bun run build:manifest` to generate it",
     });
   } else {

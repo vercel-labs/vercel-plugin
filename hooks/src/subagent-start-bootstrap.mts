@@ -315,8 +315,8 @@ function buildStandardContext(agentType: string, likelySkills: string[], budgetB
 
   // Inject full skill bodies for likely skills, falling back to summaries
   for (const skill of likelySkills) {
-    const resolved = store.resolveSkillBody(skill);
-    if (resolved) {
+    const resolved = store.resolveSkillPayload(skill);
+    if (resolved?.mode === "body" && resolved.body) {
       const content = resolved.body;
       const wrapped = `<!-- skill:${skill} -->\n${content}\n<!-- /skill:${skill} -->`;
       const byteLen = Buffer.byteLength(wrapped, "utf8");

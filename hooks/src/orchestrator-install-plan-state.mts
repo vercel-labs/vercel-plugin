@@ -1,13 +1,16 @@
 /**
  * Shared install-plan persistence — read, write, and refresh
- * `.skills/install-plan.json` from current on-disk project state.
+ * install-plan.json from current on-disk project state.
+ *
+ * The plan is stored under the hashed home-state root:
+ *   ~/.vercel-plugin/projects/<hash>/.skills/install-plan.json
  *
  * Used by session-start-profiler, orchestrator-action-runner, and
  * posttooluse-bash-chain so that the persisted plan is always the
  * single source of truth after any delegated CLI mutation.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { pluginRoot, safeReadJson } from "./hook-env.mjs";
@@ -16,13 +19,17 @@ import {
   type SkillInstallPlan,
 } from "./orchestrator-install-plan.mjs";
 import { loadProjectInstalledSkillState } from "./project-installed-skill-state.mjs";
+import {
+  ensureProjectStateRoot,
+  resolveProjectStatePaths,
+} from "./project-state-paths.mjs";
 
 // ---------------------------------------------------------------------------
 // Path
 // ---------------------------------------------------------------------------
 
 export function installPlanPath(projectRoot: string): string {
-  return join(projectRoot, ".skills", "install-plan.json");
+  return resolveProjectStatePaths(projectRoot).installPlanPath;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,8 +103,9 @@ export function requirePersistedSkillInstallPlan(args: {
   if (plan) {
     return plan;
   }
+  const planPath = installPlanPath(args.projectRoot);
   throw new Error(
-    `Missing install plan at ${installPlanPath(args.projectRoot)}. Run SessionStart first.`,
+    `Missing install plan at ${planPath}. Run SessionStart first.`,
   );
 }
 
@@ -107,13 +115,21 @@ export function requirePersistedSkillInstallPlan(args: {
 
 export function writePersistedSkillInstallPlan(
   plan: SkillInstallPlan,
+  logger?: { debug: (event: string, data: Record<string, unknown>) => void },
 ): void {
-  mkdirSync(join(plan.projectRoot, ".skills"), { recursive: true });
+  const paths = ensureProjectStateRoot(
+    resolveProjectStatePaths(plan.projectRoot),
+  );
   writeFileSync(
-    installPlanPath(plan.projectRoot),
+    paths.installPlanPath,
     JSON.stringify(plan, null, 2) + "\n",
     "utf-8",
   );
+  logger?.debug("install-plan-persisted", {
+    installPlanPath: paths.installPlanPath,
+    projectRoot: plan.projectRoot,
+    stateRoot: paths.stateRoot,
+  });
 }
 
 // ---------------------------------------------------------------------------

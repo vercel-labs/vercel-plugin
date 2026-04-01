@@ -395,8 +395,8 @@ async function runBashChainInjection(packages, sessionId, projectRoot, pluginRoo
       l.debug("posttooluse-bash-chain-skip-dedup", { pkg, skill });
       continue;
     }
-    const resolved = store.resolveSkillBody(skill, l);
-    if (!resolved) {
+    const payload = store.resolveSkillPayload(skill, l);
+    if (!payload) {
       result.missing.push(skill);
       if (!missingCandidates.has(skill)) {
         missingCandidates.set(skill, { packageName: pkg, skill, message });
@@ -404,14 +404,17 @@ async function runBashChainInjection(packages, sessionId, projectRoot, pluginRoo
       l.debug("posttooluse-bash-chain-skip-missing", { pkg, skill, projectRoot });
       continue;
     }
-    const trimmedBody = resolved.body.trim();
-    if (!trimmedBody) continue;
+    const resolvedContent = payload.mode === "body" && payload.body ? payload.body.trim() : [
+      payload.summary.trim() !== "" ? `Summary: ${payload.summary.trim()}` : null,
+      payload.docs.length > 0 ? `Docs: ${payload.docs.join(", ")}` : null
+    ].filter((line) => Boolean(line)).join("\n").trim();
+    if (resolvedContent === "") continue;
     const injectResult = tryInjectResolvedBashSkill({
       packageName: pkg,
       skill,
       message,
-      resolvedBody: trimmedBody,
-      source: resolved.source,
+      resolvedBody: resolvedContent,
+      source: payload.source,
       sessionId,
       seenSet,
       result,
@@ -469,19 +472,22 @@ async function runBashChainInjection(packages, sessionId, projectRoot, pluginRoo
       const stillMissing = [];
       for (const skill of uniqueMissing) {
         const candidate = missingCandidates.get(skill);
-        const resolved = refreshedStore.resolveSkillBody(skill, l);
-        if (!resolved || !candidate) {
+        const refreshedPayload = refreshedStore.resolveSkillPayload(skill, l);
+        if (!refreshedPayload || !candidate) {
           stillMissing.push(skill);
           continue;
         }
-        const trimmedBody = resolved.body.trim();
-        if (!trimmedBody) {
+        const resolvedBody = refreshedPayload.mode === "body" && refreshedPayload.body ? refreshedPayload.body.trim() : [
+          refreshedPayload.summary.trim() !== "" ? `Summary: ${refreshedPayload.summary.trim()}` : null,
+          refreshedPayload.docs.length > 0 ? `Docs: ${refreshedPayload.docs.join(", ")}` : null
+        ].filter((line) => Boolean(line)).join("\n").trim();
+        if (resolvedBody === "") {
           stillMissing.push(skill);
           continue;
         }
         resolvedAfterInstall.set(skill, {
-          body: trimmedBody,
-          source: resolved.source
+          body: resolvedBody,
+          source: refreshedPayload.source
         });
       }
       for (const [currentIndex, skill] of uniqueMissing.entries()) {

@@ -2,8 +2,8 @@
  * Orchestrator Install Plan — machine-readable skill detection and install plan.
  *
  * Produces a structured plan that describes which skills were detected,
- * which are already cached, and which are missing. The plan is both
- * persisted to `.skills/install-plan.json` and surfaced as a human-readable
+ * which are already cached, and which are missing. The plan is persisted
+ * under the hashed home-state root and surfaced as a human-readable
  * palette in SessionStart output.
  */
 
@@ -12,6 +12,7 @@ import {
   buildVercelCliCommand,
   type VercelSubcommand,
 } from "./vercel-cli-command.mjs";
+import { resolveProjectStatePaths } from "./project-state-paths.mjs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,6 +48,9 @@ export interface SkillInstallPlan {
   schemaVersion: 1;
   createdAt: string;
   projectRoot: string;
+  projectStateRoot: string;
+  skillsCacheDir: string;
+  installPlanPath: string;
   likelySkills: string[];
   installedSkills: string[];
   missingSkills: string[];
@@ -92,6 +96,8 @@ export function buildSkillInstallPlan(args: {
   hasEnvLocal?: boolean;
   now?: () => Date;
 }): SkillInstallPlan {
+  const statePaths = resolveProjectStatePaths(args.projectRoot);
+
   const likelySkills = uniqueSorted(
     args.detections.map((d) => d.skill),
   );
@@ -118,7 +124,7 @@ export function buildSkillInstallPlan(args: {
       description:
         missingSkills.length === 0
           ? "All detected skills are already cached."
-          : `Install ${missingSkills.length} missing skill${missingSkills.length === 1 ? "" : "s"} into .skills/.`,
+          : `Install ${missingSkills.length} missing skill${missingSkills.length === 1 ? "" : "s"} into ${statePaths.skillsDir}.`,
       command: installCommand,
       default: !args.zeroBundleReady,
     },
@@ -126,7 +132,7 @@ export function buildSkillInstallPlan(args: {
       id: "activate-cache-only",
       label: "Use cache-only mode",
       description: args.zeroBundleReady
-        ? "All detected skills are cached. This session can disable bundled fallback."
+        ? "All detected skills are cached. This session can disable shipped fallback metadata."
         : "Cache-only mode is blocked until the missing skills are installed.",
       command: args.zeroBundleReady
         ? "export VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK=1"
@@ -138,7 +144,7 @@ export function buildSkillInstallPlan(args: {
       label: "Explain detections",
       description:
         "Open the persisted install plan with full detection reasons.",
-      command: "cat .skills/install-plan.json",
+      command: `cat "${statePaths.installPlanPath}"`,
     },
   ];
 
@@ -180,6 +186,9 @@ export function buildSkillInstallPlan(args: {
     schemaVersion: 1,
     createdAt: (args.now ? args.now() : new Date()).toISOString(),
     projectRoot: args.projectRoot,
+    projectStateRoot: statePaths.stateRoot,
+    skillsCacheDir: statePaths.skillsDir,
+    installPlanPath: statePaths.installPlanPath,
     likelySkills,
     installedSkills,
     missingSkills,
@@ -217,8 +226,10 @@ export function formatSkillInstallPalette(
     `- Detected: ${plan.likelySkills.join(", ")}`,
     `- Cached: ${plan.installedSkills.length > 0 ? plan.installedSkills.join(", ") : "none"}`,
     `- Missing: ${plan.missingSkills.length > 0 ? plan.missingSkills.join(", ") : "none"}`,
+    `- State root: ${plan.projectStateRoot}`,
+    `- Skill cache: ${plan.skillsCacheDir}`,
+    `- Install plan: ${plan.installPlanPath}`,
     `- Zero-bundle ready: ${plan.zeroBundleReady ? "yes" : "no"}`,
-    `- Cache manifest: ${plan.projectSkillManifestPath ?? "none"}`,
   ];
 
   const installAction = plan.actions.find(
@@ -235,7 +246,7 @@ export function formatSkillInstallPalette(
     lines.push(`- [2] Cache only: ${cacheOnlyAction.command}`);
   }
 
-  lines.push("- [3] Explain: cat .skills/install-plan.json");
+  lines.push(`- [3] Explain: cat "${plan.installPlanPath}"`);
 
   const vercelLinkAction = plan.actions.find(
     (action) => action.id === "vercel-link",

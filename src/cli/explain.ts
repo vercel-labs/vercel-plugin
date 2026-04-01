@@ -104,7 +104,7 @@ function detectTargetType(target: string, toolName?: string): "file" | "bash" {
 
 export function explain(target: string, projectRoot: string, options?: ExplainOptions): ExplainResult {
   const skillsDir = join(projectRoot, "skills");
-  const manifestPath = join(projectRoot, "generated", "skill-manifest.json");
+  const manifestPath = join(projectRoot, "generated", "skill-rules.json");
   const opts = options || {};
   const budget = opts.budgetBytes ?? DEFAULT_INJECTION_BUDGET_BYTES;
 

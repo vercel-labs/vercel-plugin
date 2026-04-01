@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { afterEach, describe, test, expect, beforeEach } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -223,10 +223,14 @@ describe("runBashChainInjection unit tests", () => {
     }
   });
 
-  test("resolves project-local .skills/ even when process.cwd differs", async () => {
-    // Set up a temp project with a .skills/vercel-functions/SKILL.md
+  test("resolves project-local cache even when process.cwd differs", async () => {
+    // Set up a temp project with a skill in the hashed state path
     const projectDir = join(tmpdir(), `bash-chain-test-${Date.now()}`);
-    const skillDir = join(projectDir, ".skills", "vercel-functions");
+    const homeDir = join(tmpdir(), `bash-chain-home-${Date.now()}`);
+    process.env.VERCEL_PLUGIN_HOME_DIR = homeDir;
+    const { resolveProjectStatePaths } = await import("../hooks/src/project-state-paths.mts");
+    const statePaths = resolveProjectStatePaths(projectDir, homeDir);
+    const skillDir = join(statePaths.skillsDir, "vercel-functions");
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(
       join(skillDir, "SKILL.md"),
@@ -250,7 +254,6 @@ describe("runBashChainInjection unit tests", () => {
       const store = createSkillStore({
         projectRoot: projectDir,
         pluginRoot: ROOT,
-        bundledFallback: true,
       });
 
       const result = await runBashChainInjection(
@@ -265,18 +268,24 @@ describe("runBashChainInjection unit tests", () => {
 
       expect(result.injected.length).toBe(1);
       expect(result.injected[0].skill).toBe("vercel-functions");
-      // Verify it came from the project-local skill, not bundled
+      // Verify it came from the project-local cache, not rules-manifest
       expect(result.injected[0].content).toContain("project-local");
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
+      rmSync(homeDir, { recursive: true, force: true });
+      delete process.env.VERCEL_PLUGIN_HOME_DIR;
     }
   });
 
   test("reuses single store across multiple packages in one run", async () => {
-    // Set up a temp project with two project-local skills
+    // Set up a temp project with two skills in the hashed state path
     const projectDir = join(tmpdir(), `bash-chain-store-reuse-${Date.now()}`);
+    const homeDir = join(tmpdir(), `bash-chain-store-reuse-home-${Date.now()}`);
+    process.env.VERCEL_PLUGIN_HOME_DIR = homeDir;
+    const { resolveProjectStatePaths } = await import("../hooks/src/project-state-paths.mts");
+    const statePaths = resolveProjectStatePaths(projectDir, homeDir);
     for (const slug of ["vercel-functions", "vercel-storage"]) {
-      const skillDir = join(projectDir, ".skills", slug);
+      const skillDir = join(statePaths.skillsDir, slug);
       mkdirSync(skillDir, { recursive: true });
       writeFileSync(
         join(skillDir, "SKILL.md"),
@@ -298,7 +307,6 @@ describe("runBashChainInjection unit tests", () => {
       const store = createSkillStore({
         projectRoot: projectDir,
         pluginRoot: ROOT,
-        bundledFallback: true,
       });
 
       // express → vercel-functions, prisma → vercel-storage
@@ -308,7 +316,7 @@ describe("runBashChainInjection unit tests", () => {
         projectDir,
         ROOT,
         undefined,
-        { VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK: "0" } as any,
+        {} as any,
         store,
       );
 
@@ -319,6 +327,8 @@ describe("runBashChainInjection unit tests", () => {
       expect(result.injected[1].content).toContain("Local content");
     } finally {
       rmSync(projectDir, { recursive: true, force: true });
+      rmSync(homeDir, { recursive: true, force: true });
+      delete process.env.VERCEL_PLUGIN_HOME_DIR;
     }
   });
 });
@@ -471,16 +481,28 @@ describe("PostToolUse CLI delegation", () => {
 describe("PostToolUse install-and-reinject", () => {
   let runBashChainInjection: typeof import("../hooks/src/posttooluse-bash-chain.mts").runBashChainInjection;
   let createSkillStore: typeof import("../hooks/src/skill-store.mts").createSkillStore;
+  let resolveProjectStatePaths: typeof import("../hooks/src/project-state-paths.mts").resolveProjectStatePaths;
+  let testHomeDir: string;
 
   beforeEach(async () => {
     const mod = await import("../hooks/posttooluse-bash-chain.mjs");
     runBashChainInjection = mod.runBashChainInjection;
     const storeMod = await import("../hooks/skill-store.mjs");
     createSkillStore = storeMod.createSkillStore;
+    const pathsMod = await import("../hooks/src/project-state-paths.mts");
+    resolveProjectStatePaths = pathsMod.resolveProjectStatePaths;
+    testHomeDir = join(tmpdir(), `chain-reinject-home-${Date.now()}`);
+    process.env.VERCEL_PLUGIN_HOME_DIR = testHomeDir;
   });
 
-  function writeSkillMd(dir: string, slug: string, body: string): void {
-    const skillDir = join(dir, ".skills", slug);
+  afterEach(() => {
+    rmSync(testHomeDir, { recursive: true, force: true });
+    delete process.env.VERCEL_PLUGIN_HOME_DIR;
+  });
+
+  function writeSkillMd(projectDir: string, slug: string, body: string): void {
+    const statePaths = resolveProjectStatePaths(projectDir, testHomeDir);
+    const skillDir = join(statePaths.skillsDir, slug);
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(
       join(skillDir, "SKILL.md"),
@@ -499,7 +521,7 @@ describe("PostToolUse install-and-reinject", () => {
 
   /**
    * Creates a mock RegistryClient whose installSkills writes the skill to
-   * the project's .skills/ directory (simulating `npx skills add`) and
+   * the project's hashed cache directory (simulating `npx skills add`) and
    * returns a successful result. No real CLI or network calls.
    */
   function makeMockRegistryClient(

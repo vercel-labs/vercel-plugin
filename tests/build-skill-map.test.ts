@@ -7,7 +7,7 @@ import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 const ROOT = resolve(import.meta.dirname, "..");
 const BUILD_SCRIPT = join(ROOT, "scripts", "build-manifest.ts");
 const SKILLS_DIR = join(ROOT, "skills");
-const MANIFEST_PATH = join(ROOT, "generated", "skill-manifest.json");
+const MANIFEST_PATH = join(ROOT, "generated", "skill-rules.json");
 const HOOK_SCRIPT = join(ROOT, "hooks", "pretooluse-skill-inject.mjs");
 const TEST_HOME = join(tmpdir(), `build-skill-map-home-${Date.now()}`);
 
@@ -94,7 +94,7 @@ describe("build-manifest.ts", () => {
   test("build script exits 0 and produces manifest", async () => {
     const { code, stdout } = await runBuild();
     expect(code).toBe(0);
-    expect(stdout).toContain("skills to");
+    expect(stdout).toContain("skill-rules-written");
     expect(existsSync(MANIFEST_PATH)).toBe(true);
   });
 
@@ -120,9 +120,8 @@ describe("build-manifest.ts", () => {
       expect(typeof config.priority).toBe("number");
       expect(Array.isArray(config.pathPatterns)).toBe(true);
       expect(Array.isArray(config.bashPatterns)).toBe(true);
-      if (typeof config.bodyPath === "string") {
-        expect(config.bodyPath).toBe(`skills/${slug}/SKILL.md`);
-      }
+      // v3 rules manifest no longer includes bodyPath
+      expect(config.bodyPath).toBeUndefined();
     }
   });
 
@@ -272,19 +271,24 @@ describe("loadSkills pipeline stage", () => {
 
 describe("manifest with temp directory", () => {
   const TMP = join(tmpdir(), `build-manifest-test-${Date.now()}`);
+  const TEST_HOME = join(TMP, "home");
   const SKILLS = join(TMP, "skills");
   const GEN = join(TMP, "generated");
   const HOOKS = join(TMP, "hooks");
+  const PROJECT_STATE = resolveProjectStatePaths(TMP, TEST_HOME);
+  const PROJECT_SKILLS = PROJECT_STATE.skillsDir;
 
   beforeAll(() => {
     mkdirSync(SKILLS, { recursive: true });
     mkdirSync(GEN, { recursive: true });
     mkdirSync(HOOKS, { recursive: true });
+    mkdirSync(PROJECT_SKILLS, { recursive: true });
+    process.env.VERCEL_PLUGIN_HOME_DIR = TEST_HOME;
 
-    // Create a minimal skill
-    const skillDir = join(SKILLS, "test-skill");
-    mkdirSync(skillDir, { recursive: true });
-    writeFileSync(join(skillDir, "SKILL.md"), `---
+    // Create a minimal skill in the hashed project-cache for live scan
+    const projectSkillDir = join(PROJECT_SKILLS, "test-skill");
+    mkdirSync(projectSkillDir, { recursive: true });
+    writeFileSync(join(projectSkillDir, "SKILL.md"), `---
 name: Test Skill
 description: A test skill
 metadata:
@@ -321,6 +325,7 @@ This is test content.
 
   afterAll(() => {
     rmSync(TMP, { recursive: true, force: true });
+    delete process.env.VERCEL_PLUGIN_HOME_DIR;
   });
 
   test("loadSkills works without manifest (live scan)", async () => {
@@ -347,7 +352,7 @@ This is test content.
         },
       },
     };
-    writeFileSync(join(GEN, "skill-manifest.json"), JSON.stringify(manifest));
+    writeFileSync(join(GEN, "skill-rules.json"), JSON.stringify(manifest));
 
     const hookPath = join(HOOKS, "pretooluse-skill-inject.mjs");
     const mod = await import(hookPath + `?t2=${Date.now()}`);
@@ -359,7 +364,7 @@ This is test content.
   });
 
   test("loadSkills falls back on corrupt manifest", async () => {
-    writeFileSync(join(GEN, "skill-manifest.json"), "NOT JSON");
+    writeFileSync(join(GEN, "skill-rules.json"), "NOT JSON");
 
     const hookPath = join(HOOKS, "pretooluse-skill-inject.mjs");
     const mod = await import(hookPath + `?t3=${Date.now()}`);
@@ -370,7 +375,7 @@ This is test content.
   });
 
   test("loadSkills falls back on manifest without skills key", async () => {
-    writeFileSync(join(GEN, "skill-manifest.json"), JSON.stringify({ generatedAt: "x" }));
+    writeFileSync(join(GEN, "skill-rules.json"), JSON.stringify({ generatedAt: "x" }));
 
     const hookPath = join(HOOKS, "pretooluse-skill-inject.mjs");
     const mod = await import(hookPath + `?t4=${Date.now()}`);

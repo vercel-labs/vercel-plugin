@@ -4,11 +4,14 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { globToRegex } from "../hooks/patterns.mjs";
 import { createSkillStore } from "../hooks/src/skill-store.mts";
+import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const TMP = join(tmpdir(), `vercel-plugin-skill-store-${Date.now()}`);
+const HOME = join(TMP, "home");
 const PROJECT = join(TMP, "project");
-const PROJECT_SKILLS = join(PROJECT, ".skills");
+const PROJECT_STATE = resolveProjectStatePaths(PROJECT, HOME);
+const PROJECT_SKILLS = PROJECT_STATE.skillsDir;
 const GLOBAL = join(TMP, "global-skills");
 const PLUGIN = join(TMP, "plugin");
 
@@ -68,23 +71,66 @@ function writeCacheManifest(
   );
 }
 
+function writeRulesManifest(
+  pluginRoot: string,
+  slug: string,
+  priority: number,
+  pathPattern = "**/*.ts",
+): void {
+  const manifest = {
+    version: 3,
+    generatedAt: new Date().toISOString(),
+    skills: {
+      [slug]: {
+        priority,
+        summary: `${slug} summary`,
+        docs: [`https://example.com/${slug}`],
+        pathPatterns: [pathPattern],
+        bashPatterns: [],
+        importPatterns: [],
+        pathRegexSources: [globToRegex(pathPattern).source],
+        bashRegexSources: [],
+        importRegexSources: [],
+      },
+    },
+  };
+  mkdirSync(join(pluginRoot, "generated"), { recursive: true });
+  writeFileSync(
+    join(pluginRoot, "generated", "skill-rules.json"),
+    JSON.stringify(manifest, null, 2),
+    "utf-8",
+  );
+}
+
 beforeEach(() => {
   rmSync(TMP, { recursive: true, force: true });
   mkdirSync(PROJECT_SKILLS, { recursive: true });
   mkdirSync(GLOBAL, { recursive: true });
-  mkdirSync(join(PLUGIN, "skills"), { recursive: true });
   mkdirSync(join(PLUGIN, "generated"), { recursive: true });
+
+  // Set home dir for project-state-paths resolution
+  process.env.VERCEL_PLUGIN_HOME_DIR = HOME;
 });
 
 afterAll(() => {
   rmSync(TMP, { recursive: true, force: true });
+  delete process.env.VERCEL_PLUGIN_HOME_DIR;
 });
 
 describe("skill-store", () => {
-  test("merges project, global, and bundled roots with project precedence", () => {
+  test("project-cache root uses hashed state path", () => {
+    const store = createSkillStore({
+      projectRoot: PROJECT,
+      pluginRoot: PLUGIN,
+    });
+    expect(store.roots[0].rootDir).toBe(PROJECT_STATE.stateRoot);
+    expect(store.roots[0].skillsDir).toBe(PROJECT_STATE.skillsDir);
+  });
+
+  test("merges project, global, and rules-manifest roots with project precedence", () => {
     writeSkill(PROJECT_SKILLS, "nextjs", 9, "app/**/*.tsx");
     writeSkill(GLOBAL, "ai-sdk", 7, "app/api/**/*.ts");
-    writeSkill(join(PLUGIN, "skills"), "vercel-cli", 5, "vercel.json");
+    writeRulesManifest(PLUGIN, "vercel-cli", 5, "vercel.json");
 
     const store = createSkillStore({
       projectRoot: PROJECT,
@@ -101,12 +147,11 @@ describe("skill-store", () => {
     ]);
     expect(store.resolveSkill("nextjs")!.priority).toBe(9);
     expect(store.resolveSkill("ai-sdk")!.priority).toBe(7);
-    expect(store.resolveSkillBody("vercel-cli")!.source).toBe("bundled");
   });
 
-  test("project-cache skill takes precedence over bundled with same slug", () => {
+  test("project-cache skill takes precedence over rules-manifest with same slug", () => {
     writeSkill(PROJECT_SKILLS, "nextjs", 10, "app/**/*.tsx");
-    writeSkill(join(PLUGIN, "skills"), "nextjs", 5, "pages/**/*.tsx");
+    writeRulesManifest(PLUGIN, "nextjs", 5, "pages/**/*.tsx");
 
     const store = createSkillStore({
       projectRoot: PROJECT,
@@ -116,7 +161,7 @@ describe("skill-store", () => {
 
     const loaded = store.loadSkillSet();
     expect(loaded).not.toBeNull();
-    // Project cache (priority 10) wins over bundled (priority 5)
+    // Project cache (priority 10) wins over rules-manifest (priority 5)
     expect(loaded!.skillMap["nextjs"].priority).toBe(10);
     expect(loaded!.origins["nextjs"].source).toBe("project-cache");
     expect(store.resolveSkillBody("nextjs")!.source).toBe("project-cache");
@@ -140,10 +185,10 @@ describe("skill-store", () => {
     );
   });
 
-  test("listInstalledSkills excludes bundled fallback", () => {
+  test("listInstalledSkills excludes rules-manifest fallback", () => {
     writeSkill(PROJECT_SKILLS, "nextjs", 9, "app/**/*.tsx");
     writeSkill(GLOBAL, "ai-sdk", 7, "app/api/**/*.ts");
-    writeSkill(join(PLUGIN, "skills"), "vercel-cli", 5, "vercel.json");
+    writeRulesManifest(PLUGIN, "vercel-cli", 5, "vercel.json");
 
     const store = createSkillStore({
       projectRoot: PROJECT,
@@ -159,9 +204,9 @@ describe("skill-store", () => {
       projectRoot: PROJECT,
       pluginRoot: PLUGIN,
       globalCacheDir: GLOBAL,
-      bundledFallback: false,
     });
 
+    // rules-manifest has no skills file either, so all roots are empty
     expect(store.loadSkillSet()).toBeNull();
   });
 
@@ -186,25 +231,72 @@ describe("skill-store", () => {
       projectRoot: PROJECT,
       pluginRoot: PLUGIN,
       globalCacheDir: GLOBAL,
-      bundledFallback: false,
     });
 
     expect(store.resolveSkillBody("non-existent")).toBeNull();
   });
 
-  test("bundledFallback: false excludes bundled root", () => {
-    writeSkill(join(PLUGIN, "skills"), "vercel-cli", 5, "vercel.json");
+  test("rules-manifest root is always included (no bundledFallback flag)", () => {
+    writeRulesManifest(PLUGIN, "vercel-cli", 5, "vercel.json");
 
     const store = createSkillStore({
       projectRoot: PROJECT,
       pluginRoot: PLUGIN,
       globalCacheDir: GLOBAL,
-      bundledFallback: false,
     });
 
-    expect(store.loadSkillSet()).toBeNull();
-    expect(store.roots.length).toBe(2);
-    expect(store.roots.every((r) => r.source !== "bundled")).toBe(true);
+    expect(store.roots.length).toBe(3);
+    expect(store.roots[2].source).toBe("rules-manifest");
+    const loaded = store.loadSkillSet();
+    expect(loaded).not.toBeNull();
+    expect(loaded!.skillMap["vercel-cli"]).toBeDefined();
+  });
+
+  test("resolveSkillPayload returns mode:body when cached body exists", () => {
+    writeSkill(PROJECT_SKILLS, "nextjs", 9, "app/**/*.tsx");
+
+    const store = createSkillStore({
+      projectRoot: PROJECT,
+      pluginRoot: PLUGIN,
+      globalCacheDir: GLOBAL,
+    });
+
+    const payload = store.resolveSkillPayload("nextjs");
+    expect(payload).not.toBeNull();
+    expect(payload!.mode).toBe("body");
+    expect(payload!.source).toBe("project-cache");
+    expect(payload!.body).toContain("# nextjs");
+    expect(payload!.path).toContain("SKILL.md");
+    expect(payload!.summary).toBe("nextjs summary");
+  });
+
+  test("resolveSkillPayload returns mode:summary when only rules-manifest metadata exists", () => {
+    writeRulesManifest(PLUGIN, "vercel-cli", 5, "vercel.json");
+
+    const store = createSkillStore({
+      projectRoot: PROJECT,
+      pluginRoot: PLUGIN,
+      globalCacheDir: GLOBAL,
+    });
+
+    const payload = store.resolveSkillPayload("vercel-cli");
+    expect(payload).not.toBeNull();
+    expect(payload!.mode).toBe("summary");
+    expect(payload!.source).toBe("rules-manifest");
+    expect(payload!.body).toBeNull();
+    expect(payload!.path).toBeNull();
+    expect(payload!.summary).toBe("vercel-cli summary");
+    expect(payload!.docs).toEqual(["https://example.com/vercel-cli"]);
+  });
+
+  test("resolveSkillPayload returns null for unknown skill", () => {
+    const store = createSkillStore({
+      projectRoot: PROJECT,
+      pluginRoot: PLUGIN,
+      globalCacheDir: GLOBAL,
+    });
+
+    expect(store.resolveSkillPayload("non-existent")).toBeNull();
   });
 
   test("compiled skills include correct regex patterns", () => {
@@ -230,13 +322,14 @@ describe("skill-store", () => {
 });
 
 describe("loadSkills with installed cache", () => {
-  test("reads project-local .skills before bundled fallback", async () => {
+  test("reads project-local cache before rules-manifest fallback", async () => {
     const projectDir = join(TMP, "loadskills-project");
-    mkdirSync(join(projectDir, ".skills", "custom-skill"), {
+    const projectState = resolveProjectStatePaths(projectDir, HOME);
+    mkdirSync(join(projectState.skillsDir, "custom-skill"), {
       recursive: true,
     });
     writeFileSync(
-      join(projectDir, ".skills", "custom-skill", "SKILL.md"),
+      join(projectState.skillsDir, "custom-skill", "SKILL.md"),
       `---
 name: custom-skill
 description: Custom

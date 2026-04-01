@@ -17,7 +17,7 @@ import type { SkillEntry, ManifestSkill } from "../hooks/patterns.mjs";
 import type { ChainToRule, ValidationRule } from "../hooks/skill-map-frontmatter.mjs";
 import { loadValidatedSkillMap } from "../src/shared/skill-map-loader.ts";
 
-export { buildManifest, writeManifestFile, synthesizeChainToFromValidate, toBodyPath };
+export { buildManifest, writeManifestFile, synthesizeChainToFromValidate };
 
 const ROOT = resolve(import.meta.dir, "..");
 const SKILLS_DIR = join(ROOT, "skills");
@@ -25,16 +25,14 @@ const INPUT_SKILLS_DIR = process.env.VERCEL_PLUGIN_SKILLS_DIR
   ? resolve(process.env.VERCEL_PLUGIN_SKILLS_DIR)
   : SKILLS_DIR;
 const OUT_DIR = join(ROOT, "generated");
-const OUT_FILE = join(OUT_DIR, "skill-manifest.json");
+const OUT_FILE = join(OUT_DIR, "skill-rules.json");
 
-interface ManifestSkillWithBody extends ManifestSkill {
-  bodyPath: string;
-}
+interface RulesManifestSkill extends ManifestSkill {}
 
-interface Manifest {
+interface RulesManifest {
   generatedAt: string;
-  version: 2;
-  skills: Record<string, ManifestSkillWithBody>;
+  version: 3;
+  skills: Record<string, RulesManifestSkill>;
 }
 
 /**
@@ -159,7 +157,7 @@ function synthesizeChainToFromValidate(
  * Build the skill manifest object from the skills directory.
  * Exported so validate.ts can reuse this without duplicating logic.
  */
-function buildManifest(skillsDir: string): { manifest: Manifest; warnings: string[]; errors: string[] } {
+function buildManifest(skillsDir: string): { manifest: RulesManifest; warnings: string[]; errors: string[] } {
   const { validation, buildDiagnostics } = loadValidatedSkillMap(skillsDir);
   const allWarnings: string[] = [...buildDiagnostics];
 
@@ -181,7 +179,7 @@ function buildManifest(skillsDir: string): { manifest: Manifest; warnings: strin
     console.error(`  ⤳ Synthesized ${synthCount} chainTo rule(s) from upgradeToSkill validate rules`);
   }
 
-  const skills: Record<string, ManifestSkillWithBody> = {};
+  const skills: Record<string, RulesManifestSkill> = {};
   for (const [slug, config] of Object.entries(normalizedSkills) as [string, SkillEntry][]) {
     const { pathPatterns, pathRegexSources, bashPatterns, bashRegexSources, importPatterns, importRegexSources } = compileRegexSources(config);
     skills[slug] = {
@@ -192,7 +190,6 @@ function buildManifest(skillsDir: string): { manifest: Manifest; warnings: strin
       pathPatterns,
       bashPatterns,
       importPatterns,
-      bodyPath: toBodyPath(skillsDir, slug),
       pathRegexSources,
       bashRegexSources,
       importRegexSources,
@@ -203,9 +200,9 @@ function buildManifest(skillsDir: string): { manifest: Manifest; warnings: strin
     };
   }
 
-  const manifest: Manifest = {
+  const manifest: RulesManifest = {
     generatedAt: new Date().toISOString(),
-    version: 2,
+    version: 3,
     skills,
   };
 
@@ -216,7 +213,7 @@ function buildManifest(skillsDir: string): { manifest: Manifest; warnings: strin
  * Write the manifest JSON to generated/skill-manifest.json.
  * Returns the number of skills written.
  */
-function writeManifestFile(manifest: Manifest, outDir = OUT_DIR, outFile = OUT_FILE): number {
+function writeManifestFile(manifest: RulesManifest, outDir = OUT_DIR, outFile = OUT_FILE): number {
   mkdirSync(outDir, { recursive: true });
   writeFileSync(outFile, JSON.stringify(manifest, null, 2) + "\n");
   return Object.keys(manifest.skills).length;
@@ -246,5 +243,12 @@ if (isMain()) {
   }
 
   const count = writeManifestFile(manifest);
-  console.log(`✓ Wrote ${count} skills to ${OUT_FILE}`);
+  console.log(
+    JSON.stringify({
+      event: "skill-rules-written",
+      outFile: OUT_FILE,
+      skillCount: count,
+      bundledBodies: false,
+    }),
+  );
 }

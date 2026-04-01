@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { SkillInstallPlan } from "../hooks/src/orchestrator-install-plan.mts";
+import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 import {
   buildOrchestratorActionError,
   formatOrchestratorActionHumanOutput,
@@ -132,8 +133,9 @@ describe("buildOrchestratorActionError", () => {
   });
 
   test("classifies MISSING_INSTALL_PLAN errors correctly", () => {
+    const statePaths = resolveProjectStatePaths("/repo");
     const err = buildOrchestratorActionError({
-      error: new Error("Missing install plan at /repo/.skills/install-plan.json. Run SessionStart first."),
+      error: new Error(`Missing install plan at ${statePaths.installPlanPath}. Run SessionStart first.`),
       actionId: "install-missing",
       projectRoot: "/repo",
     });
@@ -294,7 +296,7 @@ describe("error classification completeness", () => {
   }> = [
     {
       label: "missing plan",
-      message: "Missing install plan at /repo/.skills/install-plan.json",
+      message: "Missing install plan at ~/.vercel-plugin/projects/abc123/.skills/install-plan.json",
       expectedCode: "MISSING_INSTALL_PLAN",
     },
     {
@@ -362,7 +364,7 @@ describe("runOrchestratorAction with real filesystem", () => {
         missingSkills: plan.missingSkills,
       }),
       installPlanPath: (projectRoot: string) =>
-        join(projectRoot, ".skills", "install-plan.json"),
+        resolveProjectStatePaths(projectRoot).installPlanPath,
       readPersistedSkillInstallPlan: () => plan,
       writePersistedSkillInstallPlan: () => {},
     }));

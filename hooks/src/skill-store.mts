@@ -2,16 +2,19 @@
  * Skill Store — cache-first skill resolution with layered roots.
  *
  * Resolution order (first match wins per slug):
- *   1. Project cache:  <projectRoot>/.skills/<slug>/SKILL.md
+ *   1. Project cache:  ~/.vercel-plugin/projects/<hash>/.skills/<slug>/SKILL.md
  *   2. Global cache:   ~/.vercel-plugin/skills/<slug>/SKILL.md
- *   3. Bundled fallback: <pluginRoot>/skills/<slug>/SKILL.md
+ *   3. Rules manifest: <pluginRoot>/generated/skill-rules.json (metadata only)
  *
- * Each root may also carry a manifest.json (v2 format with pre-compiled regexes)
+ * Each root may also carry a manifest.json (v2+ format with pre-compiled regexes)
  * for fast startup. When present, the manifest is preferred over live scanning.
  */
 
-import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import {
+  resolveProjectStatePaths,
+  resolveVercelPluginHome,
+} from "./project-state-paths.mjs";
 import {
   buildSkillMap,
   extractFrontmatter,
@@ -31,7 +34,7 @@ import { safeReadFile, safeReadJson } from "./hook-env.mjs";
 // Public types
 // ---------------------------------------------------------------------------
 
-export type SkillSource = "project-cache" | "global-cache" | "bundled";
+export type SkillSource = "project-cache" | "global-cache" | "rules-manifest";
 
 export interface SkillStoreLogger {
   debug?(event: string, data?: Record<string, unknown>): void;
@@ -54,7 +57,7 @@ export interface SkillStoreOptions {
   projectRoot: string;
   pluginRoot: string;
   globalCacheDir?: string;
-  /** Set to false to disable the bundled fallback root (default: true). */
+  /** @deprecated Use rulesManifest instead. Ignored when set. */
   bundledFallback?: boolean;
 }
 
@@ -75,6 +78,18 @@ export interface ResolvedSkillBody {
   body: string;
 }
 
+export interface ResolvedSkillPayload {
+  skill: string;
+  source: SkillSource;
+  root: SkillStoreRoot;
+  mode: "body" | "summary";
+  path: string | null;
+  raw: string | null;
+  body: string | null;
+  summary: string;
+  docs: string[];
+}
+
 export interface SkillStore {
   roots: SkillStoreRoot[];
   loadSkillSet(logger?: SkillStoreLogger): LoadedSkillSet | null;
@@ -83,6 +98,10 @@ export interface SkillStore {
     name: string,
     logger?: SkillStoreLogger,
   ): ResolvedSkillBody | null;
+  resolveSkillPayload(
+    name: string,
+    logger?: SkillStoreLogger,
+  ): ResolvedSkillPayload | null;
   listInstalledSkills(logger?: SkillStoreLogger): string[];
 }
 
@@ -128,19 +147,19 @@ function toStringArray(value: unknown): string[] {
 export function defaultSkillStoreRoots(
   options: SkillStoreOptions,
 ): SkillStoreRoot[] {
-  const projectCacheDir = resolve(options.projectRoot, ".skills");
+  const statePaths = resolveProjectStatePaths(options.projectRoot);
   const globalCacheDir = resolve(
     options.globalCacheDir ??
-      join(homedir(), ".vercel-plugin", "skills"),
+      join(resolveVercelPluginHome(), "skills"),
   );
   const pluginRoot = resolve(options.pluginRoot);
 
   const roots: SkillStoreRoot[] = [
     {
       source: "project-cache",
-      rootDir: projectCacheDir,
-      skillsDir: projectCacheDir,
-      manifestPath: join(projectCacheDir, "manifest.json"),
+      rootDir: statePaths.stateRoot,
+      skillsDir: statePaths.skillsDir,
+      manifestPath: statePaths.manifestPath,
     },
     {
       source: "global-cache",
@@ -148,16 +167,13 @@ export function defaultSkillStoreRoots(
       skillsDir: globalCacheDir,
       manifestPath: join(globalCacheDir, "manifest.json"),
     },
-  ];
-
-  if (options.bundledFallback !== false) {
-    roots.push({
-      source: "bundled",
+    {
+      source: "rules-manifest",
       rootDir: pluginRoot,
-      skillsDir: join(pluginRoot, "skills"),
-      manifestPath: join(pluginRoot, "generated", "skill-manifest.json"),
-    });
-  }
+      skillsDir: "",
+      manifestPath: join(pluginRoot, "generated", "skill-rules.json"),
+    },
+  ];
 
   return roots;
 }
@@ -350,6 +366,9 @@ function loadRootSkillSet(
     };
   }
 
+  // Rules-manifest root has no skillsDir — metadata only
+  if (!root.skillsDir) return null;
+
   // Fall back to live SKILL.md scan
   const built = buildSkillMap(root.skillsDir);
   if (built.diagnostics?.length) {
@@ -427,8 +446,20 @@ function loadRootSkillSet(
 // Public API
 // ---------------------------------------------------------------------------
 
-export function createSkillStore(options: SkillStoreOptions): SkillStore {
+export function createSkillStore(
+  options: SkillStoreOptions,
+  logger?: SkillStoreLogger,
+): SkillStore {
   const roots = defaultSkillStoreRoots(options);
+
+  logger?.debug?.("skill-store-roots-resolved", {
+    roots: roots.map((r) => ({
+      source: r.source,
+      rootDir: r.rootDir,
+      skillsDir: r.skillsDir,
+      manifestPath: r.manifestPath,
+    })),
+  });
 
   // Instance-level memoization — one scan per store lifetime.
   // Create a fresh store (not invalidate) after installing new skills.
@@ -451,7 +482,7 @@ export function createSkillStore(options: SkillStoreOptions): SkillStore {
       return null;
     }
 
-    // Merge with per-slug precedence: project > global > bundled
+    // Merge with per-slug precedence: project > global > rules-manifest
     const skillMap: Record<string, SkillConfig> = {};
     const compiledBySkill = new Map<string, CompiledSkillEntry>();
     const origins: Record<string, SkillStoreRoot> = {};
@@ -501,6 +532,7 @@ export function createSkillStore(options: SkillStoreOptions): SkillStore {
       _logger?: SkillStoreLogger,
     ): ResolvedSkillBody | null {
       for (const root of roots) {
+        if (!root.skillsDir) continue;
         const path = join(root.skillsDir, name, "SKILL.md");
         const raw = safeReadFile(path);
         if (raw === null) continue;
@@ -518,6 +550,63 @@ export function createSkillStore(options: SkillStoreOptions): SkillStore {
       return null;
     },
 
+    resolveSkillPayload(
+      name: string,
+      payloadLogger?: SkillStoreLogger,
+    ): ResolvedSkillPayload | null {
+      const loaded = loadCachedSkillSet(payloadLogger);
+      const config = loaded?.skillMap[name];
+      const root = loaded?.origins[name];
+      if (!config || !root) return null;
+
+      // Try reading a cached body from a root with a skillsDir
+      if (root.skillsDir) {
+        const path = join(root.skillsDir, name, "SKILL.md");
+        const raw = safeReadFile(path);
+        if (raw !== null) {
+          const { body } = extractFrontmatter(raw);
+          const trimmedBody = body.trimStart();
+          const mode = trimmedBody === "" ? "summary" : "body";
+          payloadLogger?.debug?.("skill-store-payload-resolved", {
+            skill: name,
+            source: root.source,
+            mode,
+            path,
+          });
+          return {
+            skill: name,
+            source: root.source,
+            root,
+            mode,
+            path,
+            raw,
+            body: trimmedBody === "" ? null : trimmedBody,
+            summary: config.summary ?? "",
+            docs: config.docs ?? [],
+          };
+        }
+      }
+
+      // Summary-only fallback from rules manifest metadata
+      payloadLogger?.debug?.("skill-store-payload-resolved", {
+        skill: name,
+        source: root.source,
+        mode: "summary",
+        path: null,
+      });
+      return {
+        skill: name,
+        source: root.source,
+        root,
+        mode: "summary",
+        path: null,
+        raw: null,
+        body: null,
+        summary: config.summary ?? "",
+        docs: config.docs ?? [],
+      };
+    },
+
     listInstalledSkills(logger?: SkillStoreLogger): string[] {
       if (cachedInstalled !== undefined) return [...cachedInstalled];
 
@@ -528,7 +617,7 @@ export function createSkillStore(options: SkillStoreOptions): SkillStore {
       }
 
       cachedInstalled = Object.entries(loaded.origins)
-        .filter(([, root]) => root.source !== "bundled")
+        .filter(([, root]) => root.source !== "rules-manifest")
         .map(([skill]) => skill)
         .sort();
       return [...cachedInstalled];

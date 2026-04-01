@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-01T22:45:39.530Z",
-  "version": 2,
+  "generatedAt": "2026-04-01T23:29:21.052Z",
+  "version": 3,
   "skills": {
     "vercel-agent": {
       "priority": 4,
@@ -22,7 +22,6 @@
         "\\bvercel\\s+agent\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/vercel-agent/SKILL.md",
       "pathRegexSources": [
         "^\\.github\\/workflows\\/vercel[^/]*\\.yml$",
         "^\\.github\\/workflows\\/vercel[^/]*\\.yaml$",
@@ -103,7 +102,6 @@
         "\\bnpx\\s+@vercel/config\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/routing-middleware/SKILL.md",
       "pathRegexSources": [
         "^middleware\\.ts$",
         "^middleware\\.js$",
@@ -207,7 +205,6 @@
         "\\bvercel\\s+dev\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/agent-browser-verify/SKILL.md",
       "pathRegexSources": [],
       "bashRegexSources": [
         "\\bnext\\s+dev\\b",
@@ -367,7 +364,6 @@
       "importPatterns": [
         "@module-federation/nextjs-mf"
       ],
-      "bodyPath": "skills/micro/SKILL.md",
       "pathRegexSources": [
         "^(?:[^/]+\\/)*micro-frontend\\/.*$",
         "^(?:[^/]+\\/)*module-federation\\/.*$"
@@ -415,7 +411,6 @@
         "\\bcypress\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/agent-browser/SKILL.md",
       "pathRegexSources": [
         "^agent-browser\\.json$",
         "^playwright\\.config\\.[^/]*$",
@@ -498,7 +493,6 @@
       ],
       "bashPatterns": [],
       "importPatterns": [],
-      "bodyPath": "skills/json-render/SKILL.md",
       "pathRegexSources": [
         "^components\\/chat\\/.*$",
         "^components\\/chat-[^/]*\\.tsx$",
@@ -571,7 +565,6 @@
         "\\bvercel\\s+deploy\\s+--prebuilt\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/deployments-cicd/SKILL.md",
       "pathRegexSources": [
         "^\\.github\\/workflows\\/[^/]*\\.yml$",
         "^\\.github\\/workflows\\/[^/]*\\.yaml$",
@@ -716,7 +709,6 @@
         "@supabase/supabase-js",
         "@prisma/client"
       ],
-      "bodyPath": "skills/vercel-storage/SKILL.md",
       "pathRegexSources": [
         "^lib\\/blob\\/.*$",
         "^lib\\/storage\\/.*$",
@@ -950,7 +942,6 @@
         "\\bcurl\\s+-[vI]"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/investigation-mode/SKILL.md",
       "pathRegexSources": [
         "^(?:[^/]+\\/)*middleware\\.(?:ts|js|mjs)$",
         "^(?:[^/]+\\/)*lib\\/logger\\.(?:ts|js)$",
@@ -1316,7 +1307,6 @@
         "@auth/core",
         "better-auth"
       ],
-      "bodyPath": "skills/bootstrap/SKILL.md",
       "pathRegexSources": [
         "^\\.env\\.example$",
         "^\\.env\\.sample$",
@@ -1422,7 +1412,6 @@
       ],
       "bashPatterns": [],
       "importPatterns": [],
-      "bodyPath": "skills/knowledge-update/SKILL.md",
       "pathRegexSources": [
         "^vercel\\.ts$"
       ],
@@ -1465,7 +1454,6 @@
         "\\bnpx\\s+@vercel/config\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/vercel-cli/SKILL.md",
       "pathRegexSources": [
         "^vercel\\.json$",
         "^vercel\\.ts$",
@@ -1604,7 +1592,6 @@
         "\\byarn\\s+add\\s+[^\\n]*@vercel/functions\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/runtime-cache/SKILL.md",
       "pathRegexSources": [
         "^lib\\/cache\\/.*$",
         "^src\\/lib\\/cache\\/.*$",
@@ -1683,7 +1670,6 @@
         "ai",
         "@ai-sdk/gateway"
       ],
-      "bodyPath": "skills/ai-gateway/SKILL.md",
       "pathRegexSources": [],
       "bashRegexSources": [
         "\\bvercel\\s+env\\s+pull\\b",
@@ -1839,7 +1825,6 @@
         "\\byarn\\s+add\\s+[^\\n]*@auth0/nextjs-auth0\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/auth/SKILL.md",
       "pathRegexSources": [
         "^middleware\\.ts$",
         "^middleware\\.js$",
@@ -1981,7 +1966,6 @@
         "workflow",
         "@vercel/workflow"
       ],
-      "bodyPath": "skills/vercel-queues/SKILL.md",
       "pathRegexSources": [
         "^lib\\/queues\\/.*$",
         "^src\\/lib\\/queues\\/.*$",
@@ -2072,7 +2056,6 @@
         "\\bnext\\s+dev\\s+--turbopack\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/turbopack/SKILL.md",
       "pathRegexSources": [
         "^next\\.config\\.[^/]*$"
       ],
@@ -2131,7 +2114,6 @@
         "\\bvercel\\s+integration\\s+discover\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/marketplace/SKILL.md",
       "pathRegexSources": [
         "^integration\\.json$"
       ],
@@ -2219,7 +2201,6 @@
         "@vercel/flags/sveltekit",
         "@flags-sdk/*"
       ],
-      "bodyPath": "skills/vercel-flags/SKILL.md",
       "pathRegexSources": [
         "^flags\\.ts$",
         "^flags\\.js$",
@@ -2337,7 +2318,6 @@
         "\\bnpm\\s+create\\s+next-app\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/shadcn/SKILL.md",
       "pathRegexSources": [
         "^components\\.json$",
         "^components\\/ui\\/.*$",
@@ -2413,7 +2393,6 @@
       ],
       "bashPatterns": [],
       "importPatterns": [],
-      "bodyPath": "skills/cron-jobs/SKILL.md",
       "pathRegexSources": [
         "^vercel\\.json$",
         "^apps\\/[^/]*\\/vercel\\.json$"
@@ -2491,7 +2470,6 @@
       "importPatterns": [
         "fastapi"
       ],
-      "bodyPath": "skills/vercel-services/SKILL.md",
       "pathRegexSources": [
         "^backend\\/.*$",
         "^backend\\/main\\.py$",
@@ -2676,7 +2654,6 @@
         "\\byarn\\s+add\\s+[^\\n]*\\bnewrelic\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/observability/SKILL.md",
       "pathRegexSources": [
         "^instrumentation\\.ts$",
         "^instrumentation\\.js$",
@@ -2892,7 +2869,6 @@
         "\\bastro\\s+dev\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/verification/SKILL.md",
       "pathRegexSources": [],
       "bashRegexSources": [
         "\\bnext\\s+dev\\b",
@@ -3071,7 +3047,6 @@
         "@workflow/*",
         "*workflow*"
       ],
-      "bodyPath": "skills/workflow/SKILL.md",
       "pathRegexSources": [
         "^lib\\/workflow\\/.*$",
         "^src\\/lib\\/workflow\\/.*$",
@@ -3872,7 +3847,6 @@
         "react",
         "react-dom"
       ],
-      "bodyPath": "skills/react-best-practices/SKILL.md",
       "pathRegexSources": [
         "^src\\/components\\/(?:[^/]+\\/)*[^/]*\\.tsx$",
         "^src\\/components\\/(?:[^/]+\\/)*[^/]*\\.jsx$",
@@ -3970,7 +3944,6 @@
         "\\bbun\\s+run\\s+(dev|build)\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/nextjs/SKILL.md",
       "pathRegexSources": [
         "^next\\.config\\.[^/]*$",
         "^next-env\\.d\\.ts$",
@@ -4357,7 +4330,6 @@
         "@ai-sdk/react",
         "@/components/ai-elements/*"
       ],
-      "bodyPath": "skills/ai-elements/SKILL.md",
       "pathRegexSources": [
         "^components\\/ai-elements\\/.*$",
         "^src\\/components\\/ai-elements\\/.*$",
@@ -4573,7 +4545,6 @@
       "importPatterns": [
         "@vercel/sandbox"
       ],
-      "bodyPath": "skills/vercel-sandbox/SKILL.md",
       "pathRegexSources": [],
       "bashRegexSources": [
         "\\bnpm\\s+(install|i|add)\\s+[^\\n]*@vercel/sandbox\\b",
@@ -4773,7 +4744,6 @@
         "\\byarn\\s+add\\s+[^\\n]*\\bnext@"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/next-upgrade/SKILL.md",
       "pathRegexSources": [
         "^next\\.config\\.[^/]*$",
         "^package\\.json$"
@@ -4919,7 +4889,6 @@
         "chat",
         "@chat-adapter/*"
       ],
-      "bodyPath": "skills/chat-sdk/SKILL.md",
       "pathRegexSources": [
         "^app\\/api\\/chat\\/.*$",
         "^app\\/api\\/chat-bot\\/.*$",
@@ -5096,7 +5065,6 @@
         "\\bbunx\\s+turbo\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/turborepo/SKILL.md",
       "pathRegexSources": [
         "^turbo\\.json$",
         "^turbo\\/.*$"
@@ -5208,7 +5176,6 @@
         "ai",
         "@ai-sdk/*"
       ],
-      "bodyPath": "skills/ai-sdk/SKILL.md",
       "pathRegexSources": [
         "^app\\/api\\/chat\\/.*$",
         "^app\\/api\\/completion\\/.*$",
@@ -5685,7 +5652,6 @@
       "importPatterns": [
         "next/cache"
       ],
-      "bodyPath": "skills/next-cache-components/SKILL.md",
       "pathRegexSources": [
         "^next\\.config\\.[^/]*$",
         "^app\\/.*$",
@@ -5786,7 +5752,6 @@
         "@v0/sdk",
         "v0"
       ],
-      "bodyPath": "skills/v0-dev/SKILL.md",
       "pathRegexSources": [],
       "bashRegexSources": [
         "\\bnpx\\s+v0\\b",
@@ -5865,7 +5830,6 @@
         "\\\\bvercel\\\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/zzz-test-empty-fp/SKILL.md",
       "pathRegexSources": [],
       "bashRegexSources": [
         "\\\\bvercel\\\\b"
@@ -5898,7 +5862,6 @@
         "\\bvercel\\s+env\\s+ls\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/env-vars/SKILL.md",
       "pathRegexSources": [
         "^\\.env$",
         "^\\.env\\.[^/]*$",
@@ -5967,7 +5930,6 @@
         "\\bmcp\\.vercel\\.com\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/vercel-api/SKILL.md",
       "pathRegexSources": [
         "^\\.mcp\\.json$",
         "^\\.vercel\\/project\\.json$"
@@ -6032,7 +5994,6 @@
       ],
       "bashPatterns": [],
       "importPatterns": [],
-      "bodyPath": "skills/sign-in-with-vercel/SKILL.md",
       "pathRegexSources": [
         "^app\\/api\\/auth\\/.*$",
         "^app\\/login\\/.*$",
@@ -6151,7 +6112,6 @@
         "@t3-oss/env-nextjs",
         "@rescale/nemo"
       ],
-      "bodyPath": "skills/next-forge/SKILL.md",
       "pathRegexSources": [
         "^pnpm-workspace\\.yaml$",
         "^apps\\/app\\/.*$",
@@ -6397,7 +6357,6 @@
         "\\bvercel\\s+logs\\b"
       ],
       "importPatterns": [],
-      "bodyPath": "skills/vercel-functions/SKILL.md",
       "pathRegexSources": [
         "^api\\/(?:[^/]+\\/)*[^/]*\\.[^/]*$",
         "^pages\\/api\\/.*$",

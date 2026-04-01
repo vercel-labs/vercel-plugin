@@ -14,18 +14,19 @@ function countSkillDirs(): number {
 }
 
 describe("build-manifest", () => {
-  test("emits skill entries with bodyPath pointing to SKILL.md", () => {
+  test("emits v3 rules manifest without bodyPath", () => {
     const { manifest, errors } = buildManifest(SKILLS_DIR);
 
     expect(errors).toEqual([]);
+    expect(manifest.version).toBe(3);
     expect(Object.keys(manifest.skills).length).toBe(countSkillDirs());
 
     for (const config of Object.values(manifest.skills) as Record<
       string,
       unknown
     >[]) {
-      expect("bodyPath" in config).toBe(true);
-      expect(typeof config.bodyPath).toBe("string");
+      expect("bodyPath" in config).toBe(false);
+      expect(typeof config.summary).toBe("string");
     }
   });
 

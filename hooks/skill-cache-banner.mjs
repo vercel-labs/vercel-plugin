@@ -1,5 +1,4 @@
 // hooks/src/skill-cache-banner.mts
-import { join } from "path";
 import { logCaughtError } from "./logger.mjs";
 import { buildSkillsAddCommand } from "./skills-cli-command.mjs";
 import {
@@ -8,6 +7,7 @@ import {
 import {
   readProjectSkillState
 } from "./project-skill-manifest.mjs";
+import { resolveProjectStatePaths } from "./project-state-paths.mjs";
 function uniqueSorted(values) {
   return [
     ...new Set(
@@ -93,7 +93,7 @@ function buildResolvedSkillCacheBanner(args) {
     installResult?.installed.length ? `- Installed now: ${installResult.installed.join(", ")}` : null,
     installResult?.reused.length ? `- Already cached: ${installResult.reused.join(", ")}` : null,
     status.missingSkills.length > 0 ? `- Missing: ${status.missingSkills.join(", ")}` : null,
-    status.missingSkills.length > 0 || outcome === "installed" || outcome === "partial" || outcome === "failed" ? `- Project cache: ${join(projectRoot, ".skills")}` : null,
+    status.missingSkills.length > 0 || outcome === "installed" || outcome === "partial" || outcome === "failed" ? `- Project cache: ${resolveProjectStatePaths(projectRoot).skillsDir}` : null,
     installQuestion ? `- Ask once: "${installQuestion}"` : null,
     installCommand ? `- Install: \`${installCommand}\`` : null
   ].filter(Boolean).join("\n");

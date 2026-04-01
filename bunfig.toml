@@ -1,0 +1,3 @@
+[test]
+root = "./"
+pathIgnorePatterns = ["smoke-tests/**"]

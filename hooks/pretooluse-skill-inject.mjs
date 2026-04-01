@@ -492,6 +492,13 @@ function deduplicateSkills({ matchedEntries, matched, toolName, toolInput, injec
 function skillInvocationMessage(skill, platform) {
   return platform === "cursor" ? `Load the /${skill} skill.` : `You must run the Skill(${skill}) tool.`;
 }
+function summaryFallbackText(payload, platform) {
+  return [
+    skillInvocationMessage(payload.skill, platform),
+    payload.summary.trim() !== "" ? `Summary: ${payload.summary.trim()}` : null,
+    payload.docs.length > 0 ? `Docs: ${payload.docs.join(", ")}` : null
+  ].filter((line) => Boolean(line)).join("\n");
+}
 function injectSkills(rankedSkills, options) {
   const { pluginRoot, projectRoot, skillStore: optStore, hasEnvDedup, sessionId, scopeId, injectedSkills, budgetBytes, maxSkills, skillMap, logger, forceSummarySkills, platform: optPlatform } = options || {};
   const platform = optPlatform ?? "claude-code";
@@ -530,34 +537,36 @@ function injectSkills(rankedSkills, options) {
       logDecision(l, { hook: "PreToolUse", event: "skill_dropped", skill, reason: "cap_exceeded", score: ceiling });
       continue;
     }
-    const resolved = store.resolveSkillBody(skill, l);
-    if (!resolved) {
-      l.issue("SKILL_FILE_MISSING", `SKILL.md not found for skill "${skill}" in any skill root`, `Install or restore skill "${skill}" before injection`, { skill });
+    const payload = store.resolveSkillPayload(skill, l);
+    if (!payload) {
+      l.issue("SKILL_PAYLOAD_MISSING", `No cached body or shipped rules metadata found for skill "${skill}"`, `Install "${skill}" into ~/.vercel-plugin before retrying`, { skill });
       continue;
     }
-    const wrapped = skillInvocationMessage(skill, platform);
+    const wrapped = payload.mode === "summary" ? summaryFallbackText(payload, platform) : skillInvocationMessage(skill, platform);
     const byteLen = Buffer.byteLength(wrapped, "utf-8");
     if (loaded.length > 0 && usedBytes + byteLen > budget) {
-      const summaryWrapped = skillInvocationMessage(skill, platform);
-      const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
-      if (usedBytes + summaryByteLen <= budget) {
-        if (!canInjectSkill(skill)) {
+      if (payload.mode === "body") {
+        const summaryWrapped = summaryFallbackText(payload, platform);
+        const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
+        if (usedBytes + summaryByteLen <= budget) {
+          if (!canInjectSkill(skill)) {
+            continue;
+          }
+          parts.push(summaryWrapped);
+          loaded.push(skill);
+          summaryOnly.push(skill);
+          usedBytes += summaryByteLen;
+          if (injectedSkills) injectedSkills.add(skill);
+          l.debug("summary-fallback", { skill, fullBytes: byteLen, summaryBytes: summaryByteLen });
           continue;
         }
-        parts.push(summaryWrapped);
-        loaded.push(skill);
-        summaryOnly.push(skill);
-        usedBytes += summaryByteLen;
-        if (injectedSkills) injectedSkills.add(skill);
-        l.debug("summary-fallback", { skill, fullBytes: byteLen, summaryBytes: summaryByteLen });
-        continue;
       }
       droppedByBudget.push(skill);
       logDecision(l, { hook: "PreToolUse", event: "budget_exhausted", skill, reason: "over_budget", budgetBytes: budget, usedBytes, skillBytes: byteLen });
       continue;
     }
     if (forceSummarySkills?.has(skill)) {
-      const summaryWrapped = skillInvocationMessage(skill, platform);
+      const summaryWrapped = summaryFallbackText(payload, platform);
       const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
       if (usedBytes + summaryByteLen <= budget || loaded.length === 0) {
         if (!canInjectSkill(skill)) {
@@ -579,6 +588,10 @@ function injectSkills(rankedSkills, options) {
     loaded.push(skill);
     usedBytes += byteLen;
     if (injectedSkills) injectedSkills.add(skill);
+    if (payload.mode === "summary") {
+      summaryOnly.push(skill);
+      l.debug("skill-summary-fallback", { skill, source: payload.source });
+    }
   }
   if (droppedByCap.length > 0 || droppedByBudget.length > 0 || summaryOnly.length > 0 || skippedByConcurrentClaim.length > 0) {
     l.debug("cap-applied", {

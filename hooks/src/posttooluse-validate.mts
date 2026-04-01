@@ -574,9 +574,9 @@ export function runChainInjection(
       continue;
     }
 
-    // Read target SKILL.md via skill store (cache-first resolution)
-    const resolved = store.resolveSkillBody(rule.targetSkill, l);
-    if (!resolved) {
+    // Resolve target skill via skill store (cache-first, summary fallback)
+    const payload = store.resolveSkillPayload(rule.targetSkill, l);
+    if (!payload) {
       l.debug("posttooluse-chain-skip-missing", {
         sourceSkill,
         targetSkill: rule.targetSkill,
@@ -589,11 +589,32 @@ export function runChainInjection(
       continue;
     }
 
-    const trimmedBody = resolved.body.trim();
-    if (!trimmedBody) continue;
+    const content =
+      payload.mode === "body" && payload.body
+        ? payload.body.trim()
+        : [
+            payload.summary.trim() !== ""
+              ? `Summary: ${payload.summary.trim()}`
+              : null,
+            payload.docs.length > 0
+              ? `Docs: ${payload.docs.join(", ")}`
+              : null,
+          ]
+            .filter((line): line is string => Boolean(line))
+            .join("\n")
+            .trim();
+    if (content === "") continue;
+
+    if (payload.mode === "summary") {
+      l.debug("posttooluse-chain-summary-fallback", {
+        sourceSkill,
+        targetSkill: rule.targetSkill,
+        source: payload.source,
+      });
+    }
 
     // Check budget
-    const bytes = Buffer.byteLength(trimmedBody, "utf-8");
+    const bytes = Buffer.byteLength(content, "utf-8");
     if (result.totalBytes + bytes > CHAIN_BUDGET_BYTES) {
       l.debug("posttooluse-chain-budget-exceeded", {
         sourceSkill,
@@ -625,16 +646,22 @@ export function runChainInjection(
       sourceSkill,
       targetSkill: rule.targetSkill,
       message: rule.message,
-      content: trimmedBody,
+      content,
     });
     result.totalBytes += bytes;
 
-    l.debug("posttooluse-chain-injected", {
-      sourceSkill,
-      targetSkill: rule.targetSkill,
-      bytes,
-      totalBytes: result.totalBytes,
-    });
+    l.debug(
+      payload.mode === "body"
+        ? "posttooluse-chain-injected"
+        : "posttooluse-chain-summary-fallback",
+      {
+        sourceSkill,
+        targetSkill: rule.targetSkill,
+        source: payload.source,
+        bytes,
+        totalBytes: result.totalBytes,
+      },
+    );
   }
 
   if (result.injected.length > 0) {

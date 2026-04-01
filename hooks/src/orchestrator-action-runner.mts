@@ -1,8 +1,9 @@
 /**
  * Orchestrator Action Runner — explicit-only execution layer.
  *
- * Reads the persisted `.skills/install-plan.json`, delegates to the
- * existing registry-client (npx skills) and vercel-cli-delegator
+ * Reads the persisted install-plan.json from the hashed home-state root
+ * (~/.vercel-plugin/projects/<hash>/.skills/install-plan.json), delegates
+ * to the existing registry-client (npx skills) and vercel-cli-delegator
  * adapters, then refreshes the plan from on-disk state.
  *
  * Not auto-invoked from any hook path — called explicitly via CLI
@@ -124,7 +125,7 @@ export function buildOrchestratorActionError(args: {
     message,
     hint:
       code === "MISSING_INSTALL_PLAN"
-        ? "Run SessionStart first so .skills/install-plan.json exists before calling the wrapper."
+        ? "Run SessionStart first so the install plan exists before calling the wrapper."
         : code === "INVALID_ACTION"
           ? `Use one of: ${ORCHESTRATOR_ACTION_IDS.join(", ")}`
           : code === "ACTION_BLOCKED"

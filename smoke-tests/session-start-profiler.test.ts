@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { readSessionFile, profileCachePath } from "../hooks/src/hook-env.mts";
+import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const PROFILER = join(ROOT, "hooks", "session-start-profiler.mjs");
@@ -81,9 +82,11 @@ function makeMockCommand(binDir: string, commandName: string, body: string): voi
 
 let tempDir: string;
 let envFile: string;
+let testHomeDir: string;
 
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "profiler-"));
+  testHomeDir = mkdtempSync(join(tmpdir(), "vercel-plugin-home-"));
   envFile = join(tempDir, "claude.env");
   writeFileSync(envFile, "", "utf-8");
   testSessionId = `session-start-profiler-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -91,6 +94,7 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
+  rmSync(testHomeDir, { recursive: true, force: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -114,6 +118,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -139,6 +144,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -159,6 +165,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -174,6 +181,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -197,6 +205,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -222,6 +231,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -247,6 +257,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -270,6 +281,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -286,6 +298,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -301,6 +314,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -670,6 +684,7 @@ describe("session-start-profiler", () => {
       CLAUDE_PROJECT_ROOT: join(tempDir, "missing-project-root"),
       PATH: binDir,
       VERCEL_PLUGIN_LOG_LEVEL: "debug",
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -681,11 +696,12 @@ describe("session-start-profiler", () => {
     expect(result.stderr).toContain("session-start-profiler:append-env-export-failed");
     expect(result.stderr).toContain("hook-env:safe-read-file-failed");
   });
-  test("exports installed skills from project .skills cache", async () => {
+  test("exports installed skills from hashed project cache", async () => {
     const projectDir = join(tempDir, "installed-skills-project");
-    mkdirSync(join(projectDir, ".skills", "nextjs"), { recursive: true });
+    const statePaths = resolveProjectStatePaths(projectDir, testHomeDir);
+    mkdirSync(join(statePaths.skillsDir, "nextjs"), { recursive: true });
     writeFileSync(
-      join(projectDir, ".skills", "nextjs", "SKILL.md"),
+      join(statePaths.skillsDir, "nextjs", "SKILL.md"),
       `---
 name: nextjs
 description: Next.js
@@ -703,6 +719,7 @@ metadata:
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -721,6 +738,7 @@ metadata:
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -743,7 +761,7 @@ metadata:
 
     expect(result.code).toBe(0);
 
-    const planPath = join(projectDir, ".skills", "install-plan.json");
+    const planPath = resolveProjectStatePaths(projectDir, testHomeDir).installPlanPath;
     expect(existsSync(planPath)).toBe(true);
     const plan = JSON.parse(readFileSync(planPath, "utf-8"));
     expect(plan.vercelLinked).toBe(false);
@@ -761,11 +779,12 @@ metadata:
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
 
-    const planPath = join(projectDir, ".skills", "install-plan.json");
+    const planPath = resolveProjectStatePaths(projectDir, testHomeDir).installPlanPath;
     expect(existsSync(planPath)).toBe(true);
     const plan = JSON.parse(readFileSync(planPath, "utf-8"));
     expect(plan.vercelLinked).toBe(true);
@@ -782,11 +801,12 @@ metadata:
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
 
-    const planPath = join(projectDir, ".skills", "install-plan.json");
+    const planPath = resolveProjectStatePaths(projectDir, testHomeDir).installPlanPath;
     const plan = JSON.parse(readFileSync(planPath, "utf-8"));
     expect(plan.hasEnvLocal).toBe(false);
     const envPullAction = plan.actions.find((a: { id: string }) => a.id === "vercel-env-pull");
@@ -804,11 +824,12 @@ metadata:
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
 
-    const planPath = join(projectDir, ".skills", "install-plan.json");
+    const planPath = resolveProjectStatePaths(projectDir, testHomeDir).installPlanPath;
     const plan = JSON.parse(readFileSync(planPath, "utf-8"));
     expect(plan.hasEnvLocal).toBe(true);
     const envPullAction = plan.actions.find((a: { id: string }) => a.id === "vercel-env-pull");

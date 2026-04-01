@@ -6,6 +6,7 @@ import {
   type SkillDetection,
   type SkillInstallPlan,
 } from "../hooks/src/orchestrator-install-plan.mts";
+import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 
 const FIXED_NOW = () => new Date("2026-03-31T12:00:00.000Z");
 
@@ -144,7 +145,7 @@ describe("buildSkillInstallPlan", () => {
     expect(offlineAction).toBeUndefined();
   });
 
-  test("actions include explain with cat command", () => {
+  test("actions include explain with cat command pointing to state root", () => {
     const plan = buildSkillInstallPlan({
       projectRoot: "/repo",
       detections: [makeDetection("nextjs")],
@@ -154,9 +155,10 @@ describe("buildSkillInstallPlan", () => {
       now: FIXED_NOW,
     });
 
+    const statePaths = resolveProjectStatePaths("/repo");
     const action = plan.actions.find((a) => a.id === "explain");
     expect(action).toBeDefined();
-    expect(action!.command).toBe("cat .skills/install-plan.json");
+    expect(action!.command).toBe(`cat "${statePaths.installPlanPath}"`);
   });
 
   test("schemaVersion is 1", () => {
@@ -170,6 +172,22 @@ describe("buildSkillInstallPlan", () => {
     });
 
     expect(plan.schemaVersion).toBe(1);
+  });
+
+  test("plan includes hashed state path fields", () => {
+    const plan = buildSkillInstallPlan({
+      projectRoot: "/repo",
+      detections: [makeDetection("nextjs")],
+      installedSkills: ["nextjs"],
+      bundledFallbackEnabled: true,
+      zeroBundleReady: true,
+      now: FIXED_NOW,
+    });
+
+    const statePaths = resolveProjectStatePaths("/repo");
+    expect(plan.projectStateRoot).toBe(statePaths.stateRoot);
+    expect(plan.skillsCacheDir).toBe(statePaths.skillsDir);
+    expect(plan.installPlanPath).toBe(statePaths.installPlanPath);
   });
 
   test("vercel-link action appears when project is not linked", () => {
@@ -347,7 +365,7 @@ describe("serializeSkillInstallPlan", () => {
 // ---------------------------------------------------------------------------
 
 describe("formatSkillInstallPalette", () => {
-  test("shows zero-bundle readiness and cache manifest", () => {
+  test("shows zero-bundle readiness and state paths", () => {
     const plan = buildSkillInstallPlan({
       projectRoot: "/repo",
       detections: [makeDetection("nextjs")],
@@ -361,7 +379,9 @@ describe("formatSkillInstallPalette", () => {
     const palette = formatSkillInstallPalette(plan);
     expect(palette).not.toBeNull();
     expect(palette).toContain("Zero-bundle ready: yes");
-    expect(palette).toContain("Cache manifest: /repo/.skills/manifest.json");
+    expect(palette).toContain(`State root: ${plan.projectStateRoot}`);
+    expect(palette).toContain(`Skill cache: ${plan.skillsCacheDir}`);
+    expect(palette).toContain(`Install plan: ${plan.installPlanPath}`);
   });
 
   test("shows zero-bundle not ready", () => {
@@ -376,7 +396,7 @@ describe("formatSkillInstallPalette", () => {
 
     const palette = formatSkillInstallPalette(plan);
     expect(palette).toContain("Zero-bundle ready: no");
-    expect(palette).toContain("Cache manifest: none");
+    expect(palette).toContain(`State root: ${plan.projectStateRoot}`);
   });
 
   test("shows cache-only command when zeroBundleReady", () => {
@@ -435,7 +455,7 @@ describe("formatSkillInstallPalette", () => {
     expect(palette).not.toContain("[1] Install now");
   });
 
-  test("always shows explain line", () => {
+  test("always shows explain line with state root path", () => {
     const plan = buildSkillInstallPlan({
       projectRoot: "/repo",
       detections: [makeDetection("nextjs")],
@@ -446,7 +466,7 @@ describe("formatSkillInstallPalette", () => {
     });
 
     const palette = formatSkillInstallPalette(plan)!;
-    expect(palette).toContain("[3] Explain: cat .skills/install-plan.json");
+    expect(palette).toContain(`[3] Explain: cat "${plan.installPlanPath}"`);
   });
 
   test("returns null for empty detections", () => {

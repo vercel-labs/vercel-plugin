@@ -153,3 +153,4 @@ evals
 .claude/scheduled_tasks.lock
 .reports
 .vercel
+.skills/

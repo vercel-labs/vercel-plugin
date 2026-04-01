@@ -17,8 +17,8 @@ function createFixture(hooksJson: unknown): string {
   // Copy generated manifest
   mkdirSync(join(dir, "generated"), { recursive: true });
   cpSync(
-    join(ROOT, "generated", "skill-manifest.json"),
-    join(dir, "generated", "skill-manifest.json")
+    join(ROOT, "generated", "skill-rules.json"),
+    join(dir, "generated", "skill-rules.json")
   );
   // Write custom hooks.json
   mkdirSync(join(dir, "hooks"), { recursive: true });
@@ -216,8 +216,8 @@ describe("doctor: subagent hooks", () => {
     cpSync(join(ROOT, "skills"), join(dir, "skills"), { recursive: true });
     mkdirSync(join(dir, "generated"), { recursive: true });
     cpSync(
-      join(ROOT, "generated", "skill-manifest.json"),
-      join(dir, "generated", "skill-manifest.json")
+      join(ROOT, "generated", "skill-rules.json"),
+      join(dir, "generated", "skill-rules.json")
     );
     try {
       const result = doctor(dir);

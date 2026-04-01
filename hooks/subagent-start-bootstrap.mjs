@@ -190,8 +190,8 @@ function buildStandardContext(agentType, likelySkills, budgetBytes, sessionId) {
     bundledFallback: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
   });
   for (const skill of likelySkills) {
-    const resolved = store.resolveSkillBody(skill);
-    if (resolved) {
+    const resolved = store.resolveSkillPayload(skill);
+    if (resolved?.mode === "body" && resolved.body) {
       const content = resolved.body;
       const wrapped = `<!-- skill:${skill} -->
 ${content}

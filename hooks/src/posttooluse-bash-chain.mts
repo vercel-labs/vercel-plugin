@@ -619,9 +619,9 @@ export async function runBashChainInjection(
       continue;
     }
 
-    // Read target SKILL.md via skill store (cache-first resolution)
-    const resolved = store.resolveSkillBody(skill, l);
-    if (!resolved) {
+    // Resolve target skill via skill store (cache-first, summary fallback)
+    const payload = store.resolveSkillPayload(skill, l);
+    if (!payload) {
       result.missing.push(skill);
       if (!missingCandidates.has(skill)) {
         missingCandidates.set(skill, { packageName: pkg, skill, message });
@@ -630,15 +630,24 @@ export async function runBashChainInjection(
       continue;
     }
 
-    const trimmedBody = resolved.body.trim();
-    if (!trimmedBody) continue;
+    const resolvedContent =
+      payload.mode === "body" && payload.body
+        ? payload.body.trim()
+        : [
+            payload.summary.trim() !== "" ? `Summary: ${payload.summary.trim()}` : null,
+            payload.docs.length > 0 ? `Docs: ${payload.docs.join(", ")}` : null,
+          ]
+            .filter((line): line is string => Boolean(line))
+            .join("\n")
+            .trim();
+    if (resolvedContent === "") continue;
 
     const injectResult = tryInjectResolvedBashSkill({
       packageName: pkg,
       skill,
       message,
-      resolvedBody: trimmedBody,
-      source: resolved.source as BashChainSkillSource,
+      resolvedBody: resolvedContent,
+      source: payload.source as BashChainSkillSource,
       sessionId,
       seenSet,
       result,
@@ -710,19 +719,28 @@ export async function runBashChainInjection(
       const stillMissing: string[] = [];
       for (const skill of uniqueMissing) {
         const candidate = missingCandidates.get(skill);
-        const resolved = refreshedStore.resolveSkillBody(skill, l);
-        if (!resolved || !candidate) {
+        const refreshedPayload = refreshedStore.resolveSkillPayload(skill, l);
+        if (!refreshedPayload || !candidate) {
           stillMissing.push(skill);
           continue;
         }
-        const trimmedBody = resolved.body.trim();
-        if (!trimmedBody) {
+        const resolvedBody =
+          refreshedPayload.mode === "body" && refreshedPayload.body
+            ? refreshedPayload.body.trim()
+            : [
+                refreshedPayload.summary.trim() !== "" ? `Summary: ${refreshedPayload.summary.trim()}` : null,
+                refreshedPayload.docs.length > 0 ? `Docs: ${refreshedPayload.docs.join(", ")}` : null,
+              ]
+                .filter((line): line is string => Boolean(line))
+                .join("\n")
+                .trim();
+        if (resolvedBody === "") {
           stillMissing.push(skill);
           continue;
         }
         resolvedAfterInstall.set(skill, {
-          body: trimmedBody,
-          source: resolved.source as BashChainSkillSource,
+          body: resolvedBody,
+          source: refreshedPayload.source as BashChainSkillSource,
         });
       }
 

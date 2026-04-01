@@ -56,7 +56,7 @@ import {
 } from "./patterns.mjs";
 import type { CompiledSkillEntry, CompiledPattern, CompileCallbacks, ManifestSkill } from "./patterns.mjs";
 import { createSkillStore } from "./skill-store.mjs";
-import type { SkillStore } from "./skill-store.mjs";
+import type { ResolvedSkillPayload, SkillStore } from "./skill-store.mjs";
 import { resolveVercelJsonSkills, isVercelJsonPath, VERCEL_JSON_SKILLS } from "./vercel-config.mjs";
 import type { VercelJsonRouting } from "./vercel-config.mjs";
 import { createLogger, logDecision } from "./logger.mjs";
@@ -889,6 +889,19 @@ function skillInvocationMessage(skill: string, platform: HookPlatform): string {
     : `You must run the Skill(${skill}) tool.`;
 }
 
+function summaryFallbackText(
+  payload: ResolvedSkillPayload,
+  platform: HookPlatform,
+): string {
+  return [
+    skillInvocationMessage(payload.skill, platform),
+    payload.summary.trim() !== "" ? `Summary: ${payload.summary.trim()}` : null,
+    payload.docs.length > 0 ? `Docs: ${payload.docs.join(", ")}` : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
 export function injectSkills(rankedSkills: string[], options?: InjectOptions): InjectResult {
   const { pluginRoot, projectRoot, skillStore: optStore, hasEnvDedup, sessionId, scopeId, injectedSkills, budgetBytes, maxSkills, skillMap, logger, forceSummarySkills, platform: optPlatform } = options || {};
   const platform: HookPlatform = optPlatform ?? "claude-code";
@@ -933,32 +946,36 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
       continue;
     }
 
-    const resolved = store.resolveSkillBody(skill, l);
-    if (!resolved) {
-      l.issue("SKILL_FILE_MISSING", `SKILL.md not found for skill "${skill}" in any skill root`, `Install or restore skill "${skill}" before injection`, { skill });
+    const payload = store.resolveSkillPayload(skill, l);
+    if (!payload) {
+      l.issue("SKILL_PAYLOAD_MISSING", `No cached body or shipped rules metadata found for skill "${skill}"`, `Install "${skill}" into ~/.vercel-plugin before retrying`, { skill });
       continue;
     }
 
-    // Instead of injecting the full body, instruct the agent to invoke the skill
-    const wrapped = skillInvocationMessage(skill, platform);
+    // Build injection text: full invocation message for body mode, summary fallback otherwise
+    const wrapped = payload.mode === "summary"
+      ? summaryFallbackText(payload, platform)
+      : skillInvocationMessage(skill, platform);
     const byteLen = Buffer.byteLength(wrapped, "utf-8");
 
-    // Budget check: always allow the first skill full body, then enforce budget
+    // Budget check: always allow the first skill, then enforce budget
     if (loaded.length > 0 && usedBytes + byteLen > budget) {
-      // Summary fallback uses the same skill invocation instruction
-      const summaryWrapped = skillInvocationMessage(skill, platform);
-      const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
-      if (usedBytes + summaryByteLen <= budget) {
-        if (!canInjectSkill(skill)) {
+      // Try summary-only fallback for body-mode skills over budget
+      if (payload.mode === "body") {
+        const summaryWrapped = summaryFallbackText(payload, platform);
+        const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
+        if (usedBytes + summaryByteLen <= budget) {
+          if (!canInjectSkill(skill)) {
+            continue;
+          }
+          parts.push(summaryWrapped);
+          loaded.push(skill);
+          summaryOnly.push(skill);
+          usedBytes += summaryByteLen;
+          if (injectedSkills) injectedSkills.add(skill);
+          l.debug("summary-fallback", { skill, fullBytes: byteLen, summaryBytes: summaryByteLen });
           continue;
         }
-        parts.push(summaryWrapped);
-        loaded.push(skill);
-        summaryOnly.push(skill);
-        usedBytes += summaryByteLen;
-        if (injectedSkills) injectedSkills.add(skill);
-        l.debug("summary-fallback", { skill, fullBytes: byteLen, summaryBytes: summaryByteLen });
-        continue;
       }
       droppedByBudget.push(skill);
       logDecision(l, { hook: "PreToolUse", event: "budget_exhausted", skill, reason: "over_budget", budgetBytes: budget, usedBytes, skillBytes: byteLen });
@@ -967,7 +984,7 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
 
     // Force summary-only for dedup-bypassed companion skills
     if (forceSummarySkills?.has(skill)) {
-      const summaryWrapped = skillInvocationMessage(skill, platform);
+      const summaryWrapped = summaryFallbackText(payload, platform);
       const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
       if (usedBytes + summaryByteLen <= budget || loaded.length === 0) {
         if (!canInjectSkill(skill)) {
@@ -990,6 +1007,11 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
     loaded.push(skill);
     usedBytes += byteLen;
     if (injectedSkills) injectedSkills.add(skill);
+
+    if (payload.mode === "summary") {
+      summaryOnly.push(skill);
+      l.debug("skill-summary-fallback", { skill, source: payload.source });
+    }
   }
 
   if (droppedByCap.length > 0 || droppedByBudget.length > 0 || summaryOnly.length > 0 || skippedByConcurrentClaim.length > 0) {

@@ -3,6 +3,7 @@ import { buildSkillsAddCommand } from "./skills-cli-command.mjs";
 import {
   buildVercelCliCommand
 } from "./vercel-cli-command.mjs";
+import { resolveProjectStatePaths } from "./project-state-paths.mjs";
 import { buildVercelCliCommand as buildVercelCliCommand2, vercelSubcommands } from "./vercel-cli-command.mjs";
 function uniqueSorted(values) {
   return [...new Set(values.filter((value) => value.trim() !== ""))].sort();
@@ -11,6 +12,7 @@ function formatReasonList(detection) {
   return detection.reasons.map((reason) => `${reason.kind}:${reason.source}`).join(", ");
 }
 function buildSkillInstallPlan(args) {
+  const statePaths = resolveProjectStatePaths(args.projectRoot);
   const likelySkills = uniqueSorted(
     args.detections.map((d) => d.skill)
   );
@@ -30,14 +32,14 @@ function buildSkillInstallPlan(args) {
     {
       id: "install-missing",
       label: "Install detected skills",
-      description: missingSkills.length === 0 ? "All detected skills are already cached." : `Install ${missingSkills.length} missing skill${missingSkills.length === 1 ? "" : "s"} into .skills/.`,
+      description: missingSkills.length === 0 ? "All detected skills are already cached." : `Install ${missingSkills.length} missing skill${missingSkills.length === 1 ? "" : "s"} into ${statePaths.skillsDir}.`,
       command: installCommand,
       default: !args.zeroBundleReady
     },
     {
       id: "activate-cache-only",
       label: "Use cache-only mode",
-      description: args.zeroBundleReady ? "All detected skills are cached. This session can disable bundled fallback." : "Cache-only mode is blocked until the missing skills are installed.",
+      description: args.zeroBundleReady ? "All detected skills are cached. This session can disable shipped fallback metadata." : "Cache-only mode is blocked until the missing skills are installed.",
       command: args.zeroBundleReady ? "export VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK=1" : null,
       default: args.zeroBundleReady
     },
@@ -45,7 +47,7 @@ function buildSkillInstallPlan(args) {
       id: "explain",
       label: "Explain detections",
       description: "Open the persisted install plan with full detection reasons.",
-      command: "cat .skills/install-plan.json"
+      command: `cat "${statePaths.installPlanPath}"`
     }
   ];
   if (!vercelLinked) {
@@ -74,6 +76,9 @@ function buildSkillInstallPlan(args) {
     schemaVersion: 1,
     createdAt: (args.now ? args.now() : /* @__PURE__ */ new Date()).toISOString(),
     projectRoot: args.projectRoot,
+    projectStateRoot: statePaths.stateRoot,
+    skillsCacheDir: statePaths.skillsDir,
+    installPlanPath: statePaths.installPlanPath,
     likelySkills,
     installedSkills,
     missingSkills,
@@ -98,8 +103,10 @@ function formatSkillInstallPalette(plan) {
     `- Detected: ${plan.likelySkills.join(", ")}`,
     `- Cached: ${plan.installedSkills.length > 0 ? plan.installedSkills.join(", ") : "none"}`,
     `- Missing: ${plan.missingSkills.length > 0 ? plan.missingSkills.join(", ") : "none"}`,
-    `- Zero-bundle ready: ${plan.zeroBundleReady ? "yes" : "no"}`,
-    `- Cache manifest: ${plan.projectSkillManifestPath ?? "none"}`
+    `- State root: ${plan.projectStateRoot}`,
+    `- Skill cache: ${plan.skillsCacheDir}`,
+    `- Install plan: ${plan.installPlanPath}`,
+    `- Zero-bundle ready: ${plan.zeroBundleReady ? "yes" : "no"}`
   ];
   const installAction = plan.actions.find(
     (action) => action.id === "install-missing"
@@ -113,7 +120,7 @@ function formatSkillInstallPalette(plan) {
   if (cacheOnlyAction?.command) {
     lines.push(`- [2] Cache only: ${cacheOnlyAction.command}`);
   }
-  lines.push("- [3] Explain: cat .skills/install-plan.json");
+  lines.push(`- [3] Explain: cat "${plan.installPlanPath}"`);
   const vercelLinkAction = plan.actions.find(
     (action) => action.id === "vercel-link"
   );

@@ -10,6 +10,7 @@ import {
   readProjectSkillState,
   type ProjectSkillState,
 } from "./project-skill-manifest.mjs";
+import { resolveProjectStatePaths } from "./project-state-paths.mjs";
 
 export interface SkillCacheStatus {
   likelySkills: string[];
@@ -217,7 +218,7 @@ export function buildResolvedSkillCacheBanner(args: {
     outcome === "installed" ||
     outcome === "partial" ||
     outcome === "failed"
-      ? `- Project cache: ${join(projectRoot, ".skills")}`
+      ? `- Project cache: ${resolveProjectStatePaths(projectRoot).skillsDir}`
       : null,
     installQuestion ? `- Ask once: "${installQuestion}"` : null,
     installCommand ? `- Install: \`${installCommand}\`` : null,

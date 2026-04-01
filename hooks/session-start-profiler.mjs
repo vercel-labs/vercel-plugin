@@ -18,6 +18,7 @@ import {
 } from "./compat.mjs";
 import { pluginRoot, profileCachePath, safeReadJson, writeSessionFile } from "./hook-env.mjs";
 import { writePersistedSkillInstallPlan } from "./orchestrator-install-plan-state.mjs";
+import { resolveProjectStatePaths } from "./project-state-paths.mjs";
 import { createLogger, logCaughtError } from "./logger.mjs";
 import { buildSkillMap } from "./skill-map-frontmatter.mjs";
 import { loadProjectInstalledSkillState } from "./project-installed-skill-state.mjs";
@@ -566,6 +567,13 @@ async function main() {
   const platform = detectSessionStartPlatform(hookInput);
   const sessionId = normalizeSessionStartSessionId(hookInput);
   const projectRoot = resolveSessionStartProjectRoot();
+  const statePaths = resolveProjectStatePaths(projectRoot);
+  log.debug("session-start-profiler-state-paths", {
+    projectRoot,
+    stateRoot: statePaths.stateRoot,
+    skillsDir: statePaths.skillsDir,
+    installPlanPath: statePaths.installPlanPath
+  });
   logBrokenSkillFrontmatterSummary();
   const greenfield = checkGreenfield(projectRoot);
   const cliStatus = checkVercelCli();
@@ -636,7 +644,9 @@ async function main() {
           "### Vercel skill cache",
           installResult.installed.length > 0 ? `- Installed now: ${installResult.installed.join(", ")}` : null,
           installResult.reused.length > 0 ? `- Already cached: ${installResult.reused.join(", ")}` : null,
-          `- Project cache: ${join(projectRoot, ".skills")}`
+          `- State root: ${statePaths.stateRoot}`,
+          `- Skill cache: ${statePaths.skillsDir}`,
+          `- Install plan: ${statePaths.installPlanPath}`
         ].filter(Boolean).join("\n")
       );
     }
@@ -673,7 +683,7 @@ async function main() {
     hasEnvLocal
   });
   try {
-    writePersistedSkillInstallPlan(installPlan);
+    writePersistedSkillInstallPlan(installPlan, log);
   } catch (error) {
     logCaughtError(log, "session-start-profiler:write-install-plan-failed", error, {
       projectRoot

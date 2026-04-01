@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 const ROOT = resolve(import.meta.dirname, "..");
 const SKILLS_DIR = join(ROOT, "skills");
 const HOOK_SCRIPT = join(ROOT, "hooks", "pretooluse-skill-inject.mjs");
-const MANIFEST_PATH = join(ROOT, "generated", "skill-manifest.json");
+const MANIFEST_PATH = join(ROOT, "generated", "skill-rules.json");
 
 // ---------------------------------------------------------------------------
 // Helpers

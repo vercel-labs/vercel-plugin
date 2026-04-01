@@ -1,13 +1,17 @@
 // hooks/src/orchestrator-install-plan-state.mts
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { existsSync, writeFileSync } from "fs";
 import { join } from "path";
 import { pluginRoot, safeReadJson } from "./hook-env.mjs";
 import {
   buildSkillInstallPlan
 } from "./orchestrator-install-plan.mjs";
 import { loadProjectInstalledSkillState } from "./project-installed-skill-state.mjs";
+import {
+  ensureProjectStateRoot,
+  resolveProjectStatePaths
+} from "./project-state-paths.mjs";
 function installPlanPath(projectRoot) {
-  return join(projectRoot, ".skills", "install-plan.json");
+  return resolveProjectStatePaths(projectRoot).installPlanPath;
 }
 function parseInstallPlan(raw) {
   if (!raw || raw.trim() === "") {
@@ -44,17 +48,25 @@ function requirePersistedSkillInstallPlan(args) {
   if (plan) {
     return plan;
   }
+  const planPath = installPlanPath(args.projectRoot);
   throw new Error(
-    `Missing install plan at ${installPlanPath(args.projectRoot)}. Run SessionStart first.`
+    `Missing install plan at ${planPath}. Run SessionStart first.`
   );
 }
-function writePersistedSkillInstallPlan(plan) {
-  mkdirSync(join(plan.projectRoot, ".skills"), { recursive: true });
+function writePersistedSkillInstallPlan(plan, logger) {
+  const paths = ensureProjectStateRoot(
+    resolveProjectStatePaths(plan.projectRoot)
+  );
   writeFileSync(
-    installPlanPath(plan.projectRoot),
+    paths.installPlanPath,
     JSON.stringify(plan, null, 2) + "\n",
     "utf-8"
   );
+  logger?.debug("install-plan-persisted", {
+    installPlanPath: paths.installPlanPath,
+    projectRoot: plan.projectRoot,
+    stateRoot: paths.stateRoot
+  });
 }
 function refreshPersistedSkillInstallPlan(args) {
   const bundledFallbackEnabled = process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1" && args.previousPlan.bundledFallbackEnabled;

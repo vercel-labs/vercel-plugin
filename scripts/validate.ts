@@ -1252,13 +1252,13 @@ async function main() {
   const errorCount = issues.filter((i) => i.severity === "error").length;
   const warnCount = issues.filter((i) => i.severity === "warning").length;
 
-  // Generate skill-manifest.json when validation passes (no errors)
+  // Generate skill-rules.json when validation passes (no errors)
   if (errorCount === 0) {
     const { manifest, errors: manifestErrors } = buildManifest(join(ROOT, "skills"));
     if (manifestErrors.length === 0) {
       const count = writeManifestFile(manifest);
       if (FORMAT === "pretty") {
-        console.log(`\n✓ Generated skill-manifest.json (${count} skills)`);
+        console.log(`\n✓ Generated skill-rules.json (${count} skills)`);
       }
     }
   }
