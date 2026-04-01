@@ -2,18 +2,18 @@
  * Registry Client — delegate skill installation to `npx skills add`.
  *
  * Instead of fetching SKILL.md files over HTTP, this module shells out
- * to the real `npx skills` CLI. Install results are inferred from
- * filesystem state (`.skills/<slug>/SKILL.md`) before and after execution.
+ * to the real `npx skills` CLI. Install results are derived from the
+ * canonical project skill state (`skills-lock.json` → directory scan)
+ * before and after execution, matching the injection read path.
  *
  * No test performs a real subprocess call — the execFile implementation
  * is injectable and mockable via the `execFileImpl` option.
  */
 
-import { existsSync, readdirSync } from "node:fs";
 import { execFile } from "node:child_process";
-import { join } from "node:path";
 import { promisify } from "node:util";
 import { buildSkillsAddCommand } from "./skills-cli-command.mjs";
+import { readProjectSkillState } from "./project-skill-manifest.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -58,20 +58,17 @@ export interface RegistryClient {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Derive installed skill slugs from the canonical project skill state.
+ *
+ * Uses `readProjectSkillState()` which prefers `skills-lock.json` over
+ * directory scanning — so install accounting stays consistent with the
+ * injection read path even when the CLI writes a lockfile before all
+ * `.skills/<slug>/SKILL.md` directories are fully materialised.
+ */
 function listProjectCachedSkills(projectRoot: string): string[] {
-  const skillsRoot = join(projectRoot, ".skills");
-  try {
-    return readdirSync(skillsRoot, { withFileTypes: true })
-      .filter(
-        (entry) =>
-          entry.isDirectory() &&
-          existsSync(join(skillsRoot, entry.name, "SKILL.md")),
-      )
-      .map((entry) => entry.name)
-      .sort();
-  } catch {
-    return [];
-  }
+  const state = readProjectSkillState(projectRoot);
+  return state.installedSlugs;
 }
 
 // ---------------------------------------------------------------------------

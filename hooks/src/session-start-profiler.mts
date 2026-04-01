@@ -52,6 +52,7 @@ import {
   type VercelCliDelegator,
   type VercelCliRunResult,
 } from "./vercel-cli-delegator.mjs";
+import { formatOrchestratorActionPalette } from "./orchestrator-action-palette.mjs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1014,6 +1015,14 @@ async function main(): Promise<void> {
   const installPalette = formatSkillInstallPalette(installPlan);
   if (installPalette) {
     userMessages.unshift(installPalette);
+  }
+
+  const wrapperPalette = formatOrchestratorActionPalette({
+    pluginRoot: pluginRoot(),
+    plan: installPlan,
+  });
+  if (wrapperPalette) {
+    userMessages.unshift(wrapperPalette);
   }
 
   const envVars = buildSessionStartProfilerEnvVars({

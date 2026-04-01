@@ -33,6 +33,7 @@ import {
 import {
   createVercelCliDelegator
 } from "./vercel-cli-delegator.mjs";
+import { formatOrchestratorActionPalette } from "./orchestrator-action-palette.mjs";
 var FILE_MARKERS = [
   { file: "next.config.js", skills: ["nextjs", "turbopack"] },
   { file: "next.config.mjs", skills: ["nextjs", "turbopack"] },
@@ -690,6 +691,13 @@ async function main() {
   const installPalette = formatSkillInstallPalette(installPlan);
   if (installPalette) {
     userMessages.unshift(installPalette);
+  }
+  const wrapperPalette = formatOrchestratorActionPalette({
+    pluginRoot: pluginRoot(),
+    plan: installPlan
+  });
+  if (wrapperPalette) {
+    userMessages.unshift(wrapperPalette);
   }
   const envVars = buildSessionStartProfilerEnvVars({
     agentBrowserAvailable,

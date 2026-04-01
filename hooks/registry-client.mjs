@@ -1,19 +1,12 @@
 // hooks/src/registry-client.mts
-import { existsSync, readdirSync } from "fs";
 import { execFile } from "child_process";
-import { join } from "path";
 import { promisify } from "util";
 import { buildSkillsAddCommand } from "./skills-cli-command.mjs";
+import { readProjectSkillState } from "./project-skill-manifest.mjs";
 var execFileAsync = promisify(execFile);
 function listProjectCachedSkills(projectRoot) {
-  const skillsRoot = join(projectRoot, ".skills");
-  try {
-    return readdirSync(skillsRoot, { withFileTypes: true }).filter(
-      (entry) => entry.isDirectory() && existsSync(join(skillsRoot, entry.name, "SKILL.md"))
-    ).map((entry) => entry.name).sort();
-  } catch {
-    return [];
-  }
+  const state = readProjectSkillState(projectRoot);
+  return state.installedSlugs;
 }
 function createRegistryClient(options = {}) {
   const execFileImpl = options.execFileImpl ?? execFileAsync;

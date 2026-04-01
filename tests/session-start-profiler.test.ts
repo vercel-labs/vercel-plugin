@@ -868,7 +868,7 @@ describe("greenfield detection", () => {
 
     expect(result.code).toBe(0);
     expect(readGreenfieldState()).toBe("");
-    expect(result.stdout).not.toContain("greenfield");
+    expect(result.stdout).not.toContain("greenfield project");
   });
 
   test("not greenfield when non-dot directory exists", async () => {

@@ -252,6 +252,104 @@ describe("installSkills", () => {
     expect(result.command).toContain("vercel/vercel-skills");
   });
 
+  test("recognises installed skills from skills-lock.json when directory is absent", async () => {
+    const PROJECT = join(TMP, "project");
+    mkdirSync(PROJECT, { recursive: true });
+
+    const exec = mockExecFile(() => {
+      // CLI writes lockfile but has NOT yet materialised .skills/nextjs/SKILL.md
+      mkdirSync(join(PROJECT, ".skills"), { recursive: true });
+      writeFileSync(
+        join(PROJECT, "skills-lock.json"),
+        JSON.stringify({
+          version: 1,
+          skills: { nextjs: { source: "vercel/vercel-skills" } },
+        }),
+        "utf-8",
+      );
+    });
+
+    const client = createRegistryClient({
+      source: "my-org/skills",
+      execFileImpl: exec.impl,
+    });
+
+    const result = await client.installSkills({
+      projectRoot: PROJECT,
+      skillNames: ["nextjs"],
+    });
+
+    expect(result.installed).toEqual(["nextjs"]);
+    expect(result.reused).toEqual([]);
+    expect(result.missing).toEqual([]);
+  });
+
+  test("reports reused from lockfile when skill exists in lockfile before CLI call", async () => {
+    const PROJECT = join(TMP, "project");
+    mkdirSync(join(PROJECT, ".skills"), { recursive: true });
+    // Pre-seed lockfile with skill already present
+    writeFileSync(
+      join(PROJECT, "skills-lock.json"),
+      JSON.stringify({
+        version: 1,
+        skills: { nextjs: { source: "vercel/vercel-skills" } },
+      }),
+      "utf-8",
+    );
+
+    const exec = mockExecFile(); // CLI is a no-op
+
+    const client = createRegistryClient({
+      source: "my-org/skills",
+      execFileImpl: exec.impl,
+    });
+
+    const result = await client.installSkills({
+      projectRoot: PROJECT,
+      skillNames: ["nextjs"],
+    });
+
+    expect(result.installed).toEqual([]);
+    expect(result.reused).toEqual(["nextjs"]);
+    expect(result.missing).toEqual([]);
+  });
+
+  test("lockfile-only install with partial directory state", async () => {
+    const PROJECT = join(TMP, "project");
+    mkdirSync(PROJECT, { recursive: true });
+
+    const exec = mockExecFile(() => {
+      // CLI writes lockfile with two skills but only one directory
+      mkdirSync(join(PROJECT, ".skills", "nextjs"), { recursive: true });
+      writeFileSync(join(PROJECT, ".skills", "nextjs", "SKILL.md"), "# Next.js", "utf-8");
+      writeFileSync(
+        join(PROJECT, "skills-lock.json"),
+        JSON.stringify({
+          version: 1,
+          skills: {
+            nextjs: { source: "vercel/vercel-skills" },
+            "ai-sdk": { source: "vercel/vercel-skills" },
+          },
+        }),
+        "utf-8",
+      );
+    });
+
+    const client = createRegistryClient({
+      source: "my-org/skills",
+      execFileImpl: exec.impl,
+    });
+
+    const result = await client.installSkills({
+      projectRoot: PROJECT,
+      skillNames: ["nextjs", "ai-sdk"],
+    });
+
+    // Both should be installed (lockfile is canonical)
+    expect(result.installed).toEqual(["ai-sdk", "nextjs"]);
+    expect(result.missing).toEqual([]);
+  });
+
   test("mixed install/reused/missing results", async () => {
     const PROJECT = join(TMP, "project");
     // Pre-seed one existing skill

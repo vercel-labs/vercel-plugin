@@ -20,6 +20,7 @@ import {
   formatProjectSkillStateLine,
   resolveSkillCacheBanner
 } from "./skill-cache-banner.mjs";
+import { formatOrchestratorActionPalette } from "./orchestrator-action-palette.mjs";
 var PLUGIN_ROOT = resolvePluginRoot();
 var CHAIN_BUDGET_BYTES = 18e3;
 var DEFAULT_CHAIN_CAP = 2;
@@ -533,6 +534,18 @@ async function runBashChainInjection(packages, sessionId, projectRoot, pluginRoo
   });
   if (nextActionPalette) {
     result.banners.push(nextActionPalette);
+  }
+  if (result.deferred.length > 0 || result.banners.length > 0) {
+    const wrapperPlan = readPersistedInstallPlan({ projectRoot, env });
+    if (wrapperPlan) {
+      const wrapperPalette = formatOrchestratorActionPalette({
+        pluginRoot: pluginRoot ?? PLUGIN_ROOT,
+        plan: wrapperPlan
+      });
+      if (wrapperPalette) {
+        result.banners.push(wrapperPalette);
+      }
+    }
   }
   return result;
 }

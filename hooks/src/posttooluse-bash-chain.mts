@@ -37,6 +37,7 @@ import {
 } from "./skill-cache-banner.mjs";
 import type { SkillStore } from "./skill-store.mjs";
 import type { SkillSource } from "./skill-store.mjs";
+import { formatOrchestratorActionPalette } from "./orchestrator-action-palette.mjs";
 
 const PLUGIN_ROOT = resolvePluginRoot();
 const CHAIN_BUDGET_BYTES = 18_000;
@@ -782,6 +783,20 @@ export async function runBashChainInjection(
   });
   if (nextActionPalette) {
     result.banners.push(nextActionPalette);
+  }
+
+  // Append the wrapper palette after install activity surfaces actionable items
+  if (result.deferred.length > 0 || result.banners.length > 0) {
+    const wrapperPlan = readPersistedInstallPlan({ projectRoot, env });
+    if (wrapperPlan) {
+      const wrapperPalette = formatOrchestratorActionPalette({
+        pluginRoot: pluginRoot ?? PLUGIN_ROOT,
+        plan: wrapperPlan,
+      });
+      if (wrapperPalette) {
+        result.banners.push(wrapperPalette);
+      }
+    }
   }
 
   return result;
