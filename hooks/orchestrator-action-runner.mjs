@@ -11,11 +11,14 @@ import {
   requirePersistedSkillInstallPlan,
   refreshPersistedSkillInstallPlan
 } from "./orchestrator-install-plan-state.mjs";
+import { pluginRoot } from "./hook-env.mjs";
 import {
+  buildOrchestratorRunnerCommand,
   ORCHESTRATOR_ACTION_IDS
 } from "./orchestrator-action-command.mjs";
 import {
-  getOrchestratorActionSpec
+  getOrchestratorActionSpec,
+  getOrchestratorActionSpecs
 } from "./orchestrator-action-spec.mjs";
 function classifyOrchestratorActionError(error) {
   const message = error instanceof Error ? error.message : String(error);
@@ -66,17 +69,29 @@ function formatVercelResultLine(result) {
   const detail = result.stderr.trim() || "delegated CLI failed";
   return `- ${result.subcommand}: failed (\`${result.command}\`) \u2014 ${detail}`;
 }
-function formatNextStep(plan) {
-  if (!plan.vercelLinked) {
-    return "Run the wrapper's `vercel-link` action next.";
+var NEXT_STEP_ORDER = [
+  "vercel-link",
+  "vercel-env-pull",
+  "install-missing",
+  "vercel-deploy"
+];
+function formatNextStep(args) {
+  const specMap = new Map(
+    getOrchestratorActionSpecs(args.plan).map((entry) => [entry.id, entry])
+  );
+  const next = NEXT_STEP_ORDER.map((id) => specMap.get(id)).filter(
+    (entry) => entry != null && entry.visible && entry.runnable && entry.id !== args.currentActionId
+  )[0];
+  if (next) {
+    const command = buildOrchestratorRunnerCommand({
+      pluginRoot: pluginRoot(),
+      projectRoot: args.plan.projectRoot,
+      actionId: next.id,
+      json: false
+    });
+    return `Run \`${next.id}\` next: \`${command}\``;
   }
-  if (!plan.hasEnvLocal) {
-    return "Run the wrapper's `vercel-env-pull` action next.";
-  }
-  if (plan.missingSkills.length > 0) {
-    return `Rerun \`install-missing\` after fixing the CLI/auth issue for: ${plan.missingSkills.join(", ")}.`;
-  }
-  if (plan.zeroBundleReady) {
+  if (args.plan.zeroBundleReady) {
     return "Project cache is ready; cache-only mode can be enabled if desired.";
   }
   return "Wrapper action completed.";
@@ -111,7 +126,9 @@ function formatOrchestratorActionHumanOutput(result) {
       `- Still missing: ${result.installResult.missing.join(", ")}`
     );
   }
-  lines.push(`- Next: ${formatNextStep(result.refreshedPlan)}`);
+  lines.push(
+    `- Next: ${formatNextStep({ plan: result.refreshedPlan, currentActionId: result.actionId })}`
+  );
   return lines.join("\n");
 }
 function formatOrchestratorActionErrorHumanOutput(error) {

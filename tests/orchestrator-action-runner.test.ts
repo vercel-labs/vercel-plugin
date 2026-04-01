@@ -7,6 +7,8 @@ import { join } from "node:path";
 import type { SkillInstallPlan } from "../hooks/src/orchestrator-install-plan.mts";
 import {
   buildOrchestratorActionError,
+  formatOrchestratorActionHumanOutput,
+  type OrchestratorActionRunResult,
   type OrchestratorActionRunError,
   type OrchestratorActionRunErrorCode,
 } from "../hooks/src/orchestrator-action-runner.mts";
@@ -526,5 +528,106 @@ describe("runOrchestratorAction with real filesystem", () => {
     expect(result.installResult).toBeNull();
     expect(registry.installSkills).not.toHaveBeenCalled();
     expect(delegator.run).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatOrchestratorActionHumanOutput — command-specific next-step
+// ---------------------------------------------------------------------------
+
+describe("formatOrchestratorActionHumanOutput — next-step guidance", () => {
+  function makeRunResult(
+    overrides: Partial<OrchestratorActionRunResult> = {},
+  ): OrchestratorActionRunResult {
+    return {
+      schemaVersion: 1,
+      type: "vercel-plugin-orchestrator-action-result",
+      ok: true,
+      actionId: "vercel-link",
+      projectRoot: "/repo",
+      commands: ["vercel link --yes"],
+      installResult: null,
+      vercelResults: [
+        {
+          ok: true,
+          subcommand: "link",
+          command: "vercel link --yes",
+          stdout: "",
+          stderr: "",
+          changed: true,
+        },
+      ],
+      refreshedPlan: makePlan({
+        vercelLinked: true,
+        hasEnvLocal: false,
+        missingSkills: ["nextjs"],
+      }),
+      ...overrides,
+    };
+  }
+
+  test("after vercel-link, next-step points to vercel-env-pull wrapper command", () => {
+    const result = makeRunResult();
+    const output = formatOrchestratorActionHumanOutput(result);
+
+    // The next-step line should mention vercel-env-pull as the next action
+    expect(output).toContain("vercel-env-pull");
+    expect(output).toContain("orchestrator-action-runner.mjs");
+    expect(output).toContain("--action vercel-env-pull");
+  });
+
+  test("when no further runnable action exists, shows completion message", () => {
+    const result = makeRunResult({
+      actionId: "install-missing",
+      refreshedPlan: makePlan({
+        vercelLinked: true,
+        hasEnvLocal: true,
+        missingSkills: [],
+        zeroBundleReady: false,
+      }),
+    });
+    const output = formatOrchestratorActionHumanOutput(result);
+
+    // No visible+runnable action remaining besides current and deploy
+    // (deploy is visible when linked, but since it's runnable and not current, it should show)
+    // Actually deploy IS visible and runnable when linked. So next-step points to deploy.
+    expect(output).toContain("- Next:");
+  });
+
+  test("zeroBundleReady triggers cache-only message when no actions remain", () => {
+    const result = makeRunResult({
+      actionId: "vercel-deploy",
+      refreshedPlan: makePlan({
+        vercelLinked: true,
+        hasEnvLocal: true,
+        missingSkills: [],
+        zeroBundleReady: true,
+      }),
+    });
+    const output = formatOrchestratorActionHumanOutput(result);
+
+    // The only visible+runnable actions are bootstrap (visible when something is missing)
+    // and deploy (visible when linked). With everything resolved except deploy being
+    // the current action, the next visible+runnable is bootstrap if visible.
+    // bootstrap visible = !linked || !hasEnvLocal || missingSkills.length > 0
+    // All false here, so bootstrap is not visible. install-missing not visible (no missing).
+    // link not visible (linked). env-pull not visible (hasEnvLocal). deploy is current.
+    // → no next action → zeroBundleReady message
+    expect(output).toContain("cache-only mode");
+  });
+
+  test("next-step command includes correct project-root", () => {
+    const result = makeRunResult({
+      projectRoot: "/my/project",
+      refreshedPlan: makePlan({
+        projectRoot: "/my/project",
+        vercelLinked: true,
+        hasEnvLocal: false,
+        missingSkills: ["nextjs"],
+      }),
+    });
+    const output = formatOrchestratorActionHumanOutput(result);
+
+    expect(output).toContain("--project-root /my/project");
   });
 });

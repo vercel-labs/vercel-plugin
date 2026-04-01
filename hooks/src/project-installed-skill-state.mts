@@ -1,9 +1,9 @@
 /**
  * Centralized project installed-skill state loader.
  *
- * Combines skill store resolution, installed-skill listing, CLI-produced
- * project state, and cache status into a single call so SessionStart and
- * PostToolUse don't duplicate the refresh logic.
+ * Combines layered cache resolution with CLI-produced project state so
+ * `skills-lock.json` can immediately affect orchestration decisions even
+ * before `.skills/<slug>/SKILL.md` fully materializes.
  */
 
 import {
@@ -32,6 +32,14 @@ export interface ProjectInstalledSkillState {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort();
+}
+
+// ---------------------------------------------------------------------------
 // Loader
 // ---------------------------------------------------------------------------
 
@@ -41,6 +49,11 @@ export interface ProjectInstalledSkillState {
  * Creates a fresh skill store, lists installed skills, reads CLI-produced
  * project state (skills-lock.json → manifest.json → directory scan), and
  * computes cache status against the likely skills set.
+ *
+ * The returned `installedSkills` is the union of the layered store
+ * (project + global cache) and `projectState.installedSlugs` so that
+ * lockfile-only installs (before `.skills/<slug>/SKILL.md` materializes)
+ * are immediately visible to plan refresh and cache-status computation.
  *
  * Call this again after auto-install to pick up newly installed skills.
  */
@@ -57,8 +70,14 @@ export function loadProjectInstalledSkillState(args: {
     bundledFallback: args.bundledFallbackEnabled,
   });
 
-  const installedSkills = skillStore.listInstalledSkills(args.logger);
   const projectState = readProjectSkillState(args.projectRoot);
+
+  // Preserve layered cache semantics (project + global) while making the
+  // project-side read path lockfile-canonical.
+  const installedSkills = uniqueSorted([
+    ...skillStore.listInstalledSkills(args.logger),
+    ...projectState.installedSlugs,
+  ]);
 
   const cacheStatus = buildSkillCacheStatus({
     likelySkills: args.likelySkills,

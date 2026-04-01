@@ -8,14 +8,20 @@ import {
 import {
   createSkillStore
 } from "./skill-store.mjs";
+function uniqueSorted(values) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort();
+}
 function loadProjectInstalledSkillState(args) {
   const skillStore = createSkillStore({
     projectRoot: args.projectRoot,
     pluginRoot: args.pluginRoot,
     bundledFallback: args.bundledFallbackEnabled
   });
-  const installedSkills = skillStore.listInstalledSkills(args.logger);
   const projectState = readProjectSkillState(args.projectRoot);
+  const installedSkills = uniqueSorted([
+    ...skillStore.listInstalledSkills(args.logger),
+    ...projectState.installedSlugs
+  ]);
   const cacheStatus = buildSkillCacheStatus({
     likelySkills: args.likelySkills,
     installedSkills,

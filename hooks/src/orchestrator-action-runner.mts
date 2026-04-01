@@ -27,12 +27,15 @@ import {
   requirePersistedSkillInstallPlan,
   refreshPersistedSkillInstallPlan,
 } from "./orchestrator-install-plan-state.mjs";
+import { pluginRoot } from "./hook-env.mjs";
 import {
+  buildOrchestratorRunnerCommand,
   ORCHESTRATOR_ACTION_IDS,
   type OrchestratorRunnerActionId,
 } from "./orchestrator-action-command.mjs";
 import {
   getOrchestratorActionSpec,
+  getOrchestratorActionSpecs,
   type OrchestratorStepSpec,
 } from "./orchestrator-action-spec.mjs";
 
@@ -152,17 +155,45 @@ function formatVercelResultLine(result: VercelCliRunResult): string {
   return `- ${result.subcommand}: failed (\`${result.command}\`) — ${detail}`;
 }
 
-function formatNextStep(plan: SkillInstallPlan): string {
-  if (!plan.vercelLinked) {
-    return "Run the wrapper's `vercel-link` action next.";
+/** Bootstrap progression order for next-step suggestions. */
+const NEXT_STEP_ORDER: readonly OrchestratorRunnerActionId[] = [
+  "vercel-link",
+  "vercel-env-pull",
+  "install-missing",
+  "vercel-deploy",
+];
+
+function formatNextStep(args: {
+  plan: SkillInstallPlan;
+  currentActionId: OrchestratorRunnerActionId;
+}): string {
+  // Find the next action following bootstrap progression order (link →
+  // env-pull → install-missing → deploy) so users who run individual steps
+  // see the logical continuation. Skip the composite bootstrap-project and
+  // the action that was just run.
+  const specMap = new Map(
+    getOrchestratorActionSpecs(args.plan).map((entry) => [entry.id, entry]),
+  );
+  const next = NEXT_STEP_ORDER.map((id) => specMap.get(id))
+    .filter(
+      (entry): entry is NonNullable<typeof entry> =>
+        entry != null &&
+        entry.visible &&
+        entry.runnable &&
+        entry.id !== args.currentActionId,
+    )[0];
+
+  if (next) {
+    const command = buildOrchestratorRunnerCommand({
+      pluginRoot: pluginRoot(),
+      projectRoot: args.plan.projectRoot,
+      actionId: next.id,
+      json: false,
+    });
+    return `Run \`${next.id}\` next: \`${command}\``;
   }
-  if (!plan.hasEnvLocal) {
-    return "Run the wrapper's `vercel-env-pull` action next.";
-  }
-  if (plan.missingSkills.length > 0) {
-    return `Rerun \`install-missing\` after fixing the CLI/auth issue for: ${plan.missingSkills.join(", ")}.`;
-  }
-  if (plan.zeroBundleReady) {
+
+  if (args.plan.zeroBundleReady) {
     return "Project cache is ready; cache-only mode can be enabled if desired.";
   }
   return "Wrapper action completed.";
@@ -208,7 +239,9 @@ export function formatOrchestratorActionHumanOutput(
     );
   }
 
-  lines.push(`- Next: ${formatNextStep(result.refreshedPlan)}`);
+  lines.push(
+    `- Next: ${formatNextStep({ plan: result.refreshedPlan, currentActionId: result.actionId })}`,
+  );
 
   return lines.join("\n");
 }
