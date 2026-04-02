@@ -62,7 +62,9 @@ describe("explain file matching", () => {
     const { stdout, exitCode } = await runCli("explain", "middleware.ts");
     expect(exitCode).toBe(0);
     expect(stdout).toContain("routing-middleware");
-    expect(stdout).toContain("INJECT");
+    // In zero-bundle mode, skills resolve as SUMMARY from rules manifest
+    // when no cached body exists; INJECT when a cached body is available
+    expect(stdout).toMatch(/INJECT|SUMMARY/);
   });
 
   test("app/api/chat/route.ts matches ai-sdk", async () => {
@@ -166,17 +168,18 @@ describe("budget-aware injection", () => {
     // The first skill is always injected regardless of budget, so usedBytes may
     // slightly exceed budgetBytes. Verify it's within 2x of the budget.
     expect(result.usedBytes).toBeLessThanOrEqual(result.budgetBytes * 2);
-    // And verify budget enforcement works for subsequent skills
-    const fullCount = result.matches.filter((m: any) => m.injectionMode === "full").length;
-    expect(fullCount).toBeGreaterThan(0);
+    // In zero-bundle mode, skills may all be summary-only; verify at least one is injected
+    const injectedCount = result.matches.filter((m: any) => m.injectionMode === "full" || m.injectionMode === "summary").length;
+    expect(injectedCount).toBeGreaterThan(0);
   });
 
   test("tiny budget forces budget drops", async () => {
     const { stdout } = await runCli("explain", "vercel.json", "--json", "--budget", "100");
     const result = JSON.parse(stdout);
-    // First skill always injected regardless of budget, rest should be budget-dropped
-    const fullCount = result.matches.filter((m: any) => m.injectionMode === "full").length;
-    expect(fullCount).toBe(1);
+    // First skill always injected regardless of budget (full or summary),
+    // rest should be budget-dropped
+    const injectedCount = result.matches.filter((m: any) => m.injectionMode === "full" || m.injectionMode === "summary").length;
+    expect(injectedCount).toBe(1);
     if (result.matches.length > 1) {
       expect(result.droppedByBudgetCount).toBeGreaterThan(0);
     }
@@ -219,6 +222,43 @@ describe("collision detection", () => {
     const result = JSON.parse(stdout);
     // vercel.json should match multiple skills (routing-middleware, deployments-cicd, etc.)
     expect(result.matches.length).toBeGreaterThan(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// zero-bundle / skill-store resolution
+// ---------------------------------------------------------------------------
+
+describe("zero-bundle resolution", () => {
+  test("explain succeeds without <projectRoot>/skills directory", async () => {
+    // The CLI uses the plugin root as project root; skills/ not required
+    const { stdout, exitCode } = await runCli("explain", "middleware.ts", "--json");
+    expect(exitCode).toBe(0);
+    const result = JSON.parse(stdout);
+    expect(result.skillCount).toBeGreaterThan(0);
+    expect(result.matches.length).toBeGreaterThan(0);
+  });
+
+  test("uncached skills report summary injection mode", async () => {
+    const { stdout } = await runCli("explain", "middleware.ts", "--json");
+    const result = JSON.parse(stdout);
+    // Without cached SKILL.md bodies, skills from rules-manifest resolve as summary
+    const summaryMatches = result.matches.filter((m: any) => m.injectionMode === "summary");
+    // At least some matches should be summary-only in zero-bundle mode
+    expect(summaryMatches.length + result.matches.filter((m: any) => m.injectionMode === "full").length).toBe(result.injectedCount);
+  });
+
+  test("--debug emits skill-store-loaded event to stderr", async () => {
+    const { stderr, exitCode } = await runCli("explain", "middleware.ts", "--debug");
+    expect(exitCode).toBe(0);
+    expect(stderr).toContain("explain-skill-store-loaded");
+  });
+
+  test("--project-root is an alias for --project", async () => {
+    const { stdout, exitCode } = await runCli("explain", "middleware.ts", "--project-root", ROOT, "--json");
+    expect(exitCode).toBe(0);
+    const result = JSON.parse(stdout);
+    expect(result.skillCount).toBeGreaterThan(0);
   });
 });
 

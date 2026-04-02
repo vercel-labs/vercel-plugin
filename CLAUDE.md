@@ -3,10 +3,11 @@
 ## Quick Reference
 
 - **Build hooks**: `bun run build:hooks` (compiles `hooks/src/*.mts` → `hooks/*.mjs` via tsup)
-- **Build manifest**: `bun run build:manifest` (generates `generated/skill-manifest.json` from SKILL.md frontmatter)
-- **Build from skills**: `bun run build:from-skills` (compiles `*.md.tmpl` → `*.md` by resolving `{{include:skill:…}}` markers)
-- **Check from skills**: `bun run build:from-skills:check` (verify generated `.md` files are up-to-date; exits non-zero on drift)
-- **Build all**: `bun run build` (hooks + manifest + from-skills)
+- **Build manifest**: `bun run build:manifest` (uses prebuilt `generated/skill-rules.json` if present; regenerates from `VERCEL_PLUGIN_SKILLS_DIR` when set)
+- **Refresh skill rules**: `bun run refresh:skill-rules` (regenerates `generated/skill-rules.json` from SKILL.md frontmatter — requires `skills/` source)
+- **Refresh templated docs**: `bun run refresh:templated-docs` (compiles `*.md.tmpl` → `*.md` by resolving `{{include:skill:…}}` markers — requires `skills/` source)
+- **Check templated docs**: `bun run refresh:templated-docs:check` (verify generated `.md` files are up-to-date; exits non-zero on drift)
+- **Build all**: `bun run build` (hooks + manifest)
 - **Test**: `bun test` (typecheck + 32 test files)
 - **Single test**: `bun test tests/<file>.test.ts`
 - **Typecheck only**: `bun run typecheck` (tsc on hooks/tsconfig.json)
@@ -17,7 +18,7 @@
 
 Run `bun run build:hooks` after editing any `.mts` file. A pre-commit hook auto-compiles when `.mts` files are staged.
 
-Run `bun run build:from-skills` after editing any skill referenced by a `.md.tmpl` template. The `build` script includes this step automatically.
+Run `bun run refresh:templated-docs` after editing any skill referenced by a `.md.tmpl` template.
 
 ## Architecture
 
@@ -146,7 +147,7 @@ Agents and commands derive instructions from skills via `.md.tmpl` templates. Sk
 
 Heading extraction is case-insensitive and captures everything from the heading to the next heading of equal or higher level.
 
-**Build**: `bun run build:from-skills` resolves all includes and writes output files. `bun run build:from-skills:check` verifies outputs are up-to-date (useful in CI). Both are part of `bun run build`.
+**Build**: `bun run refresh:templated-docs` resolves all includes and writes output files. `bun run refresh:templated-docs:check` verifies outputs are up-to-date (useful in CI). These require `VERCEL_PLUGIN_SKILLS_DIR` or a local `skills/` directory and are not part of the default `bun run build`.
 
 **Current templates** (8): `agents/ai-architect.md.tmpl`, `agents/deployment-expert.md.tmpl`, `agents/performance-optimizer.md.tmpl`, `commands/bootstrap.md.tmpl`, `commands/deploy.md.tmpl`, `commands/env.md.tmpl`, `commands/marketplace.md.tmpl`, `commands/status.md.tmpl`.
 

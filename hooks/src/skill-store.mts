@@ -57,7 +57,15 @@ export interface SkillStoreOptions {
   projectRoot: string;
   pluginRoot: string;
   globalCacheDir?: string;
-  /** @deprecated Use rulesManifest instead. Ignored when set. */
+  /**
+   * Whether to include the shipped rules-manifest as a fallback root.
+   * When `false`, only project-cache and global-cache roots are used —
+   * uncached skills will not resolve to summary-only payloads.
+   *
+   * Defaults to `true` unless `VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK=1`.
+   */
+  includeRulesManifest?: boolean;
+  /** @deprecated Use includeRulesManifest instead. */
   bundledFallback?: boolean;
 }
 
@@ -144,6 +152,16 @@ function toStringArray(value: unknown): string[] {
 // Root construction
 // ---------------------------------------------------------------------------
 
+function shouldIncludeRulesManifest(options: SkillStoreOptions): boolean {
+  if (typeof options.includeRulesManifest === "boolean") {
+    return options.includeRulesManifest;
+  }
+  if (typeof options.bundledFallback === "boolean") {
+    return options.bundledFallback;
+  }
+  return process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1";
+}
+
 export function defaultSkillStoreRoots(
   options: SkillStoreOptions,
 ): SkillStoreRoot[] {
@@ -167,13 +185,16 @@ export function defaultSkillStoreRoots(
       skillsDir: globalCacheDir,
       manifestPath: join(globalCacheDir, "manifest.json"),
     },
-    {
+  ];
+
+  if (shouldIncludeRulesManifest(options)) {
+    roots.push({
       source: "rules-manifest",
       rootDir: pluginRoot,
       skillsDir: "",
       manifestPath: join(pluginRoot, "generated", "skill-rules.json"),
-    },
-  ];
+    });
+  }
 
   return roots;
 }
@@ -450,9 +471,11 @@ export function createSkillStore(
   options: SkillStoreOptions,
   logger?: SkillStoreLogger,
 ): SkillStore {
-  const roots = defaultSkillStoreRoots(options);
+  const includeRulesManifest = shouldIncludeRulesManifest(options);
+  const roots = defaultSkillStoreRoots({ ...options, includeRulesManifest });
 
   logger?.debug?.("skill-store-roots-resolved", {
+    includeRulesManifest,
     roots: roots.map((r) => ({
       source: r.source,
       rootDir: r.rootDir,

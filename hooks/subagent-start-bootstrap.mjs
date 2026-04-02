@@ -187,7 +187,7 @@ function buildStandardContext(agentType, likelySkills, budgetBytes, sessionId) {
   const store = createSkillStore({
     projectRoot,
     pluginRoot: PLUGIN_ROOT,
-    bundledFallback: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
+    includeRulesManifest: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
   });
   for (const skill of likelySkills) {
     const resolved = store.resolveSkillPayload(skill);

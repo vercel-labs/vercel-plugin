@@ -310,7 +310,7 @@ function buildStandardContext(agentType: string, likelySkills: string[], budgetB
   const store = createSkillStore({
     projectRoot,
     pluginRoot: PLUGIN_ROOT,
-    bundledFallback: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1",
+    includeRulesManifest: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1",
   });
 
   // Inject full skill bodies for likely skills, falling back to summaries

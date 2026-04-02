@@ -236,7 +236,7 @@ describe("skill-store", () => {
     expect(store.resolveSkillBody("non-existent")).toBeNull();
   });
 
-  test("rules-manifest root is always included (no bundledFallback flag)", () => {
+  test("rules-manifest root is included by default", () => {
     writeRulesManifest(PLUGIN, "vercel-cli", 5, "vercel.json");
 
     const store = createSkillStore({
@@ -250,6 +250,84 @@ describe("skill-store", () => {
     const loaded = store.loadSkillSet();
     expect(loaded).not.toBeNull();
     expect(loaded!.skillMap["vercel-cli"]).toBeDefined();
+  });
+
+  test("rules-manifest root excluded when includeRulesManifest is false", () => {
+    writeRulesManifest(PLUGIN, "vercel-cli", 5, "vercel.json");
+
+    const store = createSkillStore({
+      projectRoot: PROJECT,
+      pluginRoot: PLUGIN,
+      globalCacheDir: GLOBAL,
+      includeRulesManifest: false,
+    });
+
+    expect(store.roots.length).toBe(2);
+    expect(store.roots.every((r) => r.source !== "rules-manifest")).toBe(true);
+    // No cached skills exist, so loadSkillSet returns null
+    expect(store.loadSkillSet()).toBeNull();
+  });
+
+  test("rules-manifest root excluded when VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK=1", () => {
+    const prev = process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK;
+    process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK = "1";
+    try {
+      writeRulesManifest(PLUGIN, "vercel-cli", 5, "vercel.json");
+
+      const store = createSkillStore({
+        projectRoot: PROJECT,
+        pluginRoot: PLUGIN,
+        globalCacheDir: GLOBAL,
+      });
+
+      expect(store.roots.length).toBe(2);
+      expect(store.roots.every((r) => r.source !== "rules-manifest")).toBe(true);
+      expect(store.loadSkillSet()).toBeNull();
+    } finally {
+      if (prev === undefined) delete process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK;
+      else process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK = prev;
+    }
+  });
+
+  test("uncached skill not resolved when includeRulesManifest is false", () => {
+    writeRulesManifest(PLUGIN, "vercel-cli", 5, "vercel.json");
+    // Put a real skill in project cache so loadSkillSet isn't null
+    writeSkill(PROJECT_SKILLS, "nextjs", 9, "app/**/*.tsx");
+
+    const store = createSkillStore({
+      projectRoot: PROJECT,
+      pluginRoot: PLUGIN,
+      globalCacheDir: GLOBAL,
+      includeRulesManifest: false,
+    });
+
+    const loaded = store.loadSkillSet();
+    expect(loaded).not.toBeNull();
+    // nextjs is cached and should resolve
+    expect(loaded!.skillMap["nextjs"]).toBeDefined();
+    // vercel-cli is only in rules-manifest which is excluded
+    expect(loaded!.skillMap["vercel-cli"]).toBeUndefined();
+    expect(store.resolveSkillPayload("vercel-cli")).toBeNull();
+  });
+
+  test("uncached skill resolves to summary when includeRulesManifest is true", () => {
+    writeRulesManifest(PLUGIN, "vercel-cli", 5, "vercel.json");
+    writeSkill(PROJECT_SKILLS, "nextjs", 9, "app/**/*.tsx");
+
+    const store = createSkillStore({
+      projectRoot: PROJECT,
+      pluginRoot: PLUGIN,
+      globalCacheDir: GLOBAL,
+      includeRulesManifest: true,
+    });
+
+    const loaded = store.loadSkillSet();
+    expect(loaded).not.toBeNull();
+    expect(loaded!.skillMap["vercel-cli"]).toBeDefined();
+    const payload = store.resolveSkillPayload("vercel-cli");
+    expect(payload).not.toBeNull();
+    expect(payload!.mode).toBe("summary");
+    expect(payload!.source).toBe("rules-manifest");
   });
 
   test("resolveSkillPayload returns mode:body when cached body exists", () => {

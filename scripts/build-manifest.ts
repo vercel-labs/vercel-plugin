@@ -9,7 +9,7 @@
  */
 
 import { resolve, join } from "node:path";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 
 // Import the canonical skill-map builder (ESM)
 import { globToRegex, importPatternToRegex } from "../hooks/patterns.mjs";
@@ -21,12 +21,10 @@ export { buildManifest, writeManifestFile, synthesizeChainToFromValidate };
 
 const ROOT = resolve(import.meta.dir, "..");
 
-function resolveInputSkillsDir(): string {
+function resolveInputSkillsDir(): string | null {
   const configured = process.env.VERCEL_PLUGIN_SKILLS_DIR?.trim();
   if (configured) return resolve(configured);
-  throw new Error(
-    "VERCEL_PLUGIN_SKILLS_DIR is required. Set it to the skills source directory (e.g. VERCEL_PLUGIN_SKILLS_DIR=./skills).",
-  );
+  return null;
 }
 const OUT_DIR = join(ROOT, "generated");
 const OUT_FILE = join(OUT_DIR, "skill-rules.json");
@@ -236,7 +234,29 @@ function isMain() {
 }
 
 if (isMain()) {
-  const { manifest, warnings, errors } = buildManifest(resolveInputSkillsDir());
+  const skillsDir = resolveInputSkillsDir();
+
+  if (!skillsDir) {
+    const prebuiltExists = existsSync(OUT_FILE);
+    console.log(
+      JSON.stringify({
+        event: "skill-rules-source-missing",
+        ok: prebuiltExists,
+        skipped: prebuiltExists,
+        outFile: OUT_FILE,
+        requiredEnv: "VERCEL_PLUGIN_SKILLS_DIR",
+      }),
+    );
+    if (!prebuiltExists) {
+      console.error(
+        "Missing VERCEL_PLUGIN_SKILLS_DIR and no prebuilt generated/skill-rules.json exists.",
+      );
+      process.exit(1);
+    }
+    process.exit(0);
+  }
+
+  const { manifest, warnings, errors } = buildManifest(skillsDir);
 
   for (const w of warnings) console.warn(`[warn] ${w}`);
 
@@ -253,6 +273,7 @@ if (isMain()) {
       outFile: OUT_FILE,
       skillCount: count,
       bundledBodies: false,
+      sourceDir: skillsDir,
     }),
   );
 }

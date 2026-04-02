@@ -67,7 +67,7 @@ export function loadProjectInstalledSkillState(args: {
   const skillStore = createSkillStore({
     projectRoot: args.projectRoot,
     pluginRoot: args.pluginRoot,
-    bundledFallback: args.bundledFallbackEnabled,
+    includeRulesManifest: args.bundledFallbackEnabled,
   });
 
   const projectState = readProjectSkillState(args.projectRoot);

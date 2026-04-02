@@ -5,6 +5,9 @@
  * Mirrors the runtime selection pipeline in hooks/pretooluse-skill-inject.mjs:
  *   path/bash/import matching → vercel.json routing → profiler boost → rank → budget+cap
  *
+ * Skill metadata is resolved through the same skill-store contract used by
+ * runtime hooks: project-cache → global-cache → rules-manifest fallback.
+ *
  * Usage:
  *   vercel-plugin explain <file-or-command> [--json] [--project <path>] [--likely-skills s1,s2]
  *   vercel-plugin explain middleware.ts
@@ -21,7 +24,12 @@ import {
   matchImportWithReason,
   rankEntries,
 } from "../../hooks/patterns.mjs";
-import { loadValidatedSkillMap } from "../shared/skill-map-loader.ts";
+import {
+  createSkillStore,
+  type SkillStore,
+  type ResolvedSkillPayload,
+  type SkillStoreLogger,
+} from "../../hooks/src/skill-store.mts";
 import {
   resolveVercelJsonSkills,
   isVercelJsonPath,
@@ -30,6 +38,7 @@ import {
 
 const MAX_SKILLS = 3;
 const DEFAULT_INJECTION_BUDGET_BYTES = 12_000;
+const DEFAULT_PLUGIN_ROOT = resolve(import.meta.dir, "../..");
 
 export interface ExplainMatch {
   skill: string;
@@ -41,7 +50,7 @@ export interface ExplainMatch {
   capped: boolean;
   /** How the skill would be injected: full body, summary-only, or not at all */
   injectionMode: "full" | "summary" | "droppedByCap" | "droppedByBudget";
-  /** Byte size of the SKILL.md body (null if file not found) */
+  /** Byte size of the skill payload (null if unavailable) */
   bodyBytes: number | null;
   /** Human-readable explanation of why the skill was dropped or how it was injected */
   capReason: string;
@@ -65,7 +74,7 @@ export interface ExplainResult {
   skillCount: number;
   budgetBytes: number;
   usedBytes: number;
-  /** Warnings from SKILL.md parsing (malformed frontmatter, missing fields, etc.) */
+  /** Warnings from skill-store loading (malformed frontmatter, missing fields, etc.) */
   buildWarnings: string[];
 }
 
@@ -78,6 +87,10 @@ export interface ExplainOptions {
   fileContent?: string;
   /** Explicit tool name (Read, Edit, Write, Bash) — overrides auto-detection */
   toolName?: string;
+  /** Plugin root directory (default: resolved from import.meta) */
+  pluginRoot?: string;
+  /** Emit debug diagnostics to stderr */
+  debug?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,10 +116,9 @@ function detectTargetType(target: string, toolName?: string): "file" | "bash" {
 // ---------------------------------------------------------------------------
 
 export function explain(target: string, projectRoot: string, options?: ExplainOptions): ExplainResult {
-  const skillsDir = join(projectRoot, "skills");
-  const manifestPath = join(projectRoot, "generated", "skill-rules.json");
   const opts = options || {};
   const budget = opts.budgetBytes ?? DEFAULT_INJECTION_BUDGET_BYTES;
+  const pluginRoot = opts.pluginRoot ?? DEFAULT_PLUGIN_ROOT;
 
   // Parse likely skills for profiler boost simulation
   const likelySkills = new Set<string>();
@@ -117,34 +129,64 @@ export function explain(target: string, projectRoot: string, options?: ExplainOp
     }
   }
 
-  // Load skill map (prefer manifest, fall back to live scan)
-  let skillMap: Record<string, {
-    priority: number;
-    pathPatterns: string[];
-    bashPatterns: string[];
-    importPatterns?: string[];
-    summary?: string;
-    bodyPath?: string;
-  }>;
+  // Build a debug logger that writes to stderr
+  const buildWarnings: string[] = [];
+  const logger: SkillStoreLogger | undefined = opts.debug
+    ? {
+        debug(event, data) {
+          console.error(JSON.stringify({ event, ...data }));
+        },
+        issue(code, message, hint, data) {
+          buildWarnings.push(`${code}: ${message}`);
+          console.error(JSON.stringify({ event: "explain-issue", code, message, hint, ...data }));
+        },
+      }
+    : {
+        issue(code, message) {
+          buildWarnings.push(`${code}: ${message}`);
+        },
+      };
 
-  let buildWarnings: string[] = [];
+  // Load skill metadata through the skill-store contract
+  const store = createSkillStore(
+    {
+      projectRoot,
+      pluginRoot,
+      includeRulesManifest:
+        process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1",
+    },
+    logger,
+  );
 
-  if (existsSync(manifestPath)) {
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-    skillMap = manifest.skills;
-  } else {
-    const { validation, skills, buildDiagnostics } = loadValidatedSkillMap(skillsDir);
-    if (!validation.ok) {
-      throw new Error(`Skill map validation failed: ${validation.errors.join(", ")}`);
-    }
-    buildWarnings = buildDiagnostics;
-    skillMap = skills;
+  const loaded = store.loadSkillSet(logger);
+  if (!loaded) {
+    throw new Error(
+      `No skill metadata available. Expected ~/.vercel-plugin cache entries or ${join(
+        pluginRoot,
+        "generated",
+        "skill-rules.json",
+      )}.`,
+    );
   }
 
-  const targetType = detectTargetType(target, opts.toolName);
+  if (opts.debug) {
+    console.error(
+      JSON.stringify({
+        event: "explain-skill-store-loaded",
+        projectRoot,
+        roots: store.roots.map((root) => ({
+          source: root.source,
+          rootDir: root.rootDir,
+          manifestPath: root.manifestPath,
+        })),
+        skillCount: Object.keys(loaded.skillMap).length,
+      }),
+    );
+  }
 
-  // Compile patterns using the shared engine
-  const compiled = compileSkillPatterns(skillMap);
+  const { skillMap, compiledSkills } = loaded;
+
+  const targetType = detectTargetType(target, opts.toolName);
 
   // Resolve file content for import matching
   let fileContent = opts.fileContent || "";
@@ -168,7 +210,7 @@ export function explain(target: string, projectRoot: string, options?: ExplainOp
     matchType: string;
   }> = [];
 
-  for (const entry of compiled) {
+  for (const entry of compiledSkills) {
     let reason: { pattern: string; matchType: string } | null = null;
 
     if (targetType === "file") {
@@ -222,11 +264,11 @@ export function explain(target: string, projectRoot: string, options?: ExplainOp
   // Sort by effectivePriority DESC, then skill name ASC
   const rankedEntries = rankEntries(matchedEntries);
 
-  // Simulate byte budget + cap selection (mirrors injectSkills in pretooluse-skill-inject.mjs)
-  const injectionPlan = simulateInjection(rankedEntries, skillMap, projectRoot, budget);
+  // Simulate byte budget + cap selection using the skill store
+  const injectionPlan = simulateInjection(rankedEntries, store, budget);
 
   // Build result with injection/cap/budget tracking
-  const matches: ExplainMatch[] = rankedEntries.map((entry, idx) => {
+  const matches: ExplainMatch[] = rankedEntries.map((entry) => {
     const plan = injectionPlan.get(entry.skill)!;
     return {
       skill: entry.skill,
@@ -277,7 +319,7 @@ export function explain(target: string, projectRoot: string, options?: ExplainOp
 }
 
 // ---------------------------------------------------------------------------
-// Byte budget + cap simulation (mirrors injectSkills from pretooluse-skill-inject.mjs)
+// Byte budget + cap simulation using skill store payload resolution
 // ---------------------------------------------------------------------------
 
 interface InjectionPlan {
@@ -286,10 +328,23 @@ interface InjectionPlan {
   capReason: string;
 }
 
+function skillInvocationMessage(skill: string): string {
+  return `You must run the Skill(${skill}) tool.`;
+}
+
+function summaryFallbackText(payload: ResolvedSkillPayload): string {
+  return [
+    skillInvocationMessage(payload.skill),
+    payload.summary.trim() !== "" ? `Summary: ${payload.summary.trim()}` : null,
+    payload.docs.length > 0 ? `Docs: ${payload.docs.join(", ")}` : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
 function simulateInjection(
   rankedEntries: Array<{ skill: string }>,
-  skillMap: Record<string, { summary?: string; bodyPath?: string }>,
-  projectRoot: string,
+  store: SkillStore,
   budgetBytes: number,
 ): Map<string, InjectionPlan> & { usedBytes: number } {
   const result = new Map<string, InjectionPlan>() as Map<string, InjectionPlan> & { usedBytes: number };
@@ -298,48 +353,66 @@ function simulateInjection(
 
   for (const entry of rankedEntries) {
     const skill = entry.skill;
-    const skillPath = join(projectRoot, "skills", skill, "SKILL.md");
+    const payload = store.resolveSkillPayload(skill);
 
-    // Read body size
-    let bodyBytes: number | null = null;
-    let wrappedBytes = 0;
-    try {
-      const content = readFileSync(skillPath, "utf-8");
-      const wrapped = `<!-- skill:${skill} -->\n${content}\n<!-- /skill:${skill} -->`;
-      wrappedBytes = Buffer.byteLength(wrapped, "utf-8");
-      bodyBytes = wrappedBytes;
-    } catch {
-      // SKILL.md not found — would be skipped at runtime too
-      result.set(skill, { mode: "droppedByCap", bodyBytes: null, capReason: "SKILL.md not found" });
+    if (!payload) {
+      result.set(skill, {
+        mode: "droppedByBudget",
+        bodyBytes: null,
+        capReason: "skill payload unavailable",
+      });
       continue;
     }
+
+    // Compute the wrapped text that would be injected at runtime
+    const isBody = payload.mode === "body" && payload.body !== null;
+    const wrapped = isBody
+      ? `<!-- skill:${skill} -->\n${payload.body}\n<!-- /skill:${skill} -->`
+      : summaryFallbackText(payload);
+    const wrappedBytes = Buffer.byteLength(wrapped, "utf-8");
 
     // Hard ceiling check (same as runtime)
     if (loadedCount >= MAX_SKILLS) {
-      result.set(skill, { mode: "droppedByCap", bodyBytes, capReason: `exceeded MAX_SKILLS=${MAX_SKILLS} hard cap (${loadedCount} already injected)` });
+      result.set(skill, {
+        mode: "droppedByCap",
+        bodyBytes: wrappedBytes,
+        capReason: `exceeded MAX_SKILLS=${MAX_SKILLS} hard cap (${loadedCount} already injected)`,
+      });
       continue;
     }
 
-    // Budget check: always allow the first skill full body, then enforce budget
+    // Budget check: always allow the first skill, then enforce budget
     if (loadedCount > 0 && usedBytes + wrappedBytes > budgetBytes) {
-      // Try summary fallback
-      const summary = skillMap[skill]?.summary;
-      if (summary) {
-        const summaryWrapped = `<!-- skill:${skill} mode:summary -->\n${summary}\n<!-- /skill:${skill} -->`;
+      // Try summary fallback if we had a full body
+      if (isBody) {
+        const summaryWrapped = summaryFallbackText(payload);
         const summaryBytes = Buffer.byteLength(summaryWrapped, "utf-8");
         if (usedBytes + summaryBytes <= budgetBytes) {
-          result.set(skill, { mode: "summary", bodyBytes, capReason: `full body (${wrappedBytes}B) exceeds budget (${usedBytes}+${wrappedBytes} > ${budgetBytes}B); using summary (${summaryBytes}B)` });
+          result.set(skill, {
+            mode: "summary",
+            bodyBytes: wrappedBytes,
+            capReason: `full body (${wrappedBytes}B) exceeds budget (${usedBytes}+${wrappedBytes} > ${budgetBytes}B); using summary (${summaryBytes}B)`,
+          });
           loadedCount++;
           usedBytes += summaryBytes;
           continue;
         }
       }
-      result.set(skill, { mode: "droppedByBudget", bodyBytes, capReason: `would exceed byte budget (${usedBytes}+${wrappedBytes} = ${usedBytes + wrappedBytes}B > ${budgetBytes}B)` });
+      result.set(skill, {
+        mode: "droppedByBudget",
+        bodyBytes: wrappedBytes,
+        capReason: `would exceed byte budget (${usedBytes}+${wrappedBytes} = ${usedBytes + wrappedBytes}B > ${budgetBytes}B)`,
+      });
       continue;
     }
 
     const position = loadedCount + 1;
-    result.set(skill, { mode: "full", bodyBytes, capReason: `injected #${position} (${wrappedBytes}B, total ${usedBytes + wrappedBytes}B / ${budgetBytes}B)` });
+    const mode = isBody ? "full" : "summary";
+    result.set(skill, {
+      mode,
+      bodyBytes: wrappedBytes,
+      capReason: `injected #${position} (${wrappedBytes}B, total ${usedBytes + wrappedBytes}B / ${budgetBytes}B)`,
+    });
     loadedCount++;
     usedBytes += wrappedBytes;
   }

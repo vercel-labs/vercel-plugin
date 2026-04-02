@@ -18,6 +18,15 @@ function toStringArray(value) {
     (entry) => typeof entry === "string" && entry.length > 0
   ) : [];
 }
+function shouldIncludeRulesManifest(options) {
+  if (typeof options.includeRulesManifest === "boolean") {
+    return options.includeRulesManifest;
+  }
+  if (typeof options.bundledFallback === "boolean") {
+    return options.bundledFallback;
+  }
+  return process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1";
+}
 function defaultSkillStoreRoots(options) {
   const statePaths = resolveProjectStatePaths(options.projectRoot);
   const globalCacheDir = resolve(
@@ -36,14 +45,16 @@ function defaultSkillStoreRoots(options) {
       rootDir: globalCacheDir,
       skillsDir: globalCacheDir,
       manifestPath: join(globalCacheDir, "manifest.json")
-    },
-    {
+    }
+  ];
+  if (shouldIncludeRulesManifest(options)) {
+    roots.push({
       source: "rules-manifest",
       rootDir: pluginRoot,
       skillsDir: "",
       manifestPath: join(pluginRoot, "generated", "skill-rules.json")
-    }
-  ];
+    });
+  }
   return roots;
 }
 function normalizeManifestSkill(raw) {
@@ -247,8 +258,10 @@ function loadRootSkillSet(root, logger) {
   };
 }
 function createSkillStore(options, logger) {
-  const roots = defaultSkillStoreRoots(options);
+  const includeRulesManifest = shouldIncludeRulesManifest(options);
+  const roots = defaultSkillStoreRoots({ ...options, includeRulesManifest });
   logger?.debug?.("skill-store-roots-resolved", {
+    includeRulesManifest,
     roots: roots.map((r) => ({
       source: r.source,
       rootDir: r.rootDir,

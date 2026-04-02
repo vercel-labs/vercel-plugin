@@ -567,7 +567,7 @@ export function loadSkills(pluginRoot?: string, logger?: Logger, projectRoot?: s
   const skillStore = createSkillStore({
     projectRoot: projectRoot ?? process.cwd(),
     pluginRoot: root,
-    bundledFallback: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1",
+    includeRulesManifest: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1",
   });
 
   const effectiveProjectRoot = projectRoot ?? process.cwd();
@@ -920,7 +920,7 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
   const store = optStore ?? createSkillStore({
     projectRoot: projectRoot ?? process.cwd(),
     pluginRoot: root,
-    bundledFallback: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1",
+    includeRulesManifest: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1",
   });
   const parts: string[] = [];
   const loaded: string[] = [];

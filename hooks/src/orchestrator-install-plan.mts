@@ -133,10 +133,10 @@ export function buildSkillInstallPlan(args: {
     },
     {
       id: "activate-cache-only",
-      label: "Use cache-only mode",
+      label: "Use body-cache-only mode",
       description: args.zeroBundleReady
-        ? "All detected skills are cached. This session can disable shipped fallback metadata."
-        : "Cache-only mode is blocked until the missing skills are installed.",
+        ? "All detected skills are cached. Disables the rules-manifest summary fallback so only cached skill bodies are used."
+        : "Body-cache-only mode is blocked until the missing skills are installed.",
       command: args.zeroBundleReady
         ? "export VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK=1"
         : null,

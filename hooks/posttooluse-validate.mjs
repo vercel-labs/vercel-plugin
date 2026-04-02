@@ -132,7 +132,7 @@ function loadValidateRules(pluginRoot, projectRoot, logger) {
   const store = createSkillStore({
     projectRoot: effectiveProjectRoot,
     pluginRoot,
-    bundledFallback: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
+    includeRulesManifest: process.env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
   });
   const loaded = store.loadSkillSet(l);
   if (!loaded) {
@@ -270,7 +270,7 @@ function runChainInjection(fileContent, matchedSkills, chainMap, sessionId, plug
   const store = skillStore ?? createSkillStore({
     projectRoot: projectRoot ?? process.cwd(),
     pluginRoot,
-    bundledFallback: env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
+    includeRulesManifest: env.VERCEL_PLUGIN_DISABLE_BUNDLED_FALLBACK !== "1"
   });
   const candidates = [];
   for (const skill of matchedSkills) {

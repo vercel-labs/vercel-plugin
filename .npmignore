@@ -1,0 +1,30 @@
+# Source skills directory — not shipped in the package.
+# Runtime hooks resolve skills from ~/.vercel-plugin/ cache
+# or the prebuilt generated/skill-rules.json metadata manifest.
+skills/
+
+# Dev-only directories
+tests/
+smoke-tests/
+evals/
+.playground/
+.reports/
+.ploop/
+
+# Template sources (compiled outputs are committed)
+agents/*.md.tmpl
+commands/*.md.tmpl
+
+# TypeScript hook sources (compiled .mjs outputs are committed)
+hooks/src/
+hooks/tsconfig.json
+hooks/tsup.config.ts
+
+# Build scripts
+scripts/
+
+# Dev config
+.claude/
+.vercel/
+.skills/
+.vercel-plugin/

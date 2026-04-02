@@ -76,15 +76,16 @@ function runExplain(explainArgs: string[]) {
   let projectRoot = resolve(import.meta.dir, "../..");
   let likelySkills: string | undefined;
   let budgetBytes: number | undefined;
+  let debug = false;
 
   for (let i = 0; i < explainArgs.length; i++) {
     const arg = explainArgs[i];
     if (arg === "--json") {
       jsonOutput = true;
-    } else if (arg === "--project") {
+    } else if (arg === "--project" || arg === "--project-root") {
       i++;
       if (i >= explainArgs.length) {
-        console.error("Error: --project requires a path argument");
+        console.error(`Error: ${arg} requires a path argument`);
         process.exit(1);
       }
       projectRoot = resolve(explainArgs[i]);
@@ -106,6 +107,8 @@ function runExplain(explainArgs: string[]) {
         console.error("Error: --budget must be a positive integer");
         process.exit(1);
       }
+    } else if (arg === "--debug") {
+      debug = true;
     } else if (arg === "--help" || arg === "-h") {
       printUsage();
       process.exit(0);
@@ -125,8 +128,10 @@ function runExplain(explainArgs: string[]) {
 
   validateProjectRoot(projectRoot);
 
+  const pluginRoot = projectRoot;
+
   try {
-    const result = explain(target, projectRoot, { likelySkills, budgetBytes });
+    const result = explain(target, projectRoot, { likelySkills, budgetBytes, pluginRoot, debug });
 
     if (jsonOutput) {
       console.log(JSON.stringify(result, null, 2));
