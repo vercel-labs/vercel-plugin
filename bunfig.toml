@@ -1,3 +1,4 @@
 [test]
 root = "./"
+preload = ["./tests/helpers/preload-mock-cache.ts"]
 pathIgnorePatterns = ["smoke-tests/**"]

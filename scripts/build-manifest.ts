@@ -1,152 +1,300 @@
 #!/usr/bin/env bun
 /**
- * Build-time script that generates a static skill manifest from SKILL.md
- * frontmatter. The PreToolUse hook reads this manifest instead of scanning
- * and parsing every SKILL.md on each invocation.
+ * Compiles engine/*.md rule files into generated/skill-rules.json.
+ *
+ * Each engine file has YAML frontmatter with matching rules (pathPatterns,
+ * bashPatterns, importPatterns, promptSignals, validate, chainTo, etc.)
+ * and a markdown body used as the summary fallback when the registry
+ * skill isn't cached locally.
+ *
+ * The compiled output pre-computes glob→regex conversions for runtime speed.
  *
  * Usage:  bun run scripts/build-manifest.ts
- *         node scripts/build-manifest.ts   (also works via bun shim)
  */
 
 import { resolve, join } from "node:path";
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
-
-// Import the canonical skill-map builder (ESM)
+import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { globToRegex, importPatternToRegex } from "../hooks/patterns.mjs";
-import type { SkillEntry, ManifestSkill } from "../hooks/patterns.mjs";
-import type { ChainToRule, ValidationRule } from "../hooks/skill-map-frontmatter.mjs";
-import { loadValidatedSkillMap } from "../src/shared/skill-map-loader.ts";
-
-export { buildManifest, writeManifestFile, synthesizeChainToFromValidate };
 
 const ROOT = resolve(import.meta.dir, "..");
-
-function resolveInputSkillsDir(): string | null {
-  const configured = process.env.VERCEL_PLUGIN_SKILLS_DIR?.trim();
-  if (configured) return resolve(configured);
-  return null;
-}
+const ENGINE_DIR = join(ROOT, "engine");
 const OUT_DIR = join(ROOT, "generated");
 const OUT_FILE = join(OUT_DIR, "skill-rules.json");
 
-interface RulesManifestSkill extends ManifestSkill {}
+// ---------------------------------------------------------------------------
+// Frontmatter parser (minimal, handles the engine file format)
+// ---------------------------------------------------------------------------
 
-interface RulesManifest {
-  generatedAt: string;
-  version: 3;
-  skills: Record<string, RulesManifestSkill>;
+function extractFrontmatter(content: string): { yaml: string; body: string } | null {
+  if (!content.startsWith("---")) return null;
+  const end = content.indexOf("\n---", 3);
+  if (end === -1) return null;
+  return {
+    yaml: content.slice(4, end),
+    body: content.slice(end + 4).trim(),
+  };
 }
 
 /**
- * Compute the bodyPath for a skill given its source directory.
- * When the skill lives under ROOT, return a ROOT-relative path with forward slashes.
- * Otherwise return the absolute path (e.g. for external .skills/ directories).
+ * Minimal YAML parser for the engine frontmatter format.
+ * Handles: scalars, arrays (- items and [inline]), nested objects (2-space indent).
+ * Does NOT handle full YAML spec — just enough for our frontmatter.
  */
-function toBodyPath(skillsDir: string, slug: string): string {
-  const abs = join(skillsDir, slug, "SKILL.md");
-  const rootPrefix = ROOT + "/";
-  const relativeFromRoot = abs.startsWith(rootPrefix)
-    ? abs.slice(rootPrefix.length)
-    : abs;
-  return relativeFromRoot.replaceAll("\\", "/");
+function parseYaml(yaml: string): Record<string, any> {
+  const result: Record<string, any> = {};
+  const lines = yaml.split("\n");
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+
+    // Skip empty lines and comments
+    if (!trimmed || trimmed.startsWith("#")) { i++; continue; }
+
+    // Top-level key
+    const keyMatch = line.match(/^([a-zA-Z_][\w]*)\s*:\s*(.*)/);
+    if (!keyMatch) { i++; continue; }
+
+    const key = keyMatch[1];
+    const valueStr = keyMatch[2].trim();
+
+    if (valueStr === "") {
+      // Check if next lines are array items or nested object
+      const nested = collectBlock(lines, i + 1, 2);
+      if (nested.lines.length > 0 && nested.lines[0].trimStart().startsWith("-")) {
+        result[key] = parseArray(nested.lines, 2);
+      } else {
+        result[key] = parseNestedObject(nested.lines, 2);
+      }
+      i = nested.nextIndex;
+    } else if (valueStr.startsWith("[")) {
+      result[key] = parseInlineArray(valueStr);
+      i++;
+    } else {
+      result[key] = unquote(valueStr);
+      i++;
+    }
+  }
+
+  return result;
 }
 
-/**
- * Compile regex sources for a skill config at build time.
- * Path globs → globToRegex().source, bash patterns → RegExp source,
- * import patterns → importPatternToRegex() source+flags.
- *
- * Returns paired arrays: patterns and regex sources stay in sync so that
- * index N of pathPatterns always corresponds to index N of pathRegexSources.
- * Invalid patterns are dropped from both arrays to prevent index drift.
- */
-function compileRegexSources(config: SkillEntry) {
+function collectBlock(lines: string[], start: number, indent: number): { lines: string[]; nextIndex: number } {
+  const collected: string[] = [];
+  let i = start;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === "" || line.trim().startsWith("#")) { i++; continue; }
+    const lineIndent = line.length - line.trimStart().length;
+    if (lineIndent < indent) break;
+    collected.push(line);
+    i++;
+  }
+  return { lines: collected, nextIndex: i };
+}
+
+function parseArray(lines: string[], baseIndent: number): any[] {
+  const result: any[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+    if (!trimmed.startsWith("-")) { i++; continue; }
+
+    const afterDash = trimmed.slice(1).trim();
+
+    // Check if this is an array of objects (- key: value)
+    if (afterDash.match(/^[a-zA-Z_][\w]*\s*:/)) {
+      const obj: Record<string, any> = {};
+      // First key on the dash line
+      const firstMatch = afterDash.match(/^([a-zA-Z_][\w]*)\s*:\s*(.*)/);
+      if (firstMatch) {
+        obj[firstMatch[1]] = unquote(firstMatch[2].trim());
+      }
+      // Subsequent indented keys
+      i++;
+      while (i < lines.length) {
+        const nextLine = lines[i];
+        const nextTrimmed = nextLine.trimStart();
+        const nextIndent = nextLine.length - nextTrimmed.length;
+        if (nextIndent <= baseIndent || nextTrimmed.startsWith("-")) break;
+        const kvMatch = nextTrimmed.match(/^([a-zA-Z_][\w]*)\s*:\s*(.*)/);
+        if (kvMatch) {
+          obj[kvMatch[1]] = unquote(kvMatch[2].trim());
+        }
+        i++;
+      }
+      result.push(obj);
+    } else if (afterDash.startsWith("[")) {
+      result.push(parseInlineArray(afterDash));
+      i++;
+    } else {
+      result.push(unquote(afterDash));
+      i++;
+    }
+  }
+
+  return result;
+}
+
+function parseNestedObject(lines: string[], baseIndent: number): Record<string, any> {
+  const result: Record<string, any> = {};
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+    const kvMatch = trimmed.match(/^([a-zA-Z_][\w]*)\s*:\s*(.*)/);
+    if (!kvMatch) { i++; continue; }
+
+    const key = kvMatch[1];
+    const valueStr = kvMatch[2].trim();
+
+    if (valueStr === "") {
+      const nested = collectNestedBlock(lines, i + 1, baseIndent + 2);
+      if (nested.lines.length > 0 && nested.lines[0].trimStart().startsWith("-")) {
+        result[key] = parseArray(nested.lines, baseIndent + 2);
+      } else {
+        result[key] = parseNestedObject(nested.lines, baseIndent + 2);
+      }
+      i = nested.nextIndex;
+    } else if (valueStr.startsWith("[")) {
+      result[key] = parseInlineArray(valueStr);
+      i++;
+    } else {
+      result[key] = unquote(valueStr);
+      i++;
+    }
+  }
+
+  return result;
+}
+
+function collectNestedBlock(lines: string[], start: number, indent: number): { lines: string[]; nextIndex: number } {
+  const collected: string[] = [];
+  let i = start;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === "") { i++; continue; }
+    const lineIndent = line.length - line.trimStart().length;
+    if (lineIndent < indent) break;
+    collected.push(line);
+    i++;
+  }
+  return { lines: collected, nextIndex: i };
+}
+
+function parseInlineArray(s: string): any[] {
+  // [item1, item2, "item 3"]
+  const inner = s.slice(1, s.lastIndexOf("]")).trim();
+  if (!inner) return [];
+  // Split on commas not inside brackets/quotes
+  const items: string[] = [];
+  let depth = 0;
+  let current = "";
+  let inQuote = false;
+  let quoteChar = "";
+  for (const ch of inner) {
+    if (inQuote) {
+      current += ch;
+      if (ch === quoteChar) inQuote = false;
+    } else if (ch === '"' || ch === "'") {
+      inQuote = true;
+      quoteChar = ch;
+      current += ch;
+    } else if (ch === "[") {
+      depth++;
+      current += ch;
+    } else if (ch === "]") {
+      depth--;
+      current += ch;
+    } else if (ch === "," && depth === 0) {
+      items.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) items.push(current.trim());
+  return items.map(unquote);
+}
+
+function unquote(s: string): string {
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    return s.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
+  // Parse numbers
+  if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s) as any;
+  return s;
+}
+
+// ---------------------------------------------------------------------------
+// Regex compilation (reuses hook patterns module)
+// ---------------------------------------------------------------------------
+
+function compileRegexSources(config: Record<string, any>) {
   const pathPatterns: string[] = [];
   const pathRegexSources: string[] = [];
-  for (const p of config.pathPatterns) {
+  for (const p of config.pathPatterns || []) {
     try {
       pathRegexSources.push(globToRegex(p).source);
       pathPatterns.push(p);
-    } catch {
-      // Skip invalid — validation catches these
-    }
+    } catch { /* skip invalid */ }
   }
 
   const bashPatterns: string[] = [];
   const bashRegexSources: string[] = [];
-  for (const p of config.bashPatterns) {
+  for (const p of config.bashPatterns || []) {
     try {
-      new RegExp(p); // validate
+      new RegExp(p);
       bashRegexSources.push(p);
       bashPatterns.push(p);
-    } catch {
-      // Skip invalid
-    }
+    } catch { /* skip invalid */ }
   }
 
   const importPatterns: string[] = [];
   const importRegexSources: Array<{ source: string; flags: string }> = [];
-  for (const p of config.importPatterns) {
+  for (const p of config.importPatterns || []) {
     try {
       const re = importPatternToRegex(p);
       importRegexSources.push({ source: re.source, flags: re.flags });
       importPatterns.push(p);
-    } catch {
-      // Skip invalid
-    }
+    } catch { /* skip invalid */ }
   }
 
   return { pathPatterns, pathRegexSources, bashPatterns, bashRegexSources, importPatterns, importRegexSources };
 }
 
-/**
- * Auto-synthesize chainTo entries from validate rules that have upgradeToSkill
- * with severity "error" or "recommended", unless a matching chainTo already
- * exists for that targetSkill in the same skill.
- *
- * Returns the number of synthesized entries added.
- */
-function synthesizeChainToFromValidate(
-  skills: Record<string, SkillEntry>,
-  allSlugs: Set<string>,
-): { count: number; warnings: string[] } {
+// ---------------------------------------------------------------------------
+// Auto-synthesize chainTo from validate upgradeToSkill rules
+// ---------------------------------------------------------------------------
+
+function synthesizeChainTo(skills: Record<string, any>): { count: number; warnings: string[] } {
   let count = 0;
   const warnings: string[] = [];
+  const allSlugs = new Set(Object.keys(skills));
 
   for (const [slug, config] of Object.entries(skills)) {
     if (!config.validate?.length) continue;
+    const existingTargets = new Set((config.chainTo ?? []).map((c: any) => c.targetSkill));
 
-    // Collect existing chainTo targets for this skill
-    const existingTargets = new Set(
-      (config.chainTo ?? []).map((c: ChainToRule) => c.targetSkill),
-    );
-
-    for (const rule of config.validate as ValidationRule[]) {
+    for (const rule of config.validate) {
       if (!rule.upgradeToSkill) continue;
       if (rule.severity !== "error" && rule.severity !== "recommended") continue;
       if (existingTargets.has(rule.upgradeToSkill)) continue;
       if (!allSlugs.has(rule.upgradeToSkill)) {
-        warnings.push(
-          `skill "${slug}": cannot synthesize chainTo for upgradeToSkill "${rule.upgradeToSkill}" — target skill does not exist`,
-        );
+        warnings.push(`skill "${slug}": upgradeToSkill "${rule.upgradeToSkill}" not found`);
         continue;
       }
-
-      const message =
-        rule.upgradeWhy ||
-        `${rule.message} — loading ${rule.upgradeToSkill} guidance.`;
-
-      const synthesized: ChainToRule = {
+      if (!config.chainTo) config.chainTo = [];
+      config.chainTo.push({
         pattern: rule.pattern,
         targetSkill: rule.upgradeToSkill,
-        message,
+        message: rule.upgradeWhy || `${rule.message} — loading ${rule.upgradeToSkill} guidance.`,
         synthesized: true,
-      };
-
-      if (!config.chainTo) {
-        config.chainTo = [];
-      }
-      config.chainTo.push(synthesized);
+      });
       existingTargets.add(rule.upgradeToSkill);
       count++;
     }
@@ -155,74 +303,80 @@ function synthesizeChainToFromValidate(
   return { count, warnings };
 }
 
-/**
- * Build the skill manifest object from the skills directory.
- * Exported so validate.ts can reuse this without duplicating logic.
- */
-function buildManifest(skillsDir: string): { manifest: RulesManifest; warnings: string[]; errors: string[] } {
-  const { validation, buildDiagnostics } = loadValidatedSkillMap(skillsDir);
-  const allWarnings: string[] = [...buildDiagnostics];
+// ---------------------------------------------------------------------------
+// Main: read engine/*.md → compile → write skill-rules.json
+// ---------------------------------------------------------------------------
 
-  if (!validation.ok) {
-    return { manifest: null as any, warnings: allWarnings, errors: validation.errors };
+export { buildFromEngine };
+
+function buildFromEngine(engineDir: string): { manifest: any; warnings: string[]; errors: string[] } {
+  const warnings: string[] = [];
+  const errors: string[] = [];
+
+  if (!existsSync(engineDir)) {
+    errors.push(`Engine directory not found: ${engineDir}`);
+    return { manifest: null, warnings, errors };
   }
 
-  if (validation.warnings?.length) {
-    allWarnings.push(...validation.warnings);
+  const files = readdirSync(engineDir).filter(f => f.endsWith(".md")).sort();
+  const parsedSkills: Record<string, any> = {};
+
+  for (const file of files) {
+    const content = readFileSync(join(engineDir, file), "utf-8");
+    const fm = extractFrontmatter(content);
+    if (!fm) {
+      warnings.push(`${file}: no frontmatter found, skipping`);
+      continue;
+    }
+
+    const config = parseYaml(fm.yaml);
+    const slug = config.name || file.replace(/\.md$/, "");
+    config._body = fm.body;
+    parsedSkills[slug] = config;
   }
 
-  // Auto-synthesize chainTo from upgradeToSkill validate rules
-  const normalizedSkills = validation.normalizedSkillMap.skills as Record<string, SkillEntry>;
-  const allSlugs = new Set(Object.keys(normalizedSkills));
-  const { count: synthCount, warnings: synthWarnings } =
-    synthesizeChainToFromValidate(normalizedSkills, allSlugs);
-  allWarnings.push(...synthWarnings);
+  // Synthesize chainTo from validate rules
+  const { count: synthCount, warnings: synthWarnings } = synthesizeChainTo(parsedSkills);
+  warnings.push(...synthWarnings);
   if (synthCount > 0) {
     console.error(`  ⤳ Synthesized ${synthCount} chainTo rule(s) from upgradeToSkill validate rules`);
   }
 
-  const skills: Record<string, RulesManifestSkill> = {};
-  for (const [slug, config] of Object.entries(normalizedSkills) as [string, SkillEntry][]) {
-    const { pathPatterns, pathRegexSources, bashPatterns, bashRegexSources, importPatterns, importRegexSources } = compileRegexSources(config);
-    skills[slug] = {
-      priority: config.priority,
-      summary: config.summary,
-      docs: config.docs,
-      ...(config.sitemap ? { sitemap: config.sitemap } : {}),
-      pathPatterns,
-      bashPatterns,
-      importPatterns,
-      pathRegexSources,
-      bashRegexSources,
-      importRegexSources,
-      ...(config.validate?.length ? { validate: config.validate } : {}),
-      ...(config.chainTo?.length ? { chainTo: config.chainTo } : {}),
-      ...(config.promptSignals ? { promptSignals: config.promptSignals } : {}),
-      ...(config.retrieval ? { retrieval: config.retrieval } : {}),
+  // Compile into manifest format
+  const skills: Record<string, any> = {};
+  for (const [slug, config] of Object.entries(parsedSkills)) {
+    const compiled = compileRegexSources(config);
+    const entry: Record<string, any> = {
+      priority: typeof config.priority === "number" ? config.priority : 5,
+      summary: config._body || "",
+      ...compiled,
     };
+
+    // Optional fields
+    if (config.docs) {
+      entry.docs = Array.isArray(config.docs) ? config.docs : [config.docs];
+    }
+    if (config.sitemap) entry.sitemap = config.sitemap;
+    if (config.registry) entry.registry = config.registry;
+    if (config.validate?.length) entry.validate = config.validate;
+    if (config.chainTo?.length) entry.chainTo = config.chainTo;
+    if (config.promptSignals) entry.promptSignals = config.promptSignals;
+    if (config.retrieval) entry.retrieval = config.retrieval;
+
+    skills[slug] = entry;
   }
 
-  const manifest: RulesManifest = {
+  const manifest = {
     generatedAt: new Date().toISOString(),
     version: 3,
     skills,
   };
 
-  return { manifest, warnings: allWarnings, errors: [] };
-}
-
-/**
- * Write the manifest JSON to generated/skill-manifest.json.
- * Returns the number of skills written.
- */
-function writeManifestFile(manifest: RulesManifest, outDir = OUT_DIR, outFile = OUT_FILE): number {
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(outFile, JSON.stringify(manifest, null, 2) + "\n");
-  return Object.keys(manifest.skills).length;
+  return { manifest, warnings, errors };
 }
 
 // ---------------------------------------------------------------------------
-// CLI entry point (only when run directly)
+// CLI entry point
 // ---------------------------------------------------------------------------
 
 function isMain() {
@@ -234,46 +388,18 @@ function isMain() {
 }
 
 if (isMain()) {
-  const skillsDir = resolveInputSkillsDir();
-
-  if (!skillsDir) {
-    const prebuiltExists = existsSync(OUT_FILE);
-    console.log(
-      JSON.stringify({
-        event: "skill-rules-source-missing",
-        ok: prebuiltExists,
-        skipped: prebuiltExists,
-        outFile: OUT_FILE,
-        requiredEnv: "VERCEL_PLUGIN_SKILLS_DIR",
-      }),
-    );
-    if (!prebuiltExists) {
-      console.error(
-        "Missing VERCEL_PLUGIN_SKILLS_DIR and no prebuilt generated/skill-rules.json exists.",
-      );
-      process.exit(1);
-    }
-    process.exit(0);
-  }
-
-  const { manifest, warnings, errors } = buildManifest(skillsDir);
+  const { manifest, warnings, errors } = buildFromEngine(ENGINE_DIR);
 
   for (const w of warnings) console.warn(`[warn] ${w}`);
 
   if (errors.length > 0) {
-    console.error("[error] Skill map validation failed:");
-    for (const e of errors) console.error(`  - ${e}`);
+    for (const e of errors) console.error(`[error] ${e}`);
     process.exit(1);
   }
 
-  const count = writeManifestFile(manifest);
-  console.log(
-    JSON.stringify({
-      event: "skill-rules-written",
-      outFile: OUT_FILE,
-      skillCount: count,
-      bundledBodies: false,
-      sourceDir: skillsDir,
-    }),
-  );
+  mkdirSync(OUT_DIR, { recursive: true });
+  writeFileSync(OUT_FILE, JSON.stringify(manifest, null, 2) + "\n");
+
+  const count = Object.keys(manifest.skills).length;
+  console.log(`✓ Wrote ${count} skills to ${OUT_FILE}`);
 }

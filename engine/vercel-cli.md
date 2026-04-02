@@ -1,0 +1,81 @@
+---
+name: vercel-cli
+priority: 4
+docs: https://vercel.com/docs/cli
+sitemap: https://vercel.com/sitemap/docs.xml
+pathPatterns:
+  - "vercel.json"
+  - "vercel.ts"
+  - ".vercel/**"
+  - ".vercelignore"
+  - "now.json"
+bashPatterns:
+  - "^\\s*vercel(?:\\s|$)"
+  - "^\\s*vc(?:\\s|$)"
+  - "\\bnpx\\s+vercel\\b"
+  - "\\bpnpm\\s+dlx\\s+vercel\\b"
+  - "\\bbunx\\s+vercel\\b"
+  - "\\byarn\\s+dlx\\s+vercel\\b"
+  - "\\bnpx\\s+@vercel/config\\b"
+promptSignals:
+  phrases:
+    - "check deployment"
+    - "check deploy"
+    - "deployment status"
+    - "deploy status"
+    - "vercel logs"
+    - "deployment logs"
+    - "deploy logs"
+    - "vercel inspect"
+    - "is it deployed"
+    - "deploy failing"
+    - "deploy failed"
+    - "deployment error"
+    - "check vercel"
+    - "vercel status"
+  allOf:
+    - ["check", "deployment"]
+    - ["check", "deploy"]
+    - ["vercel", "status"]
+    - ["vercel", "logs"]
+    - ["deploy", "error"]
+    - ["deploy", "failed"]
+    - ["deploy", "stuck"]
+  anyOf:
+    - "deployment"
+    - "deploy"
+    - "vercel"
+    - "production"
+  noneOf:
+    - "terraform"
+    - "aws deploy"
+    - "heroku"
+  minScore: 6
+
+  - pattern: "\"crons\"\\s*:"
+    targetSkill: cron-jobs
+    message: "Cron configuration detected in vercel.json — loading Cron Jobs guidance for schedule syntax, CRON_SECRET verification, and function handler patterns."
+  - pattern: "\"functions\"\\s*:\\s*\\{|\"maxDuration\"\\s*:|\"memory\"\\s*:"
+    targetSkill: vercel-functions
+    message: "Functions configuration detected in vercel.json — loading Vercel Functions guidance for runtime options, streaming, and Fluid Compute."
+  - pattern: "\"redirects\"\\s*:\\s*\\[|\"rewrites\"\\s*:\\s*\\[|\"headers\"\\s*:\\s*\\["
+    targetSkill: routing-middleware
+    message: "Routing rules in vercel.json — loading Routing Middleware guidance for platform-level request interception patterns."
+retrieval:
+  aliases: ["vercel command line", "vc cli", "deploy command", "vercel terminal"]
+  intents: ["deploy from cli", "link project", "manage domains", "view logs from terminal"]
+  entities: ["vercel CLI", "vercel deploy", "vercel env", "vercel link", "vercel logs"]
+chainTo:
+  - pattern: "\"crons\"\\s*:"
+    targetSkill: cron-jobs
+    message: "Cron configuration detected in vercel.json — loading Cron Jobs guidance for schedule syntax, CRON_SECRET verification, and function handler patterns."
+  - pattern: "\"functions\"\\s*:\\s*\\{|\"maxDuration\"\\s*:|\"memory\"\\s*:"
+    targetSkill: vercel-functions
+    message: "Functions configuration detected in vercel.json — loading Vercel Functions guidance for runtime options, streaming, and Fluid Compute."
+    skipIfFileContains: "\"crons\"\\s*:"
+  - pattern: "\"redirects\"\\s*:\\s*\\[|\"rewrites\"\\s*:\\s*\\[|\"headers\"\\s*:\\s*\\["
+    targetSkill: routing-middleware
+    message: "Routing rules in vercel.json — loading Routing Middleware guidance for platform-level request interception patterns."
+---
+
+Guidance for vercel-cli. Install from registry for full content.
