@@ -5,8 +5,6 @@ import { tmpdir } from "node:os";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const HOOK_SCRIPT = join(ROOT, "hooks", "user-prompt-submit-skill-inject.mjs");
-const SKILLS_DIR = join(ROOT, "skills");
-
 let testSession: string;
 beforeEach(() => {
   testSession = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;

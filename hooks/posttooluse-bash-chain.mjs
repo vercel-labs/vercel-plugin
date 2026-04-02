@@ -552,7 +552,8 @@ async function runBashChainInjection(packages, sessionId, projectRoot, pluginRoo
     const wrapperPlan = previousPlan ? refreshPersistedSkillInstallPlan({
       projectRoot,
       previousPlan,
-      pluginRootOverride: pluginRoot ?? PLUGIN_ROOT
+      pluginRootOverride: pluginRoot ?? PLUGIN_ROOT,
+      logger: l
     }) : null;
     if (wrapperPlan) {
       const wrapperPalette = formatOrchestratorActionPalette({

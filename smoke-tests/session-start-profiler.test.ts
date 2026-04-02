@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import {
   chmodSync,
   existsSync,
@@ -330,6 +330,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -345,6 +346,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -379,6 +381,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -412,6 +415,7 @@ describe("session-start-profiler", () => {
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -788,6 +792,7 @@ metadata:
     const result = await runProfiler({
       CLAUDE_ENV_FILE: envFile,
       CLAUDE_PROJECT_ROOT: projectDir,
+      VERCEL_PLUGIN_HOME_DIR: testHomeDir,
     });
 
     expect(result.code).toBe(0);
@@ -1366,11 +1371,51 @@ describe("autoInstallDetectedSkills registry filtering (unit)", () => {
   });
 
   test("groups installs by registry and maps registrySlug aliases", async () => {
-    const { autoInstallDetectedSkills } = await import("../hooks/session-start-profiler.mjs");
     const projectRoot = join(tempDir, "grouped-install-project");
     mkdirSync(projectRoot, { recursive: true });
     const statePaths = resolveProjectStatePaths(projectRoot, testHomeDir);
     mkdirSync(statePaths.stateRoot, { recursive: true });
+
+    const installCalls: Array<{
+      source?: string;
+      projectRoot: string;
+      skillNames: string[];
+      installTargets?: Array<{ requestedName: string; installName: string }>;
+    }> = [];
+
+    mock.module(resolve(ROOT, "hooks", "registry-client.mjs"), () => ({
+      createRegistryClient: ({ source }: { source?: string }) => ({
+        installSkills: async (args: {
+          projectRoot: string;
+          skillNames: string[];
+          installTargets?: Array<{ requestedName: string; installName: string }>;
+        }) => {
+          installCalls.push({ source, ...args });
+          const printable = [
+            "npx",
+            "skills",
+            "add",
+            source ?? "vercel/vercel-skills",
+            ...((args.installTargets ?? []).flatMap((target) => ["--skill", target.installName])),
+            "--agent",
+            "claude-code",
+            "-y",
+            "--copy",
+          ].join(" ");
+          return {
+            installed: args.skillNames,
+            reused: [],
+            missing: [],
+            command: printable,
+            commandCwd: statePaths.stateRoot,
+          };
+        },
+      }),
+    }));
+
+    const { autoInstallDetectedSkills } = await import(
+      `../hooks/session-start-profiler.mjs?grouped=${Date.now()}-${Math.random()}`
+    );
 
     const result = await autoInstallDetectedSkills({
       projectRoot,
@@ -1379,9 +1424,41 @@ describe("autoInstallDetectedSkills registry filtering (unit)", () => {
         ["nextjs", "vercel/vercel-skills"],
         ["vercel-cli", "vercel-labs/agent-skills"],
       ]),
+      registryMetadata: new Map([
+        [
+          "nextjs",
+          { registry: "vercel/vercel-skills", registrySlug: "next-best-practices" },
+        ],
+        [
+          "vercel-cli",
+          { registry: "vercel-labs/agent-skills", registrySlug: "vercel-cli-with-tokens" },
+        ],
+      ]),
       logger: undefined,
     });
 
+    expect(installCalls).toHaveLength(2);
+    expect(installCalls).toEqual([
+      {
+        source: "vercel/vercel-skills",
+        projectRoot,
+        skillNames: ["nextjs"],
+        installTargets: [
+          { requestedName: "nextjs", installName: "next-best-practices" },
+        ],
+      },
+      {
+        source: "vercel-labs/agent-skills",
+        projectRoot,
+        skillNames: ["vercel-cli"],
+        installTargets: [
+          {
+            requestedName: "vercel-cli",
+            installName: "vercel-cli-with-tokens",
+          },
+        ],
+      },
+    ]);
     expect(result.command).toContain("vercel/vercel-skills");
     expect(result.command).toContain("vercel-labs/agent-skills");
     expect(result.command).toContain("next-best-practices");

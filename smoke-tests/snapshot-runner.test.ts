@@ -8,7 +8,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync, symlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
@@ -17,7 +17,7 @@ const ROOT = resolve(import.meta.dirname, "..");
 const HOOK_SCRIPT = join(ROOT, "hooks", "pretooluse-skill-inject.mjs");
 const SNAP_DIR = join(ROOT, "tests", "snapshots");
 const FIXTURES_DIR = join(ROOT, "tests", "fixtures");
-const SKILLS_DIR = join(ROOT, "skills");
+const ENGINE_DIR = join(ROOT, "engine");
 
 const UPDATE_SNAPSHOTS =
   process.argv.includes("--update-snapshots") ||
@@ -228,10 +228,13 @@ function seedProjectCache(homeDir: string): void {
   const paths = resolveProjectStatePaths(ROOT, homeDir);
   mkdirSync(paths.skillsDir, { recursive: true });
 
-  for (const entry of readdirSync(SKILLS_DIR)) {
-    const sourceDir = join(SKILLS_DIR, entry);
-    if (!existsSync(join(sourceDir, "SKILL.md"))) continue;
-    symlinkSync(sourceDir, join(paths.skillsDir, entry), "dir");
+  for (const entry of readdirSync(ENGINE_DIR)) {
+    if (!entry.endsWith(".md")) continue;
+    const slug = entry.replace(/\.md$/, "");
+    const skillDir = join(paths.skillsDir, slug);
+    mkdirSync(skillDir, { recursive: true });
+    const content = readFileSync(join(ENGINE_DIR, entry), "utf-8");
+    writeFileSync(join(skillDir, "SKILL.md"), content);
   }
 }
 

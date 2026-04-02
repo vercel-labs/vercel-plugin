@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, beforeEach, afterAll, afterEach } from "bun:test";
-import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, symlinkSync, readdirSync, realpathSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, readdirSync, realpathSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { readdir } from "node:fs/promises";
@@ -7,7 +7,26 @@ import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const HOOK_SCRIPT = join(ROOT, "hooks", "pretooluse-skill-inject.mjs");
-const SKILLS_DIR = join(ROOT, "skills");
+const ENGINE_DIR = join(ROOT, "engine");
+
+/**
+ * Build a skills-dir-compatible structure from engine/ flat .md files.
+ * Creates <dir>/<slug>/SKILL.md for each engine/<slug>.md.
+ */
+function buildSkillsDirFromEngine(targetDir: string): void {
+  mkdirSync(targetDir, { recursive: true });
+  for (const entry of readdirSync(ENGINE_DIR)) {
+    if (!entry.endsWith(".md")) continue;
+    const slug = entry.replace(/\.md$/, "");
+    const skillDir = join(targetDir, slug);
+    mkdirSync(skillDir, { recursive: true });
+    const content = readFileSync(join(ENGINE_DIR, entry), "utf-8");
+    writeFileSync(join(skillDir, "SKILL.md"), content);
+  }
+}
+
+/** Seeded skills directory (populated from engine/ in beforeAll) */
+let SKILLS_DIR: string;
 const TEMP_HOOK_RUNTIME_MODULES = [
   "pretooluse-skill-inject.mjs",
   "project-state-paths.mjs",
@@ -98,7 +117,7 @@ function cleanupSessionDedup(): void {
   } catch {}
 }
 
-function seedProjectCacheForRoot(homeDir: string, projectRoot: string, skillsDir: string): void {
+function seedProjectCacheForRoot(homeDir: string, projectRoot: string, engineDir: string): void {
   const roots = new Set([projectRoot]);
   try {
     roots.add(realpathSync(projectRoot));
@@ -108,21 +127,27 @@ function seedProjectCacheForRoot(homeDir: string, projectRoot: string, skillsDir
     const paths = resolveProjectStatePaths(root, homeDir);
     mkdirSync(paths.skillsDir, { recursive: true });
 
-    for (const entry of readdirSync(skillsDir)) {
-      const sourceDir = join(skillsDir, entry);
-      if (!existsSync(join(sourceDir, "SKILL.md"))) continue;
-      symlinkSync(sourceDir, join(paths.skillsDir, entry), "dir");
+    for (const entry of readdirSync(engineDir)) {
+      if (!entry.endsWith(".md")) continue;
+      const slug = entry.replace(/\.md$/, "");
+      const skillDir = join(paths.skillsDir, slug);
+      mkdirSync(skillDir, { recursive: true });
+      const content = readFileSync(join(engineDir, entry), "utf-8");
+      writeFileSync(join(skillDir, "SKILL.md"), content);
     }
   }
 }
 
 function seedProjectCache(homeDir: string): void {
-  seedProjectCacheForRoot(homeDir, ROOT, SKILLS_DIR);
+  seedProjectCacheForRoot(homeDir, ROOT, ENGINE_DIR);
 }
 
 beforeAll(() => {
   originalDisableBaseTelemetry = process.env.VERCEL_PLUGIN_DISABLE_BASE_TELEMETRY;
   process.env.VERCEL_PLUGIN_DISABLE_BASE_TELEMETRY = "1";
+  // Build a skills-dir-compatible structure from engine/ for buildSkillMap tests
+  SKILLS_DIR = join(tmpdir(), `vp-skills-from-engine-${Date.now()}`);
+  buildSkillsDirFromEngine(SKILLS_DIR);
   testHomeDir = createTempHomeDir();
   seedProjectCache(testHomeDir);
 });
@@ -138,6 +163,7 @@ afterAll(() => {
     process.env.VERCEL_PLUGIN_DISABLE_BASE_TELEMETRY = originalDisableBaseTelemetry;
   }
   rmSync(testHomeDir, { recursive: true, force: true });
+  rmSync(SKILLS_DIR, { recursive: true, force: true });
 });
 
 afterEach(() => {
