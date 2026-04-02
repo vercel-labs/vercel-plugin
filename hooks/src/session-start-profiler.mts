@@ -1006,8 +1006,10 @@ async function main(): Promise<void> {
     logger: log,
   });
 
-  if (installResult.installed.length > 0 || installResult.reused.length > 0) {
-    // Refresh via shared loader after installing new skills
+  if (missingBeforeInstall.length > 0) {
+    // Refresh via shared loader after any install attempt — unconditional so
+    // that global-cache-only or lockfile-only installs are picked up even when
+    // the install result reports zero installed/reused (e.g. external install).
     installedState = loadProjectInstalledSkillState({
       projectRoot,
       pluginRoot: pluginRoot(),
@@ -1018,6 +1020,16 @@ async function main(): Promise<void> {
     skillStore = installedState.skillStore;
     installedSkills = installedState.installedSkills;
     skillCacheStatus = installedState.cacheStatus;
+
+    log.debug("session-start-profiler-post-install-refresh", {
+      projectRoot,
+      installedSkills,
+      missingBeforeInstall,
+      installResultInstalled: installResult.installed,
+      installResultReused: installResult.reused,
+      installResultMissing: installResult.missing,
+      cacheStatusMissing: skillCacheStatus.missingSkills,
+    });
   }
 
   if (missingBeforeInstall.length > 0) {

@@ -8,6 +8,8 @@ import {
   readProjectSkillState
 } from "./project-skill-manifest.mjs";
 import { resolveProjectStatePaths } from "./project-state-paths.mjs";
+import { createSkillStore } from "./skill-store.mjs";
+import { pluginRoot as resolvePluginRoot } from "./hook-env.mjs";
 function uniqueSorted(values) {
   return [
     ...new Set(
@@ -105,6 +107,16 @@ function buildSkillCacheBanner(input) {
     outcome: input.missingSkills.length === 0 ? "ready" : "suggest"
   });
 }
+function resolveInstalledSkillUnion(args) {
+  const store = createSkillStore({
+    projectRoot: args.projectRoot,
+    pluginRoot: args.pluginRootOverride ?? resolvePluginRoot()
+  });
+  return uniqueSorted([
+    ...store.listInstalledSkills(),
+    ...args.projectState.installedSlugs
+  ]);
+}
 async function resolveSkillCacheBanner(args) {
   const initialProjectState = args.projectState ?? readProjectSkillState(args.projectRoot);
   const initialStatus = buildSkillCacheStatus({
@@ -170,9 +182,20 @@ async function resolveSkillCacheBanner(args) {
     };
   }
   const projectState = readProjectSkillState(args.projectRoot);
+  const installedSkills = resolveInstalledSkillUnion({
+    projectRoot: args.projectRoot,
+    projectState,
+    pluginRootOverride: args.pluginRootOverride
+  });
+  args.logger?.debug?.("skill-cache-banner-status-refreshed", {
+    projectRoot: args.projectRoot,
+    installedSkills,
+    projectStateSource: projectState.source,
+    projectStatePath: projectState.projectSkillStatePath
+  });
   const nextStatus = buildSkillCacheStatus({
     likelySkills: args.likelySkills,
-    installedSkills: projectState.installedSlugs,
+    installedSkills,
     bundledFallbackEnabled: args.bundledFallbackEnabled
   });
   const outcome = nextStatus.missingSkills.length === 0 ? "installed" : installResult.installed.length > 0 || installResult.reused.length > 0 ? "partial" : "failed";

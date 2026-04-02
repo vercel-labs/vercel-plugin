@@ -1,10 +1,11 @@
 /**
  * CLI-produced project skill state reader.
  *
- * Instead of building a plugin-owned `.skills/manifest.json` from frontmatter
- * scanning, this module reads whatever the `npx skills` CLI has written into
- * the project — `skills-lock.json`, `.skills/manifest.json`, or simply the
- * set of `.skills/<slug>/SKILL.md` entries on disk.
+ * Instead of building a plugin-owned manifest from frontmatter scanning, this
+ * module reads whatever the `npx skills` CLI has written into the hashed
+ * project state directory at `~/.vercel-plugin/projects/<hash>/` — including
+ * `skills-lock.json`, `.skills/manifest.json`, or simply the set of
+ * `.skills/<slug>/SKILL.md` entries on disk.
  *
  * When a valid `skills-lock.json` is present, its `skills` record keys are
  * the canonical source of installed skill slugs — the directory scan is only

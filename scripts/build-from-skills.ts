@@ -16,7 +16,7 @@
  *   import { extractSkillSection, resolveIncludes } from "./build-from-skills.ts";
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import {
   extractFrontmatter,
@@ -29,11 +29,36 @@ export {
   loadSkillContent,
   compileTemplate,
   DiagnosticCode,
+  resolveDefaultSkillsDir,
 };
 export type { CompileResult, CompileDiagnostic, ResolvedInclude, ResolveOptions, ManifestEntry, BuildManifest };
 
 const ROOT = resolve(import.meta.dir, "..");
-const DEFAULT_SKILLS_DIR = join(ROOT, "skills");
+
+/**
+ * Resolve the skills source directory. Order:
+ * 1. VERCEL_PLUGIN_SKILLS_DIR env var (absolute or relative to ROOT)
+ * 2. ./skills directory if it exists in the repo root
+ * 3. Throw — this is a source-build tool and must not assume bundled skills
+ */
+function resolveDefaultSkillsDir(): string {
+  const configured = process.env.VERCEL_PLUGIN_SKILLS_DIR?.trim();
+  if (configured) {
+    return resolve(ROOT, configured);
+  }
+  const repoSkillsDir = join(ROOT, "skills");
+  if (existsSync(repoSkillsDir)) {
+    return repoSkillsDir;
+  }
+  throw new Error(
+    "No skill source directory found. Set VERCEL_PLUGIN_SKILLS_DIR before running build-from-skills.ts. " +
+    "This script is a source-build tool and must not depend on bundled ./skills in the plugin distribution.",
+  );
+}
+
+function getSkillsDir(skillsDir?: string): string {
+  return skillsDir ?? resolveDefaultSkillsDir();
+}
 
 // ---------------------------------------------------------------------------
 // Diagnostic codes and structured types
@@ -112,13 +137,14 @@ const skillCache = new Map<string, { body: string; yaml: string }>();
 
 function loadSkillContent(
   skillName: string,
-  skillsDir: string = DEFAULT_SKILLS_DIR,
+  skillsDir?: string,
 ): { body: string; yaml: string } {
-  const cacheKey = `${skillsDir}:${skillName}`;
+  const effectiveSkillsDir = getSkillsDir(skillsDir);
+  const cacheKey = `${effectiveSkillsDir}:${skillName}`;
   const cached = skillCache.get(cacheKey);
   if (cached) return cached;
 
-  const skillFile = join(skillsDir, skillName, "SKILL.md");
+  const skillFile = join(effectiveSkillsDir, skillName, "SKILL.md");
   let raw: string;
   try {
     raw = readFileSync(skillFile, "utf-8");
@@ -152,7 +178,7 @@ function loadSkillContent(
 function extractSkillSection(
   skillName: string,
   heading: string,
-  skillsDir: string = DEFAULT_SKILLS_DIR,
+  skillsDir?: string,
 ): string {
   const { body } = loadSkillContent(skillName, skillsDir);
   return extractSectionFromMarkdown(body, heading);
@@ -282,7 +308,8 @@ function resolveIncludes(template: string, options: ResolveOptions & { structure
 function resolveIncludes(template: string, options?: ResolveOptions & { structured?: false }): string;
 function resolveIncludes(template: string, options?: ResolveOptions): string | CompileResult;
 function resolveIncludes(template: string, options: ResolveOptions = {}): string | CompileResult {
-  const { skillsDir = DEFAULT_SKILLS_DIR, strict = true, structured = false } = options;
+  const { skillsDir, strict = true, structured = false } = options;
+  const effectiveSkillsDir = getSkillsDir(skillsDir);
   const errors: string[] = [];
   const resolved: ResolvedInclude[] = [];
   const diagnostics: CompileDiagnostic[] = [];
@@ -297,7 +324,11 @@ function resolveIncludes(template: string, options: ResolveOptions = {}): string
     try {
       if (target.startsWith(FRONTMATTER_PREFIX)) {
         const field = target.slice(FRONTMATTER_PREFIX.length);
-        const content = resolveFrontmatterField(skillName, field, skillsDir);
+        const content = resolveFrontmatterField(
+          skillName,
+          field,
+          effectiveSkillsDir,
+        );
         resolved.push({
           marker,
           skillName,
@@ -311,7 +342,11 @@ function resolveIncludes(template: string, options: ResolveOptions = {}): string
       // File reference: file:<path> or file:<path>:<heading>
       if (target.startsWith(FILE_PREFIX)) {
         const fileTarget = target.slice(FILE_PREFIX.length);
-        const content = resolveFileReference(skillName, fileTarget, skillsDir);
+        const content = resolveFileReference(
+          skillName,
+          fileTarget,
+          effectiveSkillsDir,
+        );
         resolved.push({
           marker,
           skillName,
@@ -323,7 +358,11 @@ function resolveIncludes(template: string, options: ResolveOptions = {}): string
         return content;
       }
       // Section reference
-      const section = extractSkillSection(skillName, target, skillsDir);
+      const section = extractSkillSection(
+        skillName,
+        target,
+        effectiveSkillsDir,
+      );
       if (!section) {
         throw new Error(
           `Heading "${target}" not found in skill "${skillName}"`,
@@ -404,9 +443,13 @@ function compileTemplate(
   templatePath: string,
   opts: { skillsDir?: string } = {},
 ): CompileResult {
-  const { skillsDir = DEFAULT_SKILLS_DIR } = opts;
+  const effectiveSkillsDir = getSkillsDir(opts.skillsDir);
   const template = readFileSync(templatePath, "utf-8");
-  return resolveIncludes(template, { skillsDir, strict: false, structured: true });
+  return resolveIncludes(template, {
+    skillsDir: effectiveSkillsDir,
+    strict: false,
+    structured: true,
+  });
 }
 
 /**
@@ -499,8 +542,18 @@ export function clearSkillCache(): void {
 // ---------------------------------------------------------------------------
 
 if (import.meta.main) {
-  const { readdirSync, writeFileSync, existsSync } = await import("node:fs");
+  const { readdirSync, writeFileSync } = await import("node:fs");
   const { basename, dirname } = await import("node:path");
+  const defaultSkillsDir = resolveDefaultSkillsDir();
+
+  // Emit structured checkpoint so CI/verification can confirm the resolved source root
+  process.stderr.write(
+    JSON.stringify({
+      event: "build-from-skills-source-root",
+      skillsDir: defaultSkillsDir,
+      bundledSkillsDirPresent: existsSync(join(ROOT, "skills")),
+    }) + "\n",
+  );
 
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
@@ -580,7 +633,9 @@ if (import.meta.main) {
     }
 
     try {
-      const resolved = resolveIncludes(templateContent);
+      const resolved = resolveIncludes(templateContent, {
+        skillsDir: defaultSkillsDir,
+      });
 
       if (dryRun) {
         console.log(resolved);
@@ -615,7 +670,11 @@ if (import.meta.main) {
     const templateContent = readFileSync(tmpl, "utf-8");
     const tmplLabel = `${basename(dirname(tmpl))}/${basename(tmpl)}`;
     const outLabel = `${basename(dirname(outFile))}/${basename(outFile)}`;
-    const result = resolveIncludes(templateContent, { strict: false, structured: true });
+    const result = resolveIncludes(templateContent, {
+      skillsDir: defaultSkillsDir,
+      strict: false,
+      structured: true,
+    });
 
     manifestEntries.push({
       template: tmplLabel,
@@ -665,7 +724,11 @@ if (import.meta.main) {
     for (const tmpl of templates) {
       const templateContent = readFileSync(tmpl, "utf-8");
       const tmplLabel = `${basename(dirname(tmpl))}/${basename(tmpl)}`;
-      const result = resolveIncludes(templateContent, { strict: false, structured: true });
+      const result = resolveIncludes(templateContent, {
+        skillsDir: defaultSkillsDir,
+        strict: false,
+        structured: true,
+      });
       const totalBytes = Buffer.byteLength(result.output, "utf-8");
       const includedBytes = result.resolved.reduce((sum, r) => sum + r.contentLength, 0);
       const coveragePercent = totalBytes > 0 ? Math.round((includedBytes / totalBytes) * 100) : 0;

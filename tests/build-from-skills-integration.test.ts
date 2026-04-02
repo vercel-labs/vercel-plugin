@@ -6,7 +6,7 @@ import { describe, test, expect, beforeEach } from "bun:test";
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join, resolve, basename, dirname } from "node:path";
 import { tmpdir } from "node:os";
-import { resolveIncludes, compileTemplate, clearSkillCache } from "../scripts/build-from-skills.ts";
+import { resolveIncludes, compileTemplate, clearSkillCache, resolveDefaultSkillsDir } from "../scripts/build-from-skills.ts";
 import type { BuildManifest, CompileResult } from "../scripts/build-from-skills.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -298,7 +298,7 @@ async function runBuildFromSkills(
     cwd: ROOT,
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, NO_COLOR: "1" },
+    env: { ...process.env, NO_COLOR: "1", VERCEL_PLUGIN_SKILLS_DIR: "./skills" },
   });
 
   const [stdout, stderr] = await Promise.all([
@@ -471,6 +471,72 @@ describe("CLI failure modes", () => {
     // All entries should be "unchanged"
     for (const entry of parsed.templates) {
       expect(entry.status).toBe("unchanged");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Source-only build: checkpoint and zero-bundle error
+// ---------------------------------------------------------------------------
+
+describe("source-only build behavior", () => {
+  test("emits build-from-skills-source-root checkpoint to stderr", async () => {
+    const { stderr, exitCode } = await runBuildFromSkills("--check", "--json");
+    expect(exitCode).toBe(0);
+
+    // Find the checkpoint line in stderr
+    const checkpointLine = stderr.split("\n").find((l) => l.includes("build-from-skills-source-root"));
+    expect(checkpointLine).toBeDefined();
+
+    const checkpoint = JSON.parse(checkpointLine!);
+    expect(checkpoint.event).toBe("build-from-skills-source-root");
+    expect(checkpoint.skillsDir).toContain("skills");
+    expect(typeof checkpoint.bundledSkillsDirPresent).toBe("boolean");
+  });
+
+  test("VERCEL_PLUGIN_SKILLS_DIR overrides default skills directory", async () => {
+    const { stderr, exitCode } = await runBuildFromSkills("--check", "--json");
+    expect(exitCode).toBe(0);
+
+    const checkpointLine = stderr.split("\n").find((l) => l.includes("build-from-skills-source-root"));
+    const checkpoint = JSON.parse(checkpointLine!);
+    // Should resolve to the repo's skills directory
+    expect(checkpoint.skillsDir).toBe(join(ROOT, "skills"));
+  });
+
+  test("resolveDefaultSkillsDir respects VERCEL_PLUGIN_SKILLS_DIR env var", () => {
+    // The function is exported so we can verify its resolution behavior.
+    // Since the repo has ./skills, the function succeeds; we verify it resolves
+    // to the expected path matching the env var we set.
+    const original = process.env.VERCEL_PLUGIN_SKILLS_DIR;
+    try {
+      process.env.VERCEL_PLUGIN_SKILLS_DIR = "./skills";
+      const resolved = resolveDefaultSkillsDir();
+      expect(resolved).toContain("skills");
+      // Should be an absolute path
+      expect(resolved.startsWith("/")).toBe(true);
+    } finally {
+      if (original !== undefined) {
+        process.env.VERCEL_PLUGIN_SKILLS_DIR = original;
+      } else {
+        delete process.env.VERCEL_PLUGIN_SKILLS_DIR;
+      }
+    }
+  });
+
+  test("resolveDefaultSkillsDir falls back to repo skills/ when env var is empty", () => {
+    const original = process.env.VERCEL_PLUGIN_SKILLS_DIR;
+    try {
+      process.env.VERCEL_PLUGIN_SKILLS_DIR = "";
+      // Since the repo has ./skills, this should succeed via fallback
+      const resolved = resolveDefaultSkillsDir();
+      expect(resolved).toBe(join(ROOT, "skills"));
+    } finally {
+      if (original !== undefined) {
+        process.env.VERCEL_PLUGIN_SKILLS_DIR = original;
+      } else {
+        delete process.env.VERCEL_PLUGIN_SKILLS_DIR;
+      }
     }
   });
 });

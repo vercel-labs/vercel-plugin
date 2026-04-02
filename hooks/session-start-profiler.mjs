@@ -670,7 +670,7 @@ async function main() {
     missingSkills: missingBeforeInstall,
     logger: log
   });
-  if (installResult.installed.length > 0 || installResult.reused.length > 0) {
+  if (missingBeforeInstall.length > 0) {
     installedState = loadProjectInstalledSkillState({
       projectRoot,
       pluginRoot: pluginRoot(),
@@ -681,6 +681,15 @@ async function main() {
     skillStore = installedState.skillStore;
     installedSkills = installedState.installedSkills;
     skillCacheStatus = installedState.cacheStatus;
+    log.debug("session-start-profiler-post-install-refresh", {
+      projectRoot,
+      installedSkills,
+      missingBeforeInstall,
+      installResultInstalled: installResult.installed,
+      installResultReused: installResult.reused,
+      installResultMissing: installResult.missing,
+      cacheStatusMissing: skillCacheStatus.missingSkills
+    });
   }
   if (missingBeforeInstall.length > 0) {
     userMessages.unshift(

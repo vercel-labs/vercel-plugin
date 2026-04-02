@@ -103,7 +103,7 @@ describe("build-from-skills workflow smoke test", () => {
   test("--check reports fresh when outputs are up-to-date", () => {
     const result = execSync(
       `bun run scripts/build-from-skills.ts --check --json ${dep.templatePath}`,
-      { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+      { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, VERCEL_PLUGIN_SKILLS_DIR: "./skills" } },
     );
     const json = JSON.parse(result);
     expect(json.stale).toBe(0);
@@ -118,7 +118,7 @@ describe("build-from-skills workflow smoke test", () => {
     try {
       execSync(
         `bun run scripts/build-from-skills.ts --check --json ${dep.templatePath}`,
-        { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+        { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, VERCEL_PLUGIN_SKILLS_DIR: "./skills" } },
       );
       // --check should exit non-zero when stale
       throw new Error("Expected --check to exit with non-zero status");
@@ -143,7 +143,7 @@ describe("build-from-skills workflow smoke test", () => {
       // Run build (not --check) to regenerate
       execSync(
         `bun run scripts/build-from-skills.ts ${dep.templatePath}`,
-        { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+        { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, VERCEL_PLUGIN_SKILLS_DIR: "./skills" } },
       );
 
       // The output file should now contain the sentinel
@@ -154,7 +154,7 @@ describe("build-from-skills workflow smoke test", () => {
       // --check should now report fresh again
       const checkResult = execSync(
         `bun run scripts/build-from-skills.ts --check --json ${dep.templatePath}`,
-        { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+        { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, VERCEL_PLUGIN_SKILLS_DIR: "./skills" } },
       );
       const json = JSON.parse(checkResult);
       expect(json.stale).toBe(0);

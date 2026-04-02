@@ -11,6 +11,8 @@ import {
   type ProjectSkillState,
 } from "./project-skill-manifest.mjs";
 import { resolveProjectStatePaths } from "./project-state-paths.mjs";
+import { createSkillStore } from "./skill-store.mjs";
+import { pluginRoot as resolvePluginRoot } from "./hook-env.mjs";
 
 export interface SkillCacheStatus {
   likelySkills: string[];
@@ -35,6 +37,7 @@ export interface ResolveSkillCacheBannerArgs extends SkillCacheBannerInput {
   registryClient?: RegistryClient;
   logger?: Logger;
   projectState?: ProjectSkillState;
+  pluginRootOverride?: string;
 }
 
 export type SkillCacheBannerOutcome =
@@ -234,6 +237,27 @@ export function buildSkillCacheBanner(
 }
 
 /**
+ * Resolve the union of installed skills from the layered cache (project +
+ * global) and project state (lockfile/directory scan). This mirrors the
+ * same union logic used by `loadProjectInstalledSkillState()` so that
+ * global-cache-only or lockfile-only installs are not misreported as missing.
+ */
+function resolveInstalledSkillUnion(args: {
+  projectRoot: string;
+  projectState: ProjectSkillState;
+  pluginRootOverride?: string;
+}): string[] {
+  const store = createSkillStore({
+    projectRoot: args.projectRoot,
+    pluginRoot: args.pluginRootOverride ?? resolvePluginRoot(),
+  });
+  return uniqueSorted([
+    ...store.listInstalledSkills(),
+    ...args.projectState.installedSlugs,
+  ]);
+}
+
+/**
  * Resolve a skill cache banner, optionally auto-installing missing skills
  * via CLI delegation when `autoInstall` is true.
  *
@@ -318,9 +342,22 @@ export async function resolveSkillCacheBanner(
 
   const projectState = readProjectSkillState(args.projectRoot);
 
+  const installedSkills = resolveInstalledSkillUnion({
+    projectRoot: args.projectRoot,
+    projectState,
+    pluginRootOverride: args.pluginRootOverride,
+  });
+
+  args.logger?.debug?.("skill-cache-banner-status-refreshed", {
+    projectRoot: args.projectRoot,
+    installedSkills,
+    projectStateSource: projectState.source,
+    projectStatePath: projectState.projectSkillStatePath,
+  });
+
   const nextStatus = buildSkillCacheStatus({
     likelySkills: args.likelySkills,
-    installedSkills: projectState.installedSlugs,
+    installedSkills,
     bundledFallbackEnabled: args.bundledFallbackEnabled,
   });
 

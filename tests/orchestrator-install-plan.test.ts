@@ -9,6 +9,7 @@ import {
 import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 
 const FIXED_NOW = () => new Date("2026-03-31T12:00:00.000Z");
+const HASHED_MANIFEST_PATH = resolveProjectStatePaths("/repo").manifestPath;
 
 function makeDetection(skill: string): SkillDetection {
   return {
@@ -35,12 +36,12 @@ describe("buildSkillInstallPlan", () => {
       installedSkills: ["nextjs"],
       bundledFallbackEnabled: true,
       zeroBundleReady: true,
-      projectSkillManifestPath: "/repo/.skills/manifest.json",
+      projectSkillManifestPath: HASHED_MANIFEST_PATH,
       now: FIXED_NOW,
     });
 
     expect(plan.zeroBundleReady).toBe(true);
-    expect(plan.projectSkillManifestPath).toBe("/repo/.skills/manifest.json");
+    expect(plan.projectSkillManifestPath).toBe(HASHED_MANIFEST_PATH);
   });
 
   test("zeroBundleReady false when skills are missing", () => {
@@ -332,7 +333,7 @@ describe("serializeSkillInstallPlan", () => {
       installedSkills: ["nextjs"],
       bundledFallbackEnabled: true,
       zeroBundleReady: true,
-      projectSkillManifestPath: "/repo/.skills/manifest.json",
+      projectSkillManifestPath: HASHED_MANIFEST_PATH,
       now: FIXED_NOW,
     });
 
@@ -340,7 +341,7 @@ describe("serializeSkillInstallPlan", () => {
     const parsed = JSON.parse(json);
 
     expect(parsed.zeroBundleReady).toBe(true);
-    expect(parsed.projectSkillManifestPath).toBe("/repo/.skills/manifest.json");
+    expect(parsed.projectSkillManifestPath).toBe(HASHED_MANIFEST_PATH);
   });
 
   test("serialized JSON has null projectSkillManifestPath when not set", () => {
@@ -372,7 +373,7 @@ describe("formatSkillInstallPalette", () => {
       installedSkills: ["nextjs"],
       bundledFallbackEnabled: true,
       zeroBundleReady: true,
-      projectSkillManifestPath: "/repo/.skills/manifest.json",
+      projectSkillManifestPath: HASHED_MANIFEST_PATH,
       now: FIXED_NOW,
     });
 
