@@ -6,7 +6,9 @@ import { resolve } from "path";
 import { fileURLToPath } from "url";
 import {
   pluginRoot,
+  profileCachePath,
   readSessionFile,
+  safeReadJson,
   writeSessionFile
 } from "./hook-env.mjs";
 import { createLogger, logCaughtError } from "./logger.mjs";
@@ -15,6 +17,65 @@ import {
 } from "./session-start-profiler.mjs";
 import { createSkillStore } from "./skill-store.mjs";
 var log = createLogger();
+function loadSessionProfileSnapshot(sessionId, fallbackProjectRoot) {
+  const cached = sessionId ? safeReadJson(profileCachePath(sessionId)) : null;
+  const projectRoot = typeof cached?.projectRoot === "string" && cached.projectRoot.trim() !== "" ? cached.projectRoot : fallbackProjectRoot;
+  const likelySkills = Array.isArray(cached?.likelySkills) && cached.likelySkills.length > 0 ? [...new Set(cached.likelySkills.map((s) => s.trim()).filter(Boolean))] : (sessionId ? readSessionFile(sessionId, "likely-skills") : process.env.VERCEL_PLUGIN_LIKELY_SKILLS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const greenfield = cached?.greenfield === true || (sessionId ? readSessionFile(sessionId, "greenfield") === "true" : process.env.VERCEL_PLUGIN_GREENFIELD === "true");
+  const projectFacts = [];
+  if (greenfield) projectFacts.push("greenfield");
+  const projectFactsRaw = process.env.VERCEL_PLUGIN_PROJECT_FACTS ?? "";
+  for (const fact of projectFactsRaw.split(",")) {
+    const trimmed = fact.trim();
+    if (trimmed && !projectFacts.includes(trimmed)) {
+      projectFacts.push(trimmed);
+    }
+  }
+  let detections;
+  if (Array.isArray(cached?.detections) && cached.detections.length > 0) {
+    detections = cached.detections.map((entry) => ({
+      skill: entry.skill,
+      reasons: entry.reasons.map((reason) => ({
+        kind: reason.kind,
+        source: reason.source,
+        detail: reason.detail
+      }))
+    }));
+  } else if (greenfield) {
+    detections = likelySkills.map((skill) => ({
+      skill,
+      reasons: [
+        {
+          kind: "greenfield",
+          source: "project-root",
+          detail: "greenfield"
+        }
+      ]
+    }));
+    log.debug("session-start-engine-context:profile-cache-fallback", {
+      sessionId,
+      reason: "greenfield_without_cached_detections",
+      projectRoot
+    });
+  } else {
+    detections = profileProjectDetections(projectRoot);
+    log.debug("session-start-engine-context:profile-cache-fallback", {
+      sessionId,
+      reason: "cache_miss",
+      projectRoot,
+      detectionCount: detections.length
+    });
+  }
+  log.debug("session-start-engine-context:profile-cache", {
+    sessionId,
+    cacheHit: Boolean(cached?.detections?.length),
+    projectRoot,
+    likelySkills,
+    greenfield,
+    detectionCount: detections.length
+  });
+  return { projectRoot, likelySkills, detections, projectFacts, greenfield };
+}
 var STRONG_DEPENDENCY_PREFIXES = ["ai", "@ai-sdk/", "@vercel/"];
 function isStrongReason(reason) {
   if (reason.kind === "vercel-json") return true;
@@ -72,27 +133,34 @@ function resolveSessionStartSkillEntries(projectRoot, skills) {
     }
     const payload = store.resolveSkillPayload(skill, log);
     const body = payload?.mode === "body" && payload.body ? payload.body.trim() : null;
+    const source = payload?.source ?? "missing";
+    const summary = (config.summary ?? "").trim() || null;
+    const eligible = resolveSessionStartEligibility(config, body);
+    log.debug("session-start-engine-context:skill-entry", {
+      projectRoot,
+      skill,
+      source,
+      eligible,
+      summaryBytes: summary ? Buffer.byteLength(summary, "utf8") : 0,
+      bodyBytes: body ? Buffer.byteLength(body, "utf8") : 0
+    });
     return [
       {
         skill,
-        summary: (config.summary ?? "").trim(),
-        summarySource: loaded.origins[skill]?.source ?? "unknown",
-        sessionStartEligible: resolveSessionStartEligibility(config, body),
+        summary,
         body,
-        bodySource: body ? payload?.source ?? null : null
+        source,
+        sessionStartEligible: eligible
       }
     ];
   });
-  log.summary("session-start-engine-context:resolved-skills", {
+  log.summary("session-start-engine-context:skill-entry-summary", {
     projectRoot,
     requestedSkills: skills,
     resolvedSkills: entries.map((entry) => ({
       skill: entry.skill,
-      eligible: entry.sessionStartEligible,
-      hasSummary: entry.summary !== "",
-      hasBody: entry.body !== null,
-      summarySource: entry.summarySource,
-      bodySource: entry.bodySource
+      source: entry.source,
+      eligible: entry.sessionStartEligible
     }))
   });
   return entries;
@@ -155,89 +223,55 @@ function buildPresentationFooter(state) {
     "- The plugin will load fuller guidance automatically when you touch matching files or prompts."
   ];
 }
-function buildTier1Block(likelySkills, projectFacts, skillEntries) {
-  const teaserLines = buildSummaryTeasers(skillEntries, 2);
-  const lines = [
-    `<!-- vercel-plugin:session-start tier="1" state="summary-only" -->`,
-    ...buildPresentationHeader(likelySkills, projectFacts, "summary-only"),
-    "",
-    "### Ready now",
-    ...teaserLines.length > 0 ? teaserLines : [
-      "- Matching skills were detected, but no startup summaries were available."
-    ],
-    "",
-    ...buildPresentationFooter("summary-only"),
-    `<!-- /vercel-plugin:session-start -->`
-  ];
-  return lines.join("\n");
-}
-function buildTier2Block(likelySkills, projectFacts, skillEntries) {
-  const teaserLines = buildSummaryTeasers(skillEntries, 3);
-  const lines = [
-    `<!-- vercel-plugin:session-start tier="2" state="summary-only" -->`,
-    ...buildPresentationHeader(likelySkills, projectFacts, "summary-only"),
-    "",
-    "### Ready now",
-    ...teaserLines.length > 0 ? teaserLines : [
-      "- Matching skills were detected, but no startup summaries were available."
-    ],
-    "",
-    ...buildPresentationFooter("summary-only"),
-    `<!-- /vercel-plugin:session-start -->`
-  ];
-  return lines.join("\n");
-}
-function buildTier3Block(likelySkills, projectFacts, skillEntries) {
-  const bodyCandidate = selectBodyCandidate(skillEntries);
+function buildSessionStartBlock(tier, likelySkills, projectFacts, skillEntries) {
+  const bodyCandidate = tier >= 3 ? selectBodyCandidate(skillEntries) : null;
   const state = bodyCandidate ? "body-selected" : "summary-only";
+  const teaserLimit = bodyCandidate ? 2 : tier <= 1 ? 2 : 3;
+  const teaserLines = buildSummaryTeasers(skillEntries, teaserLimit);
   const lines = [
-    `<!-- vercel-plugin:session-start tier="3" state="${state}" -->`,
+    `<!-- vercel-plugin:session-start tier="${tier}" state="${state}" -->`,
     ...buildPresentationHeader(likelySkills, projectFacts, state),
     ""
   ];
-  const teaserLines = buildSummaryTeasers(
-    skillEntries,
-    bodyCandidate ? 2 : 4
-  );
   if (teaserLines.length > 0) {
     lines.push(
       bodyCandidate ? "### Also relevant" : "### Ready now",
       ...teaserLines,
       ""
     );
+  } else {
+    lines.push(
+      "### Ready now",
+      "- Matching skills were detected, but no startup summaries were available.",
+      ""
+    );
   }
   if (bodyCandidate) {
     log.summary("session-start-engine-context:body-selected", {
       skill: bodyCandidate.skill,
-      bodySource: bodyCandidate.bodySource,
+      source: bodyCandidate.source,
       bodyBytes: Buffer.byteLength(bodyCandidate.body, "utf8")
     });
     lines.push(
       "### Loaded now",
-      `- \`${bodyCandidate.skill}\` from ${bodyCandidate.bodySource ?? "unknown-source"}`,
+      `- \`${bodyCandidate.skill}\` from ${bodyCandidate.source}`,
       "",
       trimBodyPreview(bodyCandidate.body),
-      ""
-    );
-  } else {
-    log.summary("session-start-engine-context:no-body-selected", {
-      eligibleSkills: presentableSkillEntries(skillEntries).filter((entry) => entry.sessionStartEligible !== "none").map((entry) => ({
-        skill: entry.skill,
-        sessionStartEligible: entry.sessionStartEligible,
-        summarySource: entry.summarySource,
-        bodySource: entry.bodySource
-      }))
-    });
-    lines.push(
-      "### Full guide not loaded yet",
-      "- No cached skill body was selected for startup preview.",
-      "- That is okay: the plugin will still inject the right guide when you open matching files.",
       ""
     );
   }
   lines.push(...buildPresentationFooter(state));
   lines.push(`<!-- /vercel-plugin:session-start -->`);
-  return lines.join("\n");
+  const block = lines.join("\n");
+  log.summary("session-start-engine-context:rendered", {
+    tier,
+    state,
+    likelySkills,
+    teaserCount: teaserLines.length,
+    bodySkill: bodyCandidate?.skill ?? null,
+    outputBytes: Buffer.byteLength(block, "utf8")
+  });
+  return block;
 }
 function buildGreenfieldBlock(likelySkills, projectFacts) {
   const lines = [
@@ -256,7 +290,7 @@ function buildGreenfieldBlock(likelySkills, projectFacts) {
   return lines.join("\n");
 }
 function logPresentationState(args) {
-  const bodyCandidate = selectBodyCandidate(args.skillEntries);
+  const bodyCandidate = args.tier >= 3 ? selectBodyCandidate(args.skillEntries) : null;
   const state = args.projectFacts.includes("greenfield") && args.tier === 0 ? "greenfield" : bodyCandidate ? "body-selected" : "summary-only";
   log.summary("session-start-engine-context:presentation-state", {
     tier: args.tier,
@@ -281,63 +315,28 @@ function main() {
     const input = parseInput(readFileSync(0, "utf8"));
     const sessionId = input?.session_id ?? null;
     const cwd = process.cwd();
-    const likelySkillsRaw = sessionId ? readSessionFile(sessionId, "likely-skills") : process.env.VERCEL_PLUGIN_LIKELY_SKILLS ?? "";
-    const likelySkills = likelySkillsRaw.split(",").map((s) => s.trim()).filter(Boolean);
-    const isGreenfield = sessionId ? readSessionFile(sessionId, "greenfield") === "true" : process.env.VERCEL_PLUGIN_GREENFIELD === "true";
-    const detections = isGreenfield ? likelySkills.map((skill) => ({
-      skill,
-      reasons: [{ kind: "greenfield", source: "project-root", detail: "greenfield" }]
-    })) : profileProjectDetections(cwd);
-    const projectFacts = [];
-    if (isGreenfield) projectFacts.push("greenfield");
-    const projectFactsRaw = process.env.VERCEL_PLUGIN_PROJECT_FACTS;
-    if (projectFactsRaw) {
-      for (const fact of projectFactsRaw.split(",")) {
-        const trimmed = fact.trim();
-        if (trimmed && !projectFacts.includes(trimmed)) {
-          projectFacts.push(trimmed);
-        }
-      }
-    }
+    const snapshot = loadSessionProfileSnapshot(sessionId, cwd);
+    const { projectRoot, likelySkills, detections, projectFacts, greenfield } = snapshot;
     const tier = computeSessionTier(detections, projectFacts);
     if (sessionId) {
       writeSessionFile(sessionId, "session-tier", String(tier));
     }
-    const skillEntries = resolveSessionStartSkillEntries(cwd, likelySkills);
+    const skillEntries = tier > 0 ? resolveSessionStartSkillEntries(projectRoot, likelySkills) : [];
     const parts = [];
     if (tier === 0) {
-      if (isGreenfield) {
-        log.summary("session-start-engine-context:greenfield-rendered", {
-          tier,
-          isGreenfield,
-          likelySkills,
-          projectFacts
-        });
+      if (greenfield) {
         parts.push(buildGreenfieldBlock(likelySkills, projectFacts));
       }
     } else {
-      if (tier === 1) {
-        parts.push(buildTier1Block(likelySkills, projectFacts, skillEntries));
-      } else if (tier === 2) {
-        parts.push(buildTier2Block(likelySkills, projectFacts, skillEntries));
-      } else {
-        parts.push(buildTier3Block(likelySkills, projectFacts, skillEntries));
+      parts.push(
+        buildSessionStartBlock(tier, likelySkills, projectFacts, skillEntries)
+      );
+      if (greenfield) {
+        parts.push(buildGreenfieldBlock(likelySkills, projectFacts));
       }
     }
     if (parts.length === 0) return;
     const output = parts.join("\n\n");
-    log.summary("session-start-engine-context:assembled", {
-      tier,
-      likelySkills,
-      projectFacts,
-      skillEntries: skillEntries.map((entry) => ({
-        skill: entry.skill,
-        eligible: entry.sessionStartEligible,
-        summarySource: entry.summarySource,
-        bodySource: entry.bodySource
-      })),
-      emittedBytes: Buffer.byteLength(output, "utf8")
-    });
     logPresentationState({
       tier,
       likelySkills,
@@ -356,7 +355,7 @@ if (isEntrypoint) {
   main();
 }
 export {
-  buildTier3Block,
+  buildSessionStartBlock,
   computeSessionTier,
   resolveSessionStartSkillEntries
 };

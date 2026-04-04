@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { resolveProjectStatePaths } from "../hooks/src/project-state-paths.mts";
 import {
   resolveSessionStartSkillEntries,
-  buildTier3Block,
+  buildSessionStartBlock,
+  computeSessionTier,
 } from "../hooks/src/session-start-engine-context.mts";
 import {
   buildMinimalContext,
@@ -107,12 +108,43 @@ describe("bootstrap cache fidelity", () => {
     const entries = resolveSessionStartSkillEntries(projectRoot, ["ai-sdk"]);
     expect(entries).toHaveLength(1);
     expect(entries[0]?.body).toContain("Use streamText()");
-    expect(entries[0]?.bodySource).toBe("project-cache");
+    expect(entries[0]?.source).toBe("project-cache");
 
-    const block = buildTier3Block(["ai-sdk"], [], entries);
+    const block = buildSessionStartBlock(3, ["ai-sdk"], [], entries);
     expect(block).toContain("### Loaded now");
     expect(block).toContain("`ai-sdk` from project-cache");
     expect(block).toContain("Use streamText()");
+  });
+
+  test("weak project produces summary-only state", () => {
+    // Tier 1: one weak detection, no strong signals
+    const detections = [
+      { skill: "ai-sdk", reasons: [{ kind: "dependency" as const, source: "some-pkg", detail: "weak" }] },
+    ];
+    const tier = computeSessionTier(detections, []);
+    expect(tier).toBe(1);
+
+    const entries = resolveSessionStartSkillEntries(projectRoot, ["ai-sdk"]);
+    // Tier < 3 means buildSessionStartBlock will NOT select a body
+    const block = buildSessionStartBlock(tier, ["ai-sdk"], [], entries);
+    expect(block).toContain('state="summary-only"');
+    expect(block).not.toContain("### Loaded now");
+    expect(block).toContain("### Ready now");
+  });
+
+  test("greenfield with no likely skills emits only greenfield block", () => {
+    // Tier 0 with greenfield = true: no skill entries, just greenfield context
+    const detections: { skill: string; reasons: { kind: string; source: string; detail: string }[] }[] = [];
+    const tier = computeSessionTier(detections, ["greenfield"]);
+    expect(tier).toBe(0);
+
+    // With tier 0 and no skills, buildSessionStartBlock is never called.
+    // The greenfield block is emitted separately by main(). Verify the tier logic.
+    // We can still verify that buildSessionStartBlock with tier 0 produces summary-only
+    // (no body selected) if it were called:
+    const block = buildSessionStartBlock(0, [], ["greenfield"], []);
+    expect(block).toContain('state="summary-only"');
+    expect(block).not.toContain("### Loaded now");
   });
 
   test("subagent bootstrap only reports skills that were actually included", () => {

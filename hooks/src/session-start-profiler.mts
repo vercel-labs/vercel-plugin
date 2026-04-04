@@ -1453,6 +1453,14 @@ async function main(): Promise<void> {
       const cache = {
         projectRoot,
         likelySkills,
+        detections: detections.map(({ skill, reasons }) => ({
+          skill,
+          reasons: reasons.map(({ kind, source, detail }) => ({
+            kind,
+            source,
+            detail,
+          })),
+        })),
         installedSkills,
         missingSkills: skillCacheStatus.missingSkills,
         zeroBundleReady: skillCacheStatus.zeroBundleReady,
@@ -1464,6 +1472,13 @@ async function main(): Promise<void> {
         agentBrowserAvailable,
         timestamp: new Date().toISOString(),
       };
+      log.debug("session-start-profiler:profile-cache-write", {
+        sessionId,
+        projectRoot,
+        likelySkillsCount: likelySkills.length,
+        detectionCount: detections.length,
+        greenfield: greenfield !== null,
+      });
       writeFileSync(profileCachePath(sessionId), JSON.stringify(cache), "utf-8");
     } catch (error) {
       logCaughtError(log, "session-start-profiler:write-profile-cache-failed", error, {
