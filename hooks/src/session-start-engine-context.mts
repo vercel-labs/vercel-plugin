@@ -66,7 +66,12 @@ interface ProfileCache {
   projectRoot: string;
   likelySkills: string[];
   detections?: CachedSkillDetection[];
+  projectFacts?: ProjectFact[];
   greenfield: boolean;
+  installedSkills?: string[];
+  missingSkills?: string[];
+  zeroBundleReady?: boolean;
+  projectSkillManifestPath?: string | null;
   bootstrapHints: string[];
   resourceHints: string[];
   setupMode: boolean;
@@ -115,6 +120,13 @@ function loadSessionProfileSnapshot(
 
   const projectFacts: ProjectFact[] = [];
   if (greenfield) projectFacts.push("greenfield");
+  if (Array.isArray(cached?.projectFacts)) {
+    for (const fact of cached!.projectFacts) {
+      if (fact && !projectFacts.includes(fact)) {
+        projectFacts.push(fact);
+      }
+    }
+  }
   const projectFactsRaw = process.env.VERCEL_PLUGIN_PROJECT_FACTS ?? "";
   for (const fact of projectFactsRaw.split(",")) {
     const trimmed = fact.trim() as ProjectFact;

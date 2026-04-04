@@ -89,6 +89,31 @@ export type ProjectFact =
   | "no-env-files"
   | "no-ai-gateway-dep";
 
+/**
+ * Shape of the JSON snapshot written to profileCachePath(sessionId).
+ * Downstream consumers (session-start-engine-context, subagent-start-bootstrap)
+ * should treat new fields as optional for backward tolerance.
+ */
+export interface SessionProfileCache {
+  projectRoot: string;
+  likelySkills: string[];
+  detections: Array<{
+    skill: string;
+    reasons: Array<{ kind: string; source: string; detail: string }>;
+  }>;
+  projectFacts: ProjectFact[];
+  installedSkills: string[];
+  missingSkills: string[];
+  zeroBundleReady: boolean;
+  projectSkillManifestPath: string | null;
+  greenfield: boolean;
+  bootstrapHints: string[];
+  resourceHints: string[];
+  setupMode: boolean;
+  agentBrowserAvailable: boolean;
+  timestamp: string;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -1450,7 +1475,7 @@ async function main(): Promise<void> {
   // Write profile cache so SubagentStart hooks can read it without re-profiling
   if (sessionId) {
     try {
-      const cache = {
+      const cache: SessionProfileCache = {
         projectRoot,
         likelySkills,
         detections: detections.map(({ skill, reasons }) => ({
@@ -1461,6 +1486,7 @@ async function main(): Promise<void> {
             detail,
           })),
         })),
+        projectFacts,
         installedSkills,
         missingSkills: skillCacheStatus.missingSkills,
         zeroBundleReady: skillCacheStatus.zeroBundleReady,
@@ -1472,11 +1498,14 @@ async function main(): Promise<void> {
         agentBrowserAvailable,
         timestamp: new Date().toISOString(),
       };
-      log.debug("session-start-profiler:profile-cache-write", {
+      log.debug("session-start-profiler:profile-cache-written", {
         sessionId,
         projectRoot,
-        likelySkillsCount: likelySkills.length,
+        likelySkillCount: likelySkills.length,
         detectionCount: detections.length,
+        projectFactCount: projectFacts.length,
+        installedSkillCount: installedSkills.length,
+        missingSkillCount: skillCacheStatus.missingSkills.length,
         greenfield: greenfield !== null,
       });
       writeFileSync(profileCachePath(sessionId), JSON.stringify(cache), "utf-8");

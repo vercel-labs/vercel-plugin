@@ -24,6 +24,13 @@ function loadSessionProfileSnapshot(sessionId, fallbackProjectRoot) {
   const greenfield = cached?.greenfield === true || (sessionId ? readSessionFile(sessionId, "greenfield") === "true" : process.env.VERCEL_PLUGIN_GREENFIELD === "true");
   const projectFacts = [];
   if (greenfield) projectFacts.push("greenfield");
+  if (Array.isArray(cached?.projectFacts)) {
+    for (const fact of cached.projectFacts) {
+      if (fact && !projectFacts.includes(fact)) {
+        projectFacts.push(fact);
+      }
+    }
+  }
   const projectFactsRaw = process.env.VERCEL_PLUGIN_PROJECT_FACTS ?? "";
   for (const fact of projectFactsRaw.split(",")) {
     const trimmed = fact.trim();

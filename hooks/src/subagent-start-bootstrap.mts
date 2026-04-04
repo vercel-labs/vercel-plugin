@@ -65,6 +65,19 @@ interface ProfileCache {
   projectRoot: string;
   likelySkills: string[];
   greenfield: boolean;
+  projectFacts?: string[];
+  detections?: Array<{
+    skill: string;
+    reasons: Array<{
+      kind: string;
+      source: string;
+      detail: string;
+    }>;
+  }>;
+  installedSkills?: string[];
+  missingSkills?: string[];
+  zeroBundleReady?: boolean;
+  projectSkillManifestPath?: string | null;
   bootstrapHints: string[];
   resourceHints: string[];
   setupMode: boolean;

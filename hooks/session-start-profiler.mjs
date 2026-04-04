@@ -995,6 +995,7 @@ async function main() {
             detail
           }))
         })),
+        projectFacts,
         installedSkills,
         missingSkills: skillCacheStatus.missingSkills,
         zeroBundleReady: skillCacheStatus.zeroBundleReady,
@@ -1006,11 +1007,14 @@ async function main() {
         agentBrowserAvailable,
         timestamp: (/* @__PURE__ */ new Date()).toISOString()
       };
-      log.debug("session-start-profiler:profile-cache-write", {
+      log.debug("session-start-profiler:profile-cache-written", {
         sessionId,
         projectRoot,
-        likelySkillsCount: likelySkills.length,
+        likelySkillCount: likelySkills.length,
         detectionCount: detections.length,
+        projectFactCount: projectFacts.length,
+        installedSkillCount: installedSkills.length,
+        missingSkillCount: skillCacheStatus.missingSkills.length,
         greenfield: greenfield !== null
       });
       writeFileSync(profileCachePath(sessionId), JSON.stringify(cache), "utf-8");
