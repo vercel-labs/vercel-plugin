@@ -1,6 +1,6 @@
 ---
 name: react-best-practices
-registry: vercel-labs/agent-skills
+registry: vercel/vercel-skills
 registrySlug: vercel-react-best-practices
 priority: 4
 docs:

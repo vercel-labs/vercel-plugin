@@ -699,7 +699,8 @@ async function autoInstallDetectedSkills(args) {
       reused: result.reused,
       missing: result.missing,
       skippedNonRegistry: skipped,
-      command: result.command
+      command: result.command,
+      commandCwd: result.commandCwd
     });
     return {
       ...result,

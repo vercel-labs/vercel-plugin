@@ -96,7 +96,7 @@ describe("installSkills", () => {
           "--agent", "claude-code",
           "-y", "--copy",
         ],
-        cwd: PROJECT,
+        cwd: state.stateRoot,
       },
     ]);
     expect(result.installed).toEqual(["nextjs"]);

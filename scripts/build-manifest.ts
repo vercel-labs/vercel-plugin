@@ -441,5 +441,19 @@ if (isMain()) {
   writeFileSync(OUT_FILE, JSON.stringify(manifest, null, 2) + "\n");
 
   const count = Object.keys(manifest.skills).length;
+  const registryBacked = Object.values(manifest.skills).filter(
+    (skill: any) =>
+      typeof skill.registry === "string" && skill.registry.trim() !== "",
+  );
+  const registries = [
+    ...new Set(
+      registryBacked.map((skill: any) => skill.registry as string),
+    ),
+  ].sort();
   console.log(`✓ Wrote ${count} skills to ${OUT_FILE}`);
+  console.log(
+    `✓ Registry-backed skills: ${registryBacked.length}${
+      registries.length > 0 ? ` (${registries.join(", ")})` : ""
+    }`,
+  );
 }

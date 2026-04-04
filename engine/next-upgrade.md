@@ -1,6 +1,6 @@
 ---
 name: next-upgrade
-registry: vercel-labs/next-skills
+registry: vercel/vercel-skills
 priority: 6
 docs:
   - https://nextjs.org/docs/app/guides/upgrading

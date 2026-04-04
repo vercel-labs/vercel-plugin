@@ -11,13 +11,15 @@
  */
 
 import { execFile } from "node:child_process";
-import { resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { buildSkillsAddCommand } from "./skills-cli-command.mjs";
 import { readProjectSkillState } from "./project-skill-manifest.mjs";
 import {
   ensureProjectStateRoot,
   resolveProjectStatePaths,
+  resolveVercelPluginHome,
 } from "./project-state-paths.mjs";
 import { canonicalizeInstalledSkillNames } from "./registry-skill-metadata.mjs";
 
@@ -98,6 +100,39 @@ function listProjectCachedSkills(projectRoot: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Cache sync
+// ---------------------------------------------------------------------------
+
+/**
+ * After `npx skills add` writes into `<cwd>/.claude/skills/`, copy each
+ * installed skill directory into the specified target cache directories
+ * (project-scoped + global).
+ */
+function syncClaudeCacheIntoDirectories(
+  claudeSkillsDir: string,
+  targetDirs: string[],
+): void {
+  if (!existsSync(claudeSkillsDir)) return;
+
+  const entries = readdirSync(claudeSkillsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+
+    const sourceDir = join(claudeSkillsDir, entry.name);
+    const skillFile = join(sourceDir, "SKILL.md");
+    if (!existsSync(skillFile)) continue;
+
+    for (const targetDir of targetDirs) {
+      mkdirSync(targetDir, { recursive: true });
+      cpSync(sourceDir, join(targetDir, entry.name), {
+        recursive: true,
+        force: true,
+      });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
@@ -153,9 +188,8 @@ export function createRegistryClient(
         };
       }
 
-      // Run from the project root so `npx skills add --copy` installs into
-      // <projectRoot>/.claude/skills/ where the Skill() tool can find them.
-      const installCwd = resolve(args.projectRoot);
+      // Run from the hashed state root so CLI output lands inside ~/.vercel-plugin.
+      const installCwd = statePaths.stateRoot;
 
       try {
         await execFileImpl(command.file, command.args, {
@@ -167,6 +201,15 @@ export function createRegistryClient(
       } catch {
         // Infer result from post-run filesystem state instead of parsing CLI text.
       }
+
+      // Sync installed skills into the layered cache tree.
+      syncClaudeCacheIntoDirectories(
+        join(statePaths.stateRoot, ".claude", "skills"),
+        [
+          statePaths.skillsDir,
+          join(resolveVercelPluginHome(), "skills"),
+        ],
+      );
 
       const after = new Set(listProjectCachedSkills(args.projectRoot));
       const requested = requestedEntries.map((entry) => entry.requestedName);

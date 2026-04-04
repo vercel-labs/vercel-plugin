@@ -1075,6 +1075,7 @@ export async function autoInstallDetectedSkills(args: {
       missing: result.missing,
       skippedNonRegistry: skipped,
       command: result.command,
+      commandCwd: result.commandCwd,
     });
 
     return {

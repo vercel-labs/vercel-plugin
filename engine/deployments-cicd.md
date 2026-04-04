@@ -1,6 +1,6 @@
 ---
 name: deployments-cicd
-registry: vercel-labs/agent-skills
+registry: vercel/vercel-skills
 registrySlug: vercel-deploy
 priority: 6
 docs:

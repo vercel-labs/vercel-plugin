@@ -1,7 +1,5 @@
 ---
 name: vercel-flags
-registry: vercel/flags
-registrySlug: flags-sdk
 priority: 6
 docs:
   - https://vercel.com/docs/workflow-collaboration/feature-flags

@@ -11,7 +11,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildFromEngine } from "../../scripts/build-manifest.ts";
+import { buildFromEngine as defaultBuildFromEngine } from "../../scripts/build-manifest.ts";
+
+type BuildFromEngineFn = typeof defaultBuildFromEngine;
 
 /** Maximum allowed timeout (seconds) for subagent hooks. */
 const SUBAGENT_HOOK_TIMEOUT_MAX = 5;
@@ -42,10 +44,16 @@ export interface DoctorResult {
     liveSkillCount: number;
     totalPatterns: number;
     dedupStrategy: string;
+    validatedSubagentEvents: string[];
   };
 }
 
-export function doctor(projectRoot: string): DoctorResult {
+export interface DoctorOptions {
+  buildFromEngineImpl?: BuildFromEngineFn;
+}
+
+export function doctor(projectRoot: string, options: DoctorOptions = {}): DoctorResult {
+  const buildFromEngine = options.buildFromEngineImpl ?? defaultBuildFromEngine;
   const issues: DoctorIssue[] = [];
   const engineDir = join(projectRoot, "engine");
   const manifestPath = join(projectRoot, "generated", "skill-rules.json");
@@ -349,6 +357,7 @@ export function doctor(projectRoot: string): DoctorResult {
       liveSkillCount,
       totalPatterns,
       dedupStrategy,
+      validatedSubagentEvents: [...REQUIRED_SUBAGENT_EVENTS],
     },
   };
 }
@@ -367,6 +376,7 @@ export function formatDoctorResult(result: DoctorResult): string {
   }
   lines.push(`Total patterns:           ${summary.totalPatterns}`);
   lines.push(`Dedup strategy:           ${summary.dedupStrategy}`);
+  lines.push(`Subagent hook events:     ${summary.validatedSubagentEvents.join(", ")}`);
   lines.push("");
 
   const errors = issues.filter((i) => i.severity === "error");

@@ -1,12 +1,14 @@
 // hooks/src/registry-client.mts
 import { execFile } from "child_process";
-import { resolve } from "path";
+import { cpSync, existsSync, mkdirSync, readdirSync } from "fs";
+import { join } from "path";
 import { promisify } from "util";
 import { buildSkillsAddCommand } from "./skills-cli-command.mjs";
 import { readProjectSkillState } from "./project-skill-manifest.mjs";
 import {
   ensureProjectStateRoot,
-  resolveProjectStatePaths
+  resolveProjectStatePaths,
+  resolveVercelPluginHome
 } from "./project-state-paths.mjs";
 import { canonicalizeInstalledSkillNames } from "./registry-skill-metadata.mjs";
 var execFileAsync = promisify(execFile);
@@ -20,6 +22,23 @@ function formatCommandWithCwd(command, cwd) {
 function listProjectCachedSkills(projectRoot) {
   const state = readProjectSkillState(projectRoot);
   return canonicalizeInstalledSkillNames(state.installedSlugs);
+}
+function syncClaudeCacheIntoDirectories(claudeSkillsDir, targetDirs) {
+  if (!existsSync(claudeSkillsDir)) return;
+  const entries = readdirSync(claudeSkillsDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const sourceDir = join(claudeSkillsDir, entry.name);
+    const skillFile = join(sourceDir, "SKILL.md");
+    if (!existsSync(skillFile)) continue;
+    for (const targetDir of targetDirs) {
+      mkdirSync(targetDir, { recursive: true });
+      cpSync(sourceDir, join(targetDir, entry.name), {
+        recursive: true,
+        force: true
+      });
+    }
+  }
 }
 function createRegistryClient(options = {}) {
   const execFileImpl = options.execFileImpl ?? execFileAsync;
@@ -60,7 +79,7 @@ function createRegistryClient(options = {}) {
           commandCwd: null
         };
       }
-      const installCwd = resolve(args.projectRoot);
+      const installCwd = statePaths.stateRoot;
       try {
         await execFileImpl(command.file, command.args, {
           cwd: installCwd,
@@ -70,6 +89,13 @@ function createRegistryClient(options = {}) {
         });
       } catch {
       }
+      syncClaudeCacheIntoDirectories(
+        join(statePaths.stateRoot, ".claude", "skills"),
+        [
+          statePaths.skillsDir,
+          join(resolveVercelPluginHome(), "skills")
+        ]
+      );
       const after = new Set(listProjectCachedSkills(args.projectRoot));
       const requested = requestedEntries.map((entry) => entry.requestedName);
       return {

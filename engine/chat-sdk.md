@@ -1,6 +1,5 @@
 ---
 name: chat-sdk
-registry: vercel/chat
 priority: 8
 docs:
   - https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot

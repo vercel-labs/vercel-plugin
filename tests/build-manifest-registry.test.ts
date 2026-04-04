@@ -3,69 +3,39 @@ import { resolve, join } from "node:path";
 import { readFileSync } from "node:fs";
 
 const ROOT = resolve(import.meta.dirname, "..");
-
-/**
- * Registry metadata tests — verifies that engine rules with known registry
- * packages carry the correct `registry` and `registrySlug` fields in both
- * source frontmatter and the compiled manifest.
- */
-
-// ---------------------------------------------------------------------------
-// Load the compiled manifest
-// ---------------------------------------------------------------------------
-
 const manifestPath = join(ROOT, "generated", "skill-rules.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
 const skills: Record<string, any> = manifest.skills;
 
-// ---------------------------------------------------------------------------
-// Single source-of-truth expectation map
-// ---------------------------------------------------------------------------
-
-/**
- * Every registry-backed engine skill must appear here with its exact
- * registry and (when the engine slug differs from the package name)
- * registrySlug. Skills NOT in this map must have neither field.
- */
-const REGISTRY_EXPECTATIONS: Record<
+const REQUIRED_REGISTRY_SKILLS: Record<
   string,
   { registry: string; registrySlug?: string }
 > = {
-  // Direct matches — engine slug === registry package name
-  "agent-browser": { registry: "vercel-labs/agent-browser" },
-  "ai-elements": { registry: "vercel/ai-elements" },
-  "ai-sdk": { registry: "vercel/ai" },
-  "chat-sdk": { registry: "vercel/chat" },
-  "next-cache-components": { registry: "vercel-labs/next-skills" },
-  "next-upgrade": { registry: "vercel-labs/next-skills" },
-  turborepo: { registry: "vercel/turborepo" },
-  "vercel-sandbox": { registry: "vercel-labs/agent-browser" },
-  workflow: { registry: "vercel/workflow" },
-
-  // Slug mismatches — engine slug differs from registry package name
+  "agent-browser": { registry: "vercel/vercel-skills" },
+  "ai-elements": { registry: "vercel/vercel-skills" },
+  "ai-sdk": { registry: "vercel/vercel-skills" },
+  "next-cache-components": { registry: "vercel/vercel-skills" },
+  "next-upgrade": { registry: "vercel/vercel-skills" },
+  turborepo: { registry: "vercel/vercel-skills" },
   nextjs: {
-    registry: "vercel-labs/next-skills",
+    registry: "vercel/vercel-skills",
     registrySlug: "next-best-practices",
   },
   "react-best-practices": {
-    registry: "vercel-labs/agent-skills",
+    registry: "vercel/vercel-skills",
     registrySlug: "vercel-react-best-practices",
   },
   "deployments-cicd": {
-    registry: "vercel-labs/agent-skills",
+    registry: "vercel/vercel-skills",
     registrySlug: "vercel-deploy",
   },
-  "vercel-cli": { registry: "vercel/vercel" },
-  "vercel-flags": {
-    registry: "vercel/flags",
-    registrySlug: "flags-sdk",
+  "vercel-cli": {
+    registry: "vercel-labs/agent-skills",
+    registrySlug: "vercel-cli-with-tokens",
   },
-  shadcn: { registry: "vercel-labs/json-render" },
-  "next-forge": { registry: "vercel/next-forge" },
 };
 
-/** Representative non-registry skills that must have no registry fields. */
-const NO_REGISTRY: string[] = [
+const KNOWN_NO_REGISTRY = [
   "auth",
   "env-vars",
   "vercel-storage",
@@ -73,16 +43,37 @@ const NO_REGISTRY: string[] = [
   "ai-gateway",
   "vercel-functions",
   "routing-middleware",
+  "chat-sdk",
+  "vercel-sandbox",
+  "workflow",
+  "vercel-flags",
+  "next-forge",
+  "shadcn",
 ];
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+const ALLOWED_REGISTRIES = new Set([
+  "vercel/vercel-skills",
+  "vercel-labs/agent-skills",
+]);
+
+const LEGACY_REGISTRIES = [
+  "vercel-labs/agent-browser",
+  "vercel/ai-elements",
+  "vercel/ai",
+  "vercel/chat",
+  "vercel-labs/next-skills",
+  "vercel/turborepo",
+  "vercel/workflow",
+  "vercel/vercel",
+  "vercel/flags",
+  "vercel/next-forge",
+  "vercel-labs/json-render",
+];
 
 describe("build-manifest registry metadata", () => {
-  describe("registry-backed skills have exact metadata", () => {
-    for (const [slug, expected] of Object.entries(REGISTRY_EXPECTATIONS)) {
-      test(`${slug} → ${expected.registry}${expected.registrySlug ? ` as ${expected.registrySlug}` : ""}`, () => {
+  describe("required registry-backed skills have exact metadata", () => {
+    for (const [slug, expected] of Object.entries(REQUIRED_REGISTRY_SKILLS)) {
+      test(`${slug} -> ${expected.registry}${expected.registrySlug ? ` as ${expected.registrySlug}` : ""}`, () => {
         const skill = skills[slug];
         expect(skill).toBeDefined();
         expect(skill.registry).toBe(expected.registry);
@@ -95,9 +86,9 @@ describe("build-manifest registry metadata", () => {
     }
   });
 
-  describe("non-registry skills have no registry fields", () => {
-    for (const slug of NO_REGISTRY) {
-      test(`${slug} has no registry field`, () => {
+  describe("known non-registry skills have no registry metadata", () => {
+    for (const slug of KNOWN_NO_REGISTRY) {
+      test(`${slug} has no registry metadata`, () => {
         const skill = skills[slug];
         expect(skill).toBeDefined();
         expect(skill.registry).toBeUndefined();
@@ -106,37 +97,30 @@ describe("build-manifest registry metadata", () => {
     }
   });
 
-  test("no skill outside the expectation map has a registry field", () => {
-    const unexpected: string[] = [];
-    for (const [slug, skill] of Object.entries(skills)) {
-      if (skill.registry && !(slug in REGISTRY_EXPECTATIONS)) {
-        unexpected.push(slug);
-      }
-    }
+  test("every registry field uses one of the two allowed repos", () => {
+    const unexpected = Object.entries(skills)
+      .filter(([, skill]) => skill.registry && !ALLOWED_REGISTRIES.has(skill.registry))
+      .map(([slug, skill]) => `${slug}:${skill.registry}`)
+      .sort();
     expect(unexpected).toEqual([]);
   });
 
-  test("all registry fields reference a valid org/repo format", () => {
-    for (const [slug, skill] of Object.entries(skills)) {
-      if (skill.registry) {
-        expect(skill.registry).toMatch(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/);
-      }
-    }
+  test("legacy registry repos are absent from the compiled manifest", () => {
+    const legacyHits = Object.entries(skills)
+      .filter(([, skill]) => LEGACY_REGISTRIES.includes(skill.registry))
+      .map(([slug, skill]) => `${slug}:${skill.registry}`)
+      .sort();
+    expect(legacyHits).toEqual([]);
   });
 
   test("registrySlug is never set without registry", () => {
     for (const [slug, skill] of Object.entries(skills)) {
       if (skill.registrySlug) {
-        expect(skill.registry).toBeDefined();
+        expect(
+          skill.registry,
+          `${slug} has registrySlug without registry`,
+        ).toBeDefined();
       }
     }
-  });
-
-  test("expectation map covers all registry-backed skills in manifest", () => {
-    const manifestRegistrySkills = Object.keys(skills).filter(
-      (slug) => skills[slug].registry,
-    );
-    const expectedRegistrySkills = Object.keys(REGISTRY_EXPECTATIONS).sort();
-    expect(manifestRegistrySkills.sort()).toEqual(expectedRegistrySkills);
   });
 });

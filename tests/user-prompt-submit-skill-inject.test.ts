@@ -48,8 +48,8 @@ async function runHook(
 // ---------------------------------------------------------------------------
 
 describe("lexical prompt matching (VERCEL_PLUGIN_LEXICAL_PROMPT)", () => {
-  const LEXICAL_ON = { VERCEL_PLUGIN_LEXICAL_PROMPT: "1", VERCEL_PLUGIN_SEEN_SKILLS: "" };
-  const LEXICAL_OFF = { VERCEL_PLUGIN_LEXICAL_PROMPT: "0", VERCEL_PLUGIN_SEEN_SKILLS: "" };
+  const LEXICAL_ON = { VERCEL_PLUGIN_LEXICAL_PROMPT: "1", VERCEL_PLUGIN_SEEN_SKILLS: "", VERCEL_PLUGIN_SYNC_INSTALL: "0" };
+  const LEXICAL_OFF = { VERCEL_PLUGIN_LEXICAL_PROMPT: "0", VERCEL_PLUGIN_SEEN_SKILLS: "", VERCEL_PLUGIN_SYNC_INSTALL: "0" };
 
   test("with flag on, 'I want to ship my app' matches deployments-cicd via synonym expansion (ship→deploy)", async () => {
     const { code, stdout } = await runHook(

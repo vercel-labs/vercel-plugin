@@ -2,7 +2,7 @@
 name: ai-sdk
 greenfield: true
 priority: 8
-registry: vercel/ai
+registry: vercel/vercel-skills
 docs:
   - https://sdk.vercel.ai/docs
   - https://sdk.vercel.ai/docs/reference

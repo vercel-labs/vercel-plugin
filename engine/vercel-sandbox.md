@@ -1,6 +1,5 @@
 ---
 name: vercel-sandbox
-registry: vercel-labs/agent-browser
 priority: 4
 docs: https://vercel.com/docs/sandbox
 sitemap: https://vercel.com/sitemap/docs.xml

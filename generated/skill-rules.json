@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-04T00:07:13.720Z",
+  "generatedAt": "2026-04-04T05:09:37.116Z",
   "version": 3,
   "skills": {
     "agent-browser-verify": {
@@ -223,7 +223,7 @@
       "docs": [
         "https://docs.anthropic.com/en/docs/claude-code/sub-agents"
       ],
-      "registry": "vercel-labs/agent-browser",
+      "registry": "vercel/vercel-skills",
       "chainTo": [
         {
           "pattern": "localhost:\\d+|127\\.0\\.0\\.1:\\d+",
@@ -340,7 +340,7 @@
         "https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot-with-tool-calling"
       ],
       "sitemap": "https://sdk.vercel.ai/sitemap.xml",
-      "registry": "vercel/ai-elements",
+      "registry": "vercel/vercel-skills",
       "validate": [
         {
           "pattern": "part\\.text\\b",
@@ -783,7 +783,7 @@
       ],
       "greenfield": true,
       "sitemap": "https://sdk.vercel.ai/sitemap.xml",
-      "registry": "vercel/ai",
+      "registry": "vercel/vercel-skills",
       "validate": [
         {
           "pattern": "from\\s+['\"]openai['\"]",
@@ -1740,7 +1740,6 @@
         }
       ],
       "sitemap": "https://sdk.vercel.ai/sitemap.xml",
-      "registry": "vercel/chat",
       "chainTo": [
         {
           "pattern": "from\\s+[''\"\"]openai[''\"\"]",
@@ -1935,7 +1934,7 @@
         }
       ],
       "sitemap": "https://vercel.com/sitemap/docs.xml",
-      "registry": "vercel-labs/agent-skills",
+      "registry": "vercel/vercel-skills",
       "registrySlug": "vercel-deploy",
       "validate": [
         {
@@ -2636,7 +2635,7 @@
           "https": "//nextjs.org/docs/app/api-reference/directives/use-cache"
         }
       ],
-      "registry": "vercel-labs/next-skills",
+      "registry": "vercel/vercel-skills",
       "chainTo": [
         {
           "pattern": "use cache",
@@ -2911,7 +2910,6 @@
           "https": "//github.com/haydenbleasel/next-forge"
         }
       ],
-      "registry": "vercel/next-forge",
       "validate": [
         {
           "pattern": "\"pipeline\"\\s*:",
@@ -3047,7 +3045,7 @@
           "https": "//nextjs.org/docs/app/guides/upgrading/codemods"
         }
       ],
-      "registry": "vercel-labs/next-skills",
+      "registry": "vercel/vercel-skills",
       "chainTo": [
         {
           "pattern": "getServerSideProps|getStaticProps|next/router|next/head|next/document",
@@ -3175,7 +3173,7 @@
       ],
       "greenfield": true,
       "sitemap": "https://nextjs.org/sitemap.xml",
-      "registry": "vercel-labs/next-skills",
+      "registry": "vercel/vercel-skills",
       "registrySlug": "next-best-practices",
       "validate": [
         {
@@ -3889,7 +3887,7 @@
           "https": "//react.dev/learn"
         }
       ],
-      "registry": "vercel-labs/agent-skills",
+      "registry": "vercel/vercel-skills",
       "registrySlug": "vercel-react-best-practices",
       "validate": [
         {
@@ -4200,7 +4198,6 @@
           "https": "//ui.shadcn.com/docs/components"
         }
       ],
-      "registry": "vercel-labs/json-render",
       "validate": [
         {
           "pattern": "\"base\"\\s*:\\s*\"base-ui\"",
@@ -4407,7 +4404,7 @@
         "https://turborepo.dev/docs"
       ],
       "sitemap": "https://turborepo.dev/sitemap.xml",
-      "registry": "vercel/turborepo",
+      "registry": "vercel/vercel-skills",
       "validate": [
         {
           "pattern": "\"pipeline\"\\s*:",
@@ -4728,7 +4725,8 @@
       ],
       "greenfield": true,
       "sitemap": "https://vercel.com/sitemap/docs.xml",
-      "registry": "vercel/vercel",
+      "registry": "vercel-labs/agent-skills",
+      "registrySlug": "vercel-cli-with-tokens",
       "chainTo": [
         {
           "pattern": "\"crons\"\\s*:",
@@ -4938,8 +4936,6 @@
         }
       ],
       "sitemap": "https://vercel.com/sitemap/docs.xml",
-      "registry": "vercel/flags",
-      "registrySlug": "flags-sdk",
       "chainTo": [
         {
           "pattern": "process\\.env\\.(FEATURE_|FLAG_|ENABLE_|DISABLE_)\\w+",
@@ -5352,7 +5348,6 @@
         "https://vercel.com/docs/sandbox"
       ],
       "sitemap": "https://vercel.com/sitemap/docs.xml",
-      "registry": "vercel-labs/agent-browser",
       "chainTo": [
         {
           "pattern": "from\\s+[''\"\"]vm2[''\"\"]|require\\s*\\(\\s*[''\"\"]vm2[''\"\"\\)]|new\\s+VM\\(",
@@ -6276,7 +6271,6 @@
         }
       ],
       "sitemap": "https://vercel.com/sitemap/docs.xml",
-      "registry": "vercel/workflow",
       "validate": [
         {
           "pattern": "experimental_createWorkflow",
