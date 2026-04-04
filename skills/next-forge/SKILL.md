@@ -125,7 +125,7 @@ retrieval:
     - use next-forge
   entities:
     - next-forge
-    - @repo/*
+    - "@repo/*"
     - Turborepo
     - monorepo
     - SaaS starter
