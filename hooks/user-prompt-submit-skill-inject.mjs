@@ -697,10 +697,14 @@ function run() {
   report.selectedSkills.push(...promptCoInject.rankedSkills);
   const allMatched = Object.entries(report.perSkillResults).filter(([, r]) => r.matched).map(([skill]) => skill);
   const isGreenfield = sessionId ? readSessionFile(sessionId, "greenfield") === "true" : false;
-  const hasStrongPromptMatch = Object.entries(report.perSkillResults).some(
-    ([, r]) => r.matched && r.score >= 6
+  const hasExplicitPromptMatch = Object.entries(report.perSkillResults).some(
+    ([, r]) => r.matched && r.reason && !r.reason.includes("lexical")
   );
-  if (isGreenfield && hasStrongPromptMatch && cwd && sessionId) {
+  if (isGreenfield && !hasExplicitPromptMatch) {
+    log.complete("greenfield_no_vercel_signals", { matchedCount: allMatched.length }, log.active ? timing : null);
+    return formatEmptyOutput(platform, finalizePromptEnvUpdates(platform, promptEnvBefore));
+  }
+  if (isGreenfield && hasExplicitPromptMatch && cwd && sessionId) {
     const alreadyRecommended = readSessionFile(sessionId, "skills-recommended");
     if (!alreadyRecommended) {
       writeSessionFile(sessionId, "skills-recommended", "true");
@@ -828,7 +832,7 @@ ${setupNote}</CRITICAL>`;
     }
     return commands.join(" && ");
   }
-  if (allMatched.length > 0 && cwd && sessionId && process.env.VERCEL_PLUGIN_SYNC_INSTALL !== "0") {
+  if (!isGreenfield && hasExplicitPromptMatch && cwd && sessionId && process.env.VERCEL_PLUGIN_SYNC_INSTALL !== "0") {
     const registryMeta = loadRegistrySkillMetadata();
     const installedSkills = skills.skillStore?.listInstalledSkills() ?? [];
     const installedSet = new Set(installedSkills);

@@ -1074,14 +1074,20 @@ export function run(): string {
   const isGreenfield = sessionId ? readSessionFile(sessionId, "greenfield") === "true" : false;
 
   // Stage 3b: Greenfield skill discovery
-  // On a new project where the prompt strongly matches a Vercel skill
-  // (phrase/allOf match, score >= 6), inject bundle prompt. Lexical-only
-  // matches are too broad (e.g., "API" matching vercel-api) and would
-  // pollute non-Vercel projects like Python Flask.
-  const hasStrongPromptMatch = Object.entries(report.perSkillResults).some(
-    ([, r]) => r.matched && r.score >= 6
+  // Only show bundles when a prompt matches via explicit phrase/allOf
+  // signals (not lexical stemmer). Lexical matches are too broad —
+  // "build an interesting python cli" gets raw 309 on ai-sdk via stemmer.
+  const hasExplicitPromptMatch = Object.entries(report.perSkillResults).some(
+    ([, r]) => r.matched && r.reason && !r.reason.includes("lexical")
   );
-  if (isGreenfield && hasStrongPromptMatch && cwd && sessionId) {
+  // On greenfield with no explicit Vercel prompt signals, return empty —
+  // don't pollute non-Vercel projects with skill recommendations.
+  if (isGreenfield && !hasExplicitPromptMatch) {
+    log.complete("greenfield_no_vercel_signals", { matchedCount: allMatched.length }, log.active ? timing : null);
+    return formatEmptyOutput(platform, finalizePromptEnvUpdates(platform, promptEnvBefore));
+  }
+
+  if (isGreenfield && hasExplicitPromptMatch && cwd && sessionId) {
     const alreadyRecommended = readSessionFile(sessionId, "skills-recommended");
     if (!alreadyRecommended) {
       writeSessionFile(sessionId, "skills-recommended", "true");
@@ -1218,7 +1224,9 @@ export function run(): string {
   }
 
   // Stage 3c: Prompt-based skill recommendations (non-greenfield)
-  if (allMatched.length > 0 && cwd && sessionId && process.env.VERCEL_PLUGIN_SYNC_INSTALL !== "0") {
+  // Only fires for established projects where explicit (non-lexical) prompt
+  // signals match, and only when skills aren't already installed.
+  if (!isGreenfield && hasExplicitPromptMatch && cwd && sessionId && process.env.VERCEL_PLUGIN_SYNC_INSTALL !== "0") {
     const registryMeta = loadRegistrySkillMetadata();
     const installedSkills = skills.skillStore?.listInstalledSkills() ?? [];
     const installedSet = new Set(installedSkills);
