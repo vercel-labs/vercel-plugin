@@ -186,7 +186,6 @@ function buildStandardContext(agentType, likelySkills, budgetBytes, sessionId) {
   parts.push(`<!-- vercel-plugin:subagent-bootstrap agent_type="${agentType}" budget="standard" -->`);
   parts.push(profileLine(agentType, likelySkills));
   let usedBytes = Buffer.byteLength(parts.join("\n"), "utf8");
-  const loaded = loadSkills(PLUGIN_ROOT, log, projectRoot);
   const store = createSkillStore({
     projectRoot,
     pluginRoot: PLUGIN_ROOT,
@@ -194,31 +193,59 @@ function buildStandardContext(agentType, likelySkills, budgetBytes, sessionId) {
   });
   for (const skill of likelySkills) {
     const resolved = store.resolveSkillPayload(skill, log);
-    if (resolved?.mode === "body" && resolved.body) {
-      const content = resolved.body;
-      const wrapped = `<!-- skill:${skill} -->
-${content}
+    if (!resolved) {
+      log.summary("subagent-start-bootstrap:skill-missing", {
+        skill,
+        projectRoot
+      });
+      continue;
+    }
+    if (resolved.mode === "body" && resolved.body) {
+      const wrapped = `<!-- skill:${skill} mode="body" source="${resolved.source}" -->
+${resolved.body}
 <!-- /skill:${skill} -->`;
       const byteLen = Buffer.byteLength(wrapped, "utf8");
       if (usedBytes + byteLen + 1 <= budgetBytes) {
         parts.push(wrapped);
         includedSkills.push(skill);
         usedBytes += byteLen + 1;
+        log.summary("subagent-start-bootstrap:skill-added", {
+          skill,
+          mode: "body",
+          source: resolved.source,
+          usedBytes,
+          budgetBytes
+        });
         continue;
       }
     }
-    const summary = loaded?.skillMap[skill]?.summary;
-    if (summary) {
-      const line = `<!-- skill:${skill} mode:summary -->
+    const summary = resolved.summary.trim();
+    if (summary !== "") {
+      const wrapped = `<!-- skill:${skill} mode="summary" source="${resolved.source}" -->
 ${summary}
 <!-- /skill:${skill} -->`;
-      const lineBytes = Buffer.byteLength(line, "utf8");
-      if (usedBytes + lineBytes + 1 <= budgetBytes) {
-        parts.push(line);
+      const byteLen = Buffer.byteLength(wrapped, "utf8");
+      if (usedBytes + byteLen + 1 <= budgetBytes) {
+        parts.push(wrapped);
         includedSkills.push(skill);
-        usedBytes += lineBytes + 1;
+        usedBytes += byteLen + 1;
+        log.summary("subagent-start-bootstrap:skill-added", {
+          skill,
+          mode: "summary",
+          source: resolved.source,
+          usedBytes,
+          budgetBytes
+        });
+        continue;
       }
     }
+    log.summary("subagent-start-bootstrap:skill-skipped", {
+      skill,
+      source: resolved.source,
+      mode: resolved.mode,
+      usedBytes,
+      budgetBytes
+    });
   }
   parts.push("<!-- /vercel-plugin:subagent-bootstrap -->");
   return { context: parts.join("\n"), includedSkills };

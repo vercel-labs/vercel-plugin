@@ -168,7 +168,7 @@ export function resolveSessionStartSkillEntries(
     ];
   });
 
-  log.debug("session-start-engine-context:resolved-skills", {
+  log.summary("session-start-engine-context:resolved-skills", {
     projectRoot,
     requestedSkills: skills,
     resolvedSkills: entries.map((entry) => ({
@@ -272,10 +272,10 @@ export function buildTier3Block(
     );
 
   if (bodyCandidate) {
-    log.debug("session-start-engine-context:body-selected", {
+    log.summary("session-start-engine-context:body-selected", {
       skill: bodyCandidate.skill,
-      source: bodyCandidate.bodySource,
-      bytes: Buffer.byteLength(bodyCandidate.body!, "utf8"),
+      bodySource: bodyCandidate.bodySource,
+      bodyBytes: Buffer.byteLength(bodyCandidate.body!, "utf8"),
     });
     lines.push("");
     lines.push(`### Loaded Skill(${bodyCandidate.skill})`);
@@ -286,14 +286,13 @@ export function buildTier3Block(
         : bodyCandidate.body!,
     );
   } else {
-    log.debug("session-start-engine-context:body-missing", {
-      requestedSkills: displayedSkills,
-      candidates: skillEntries.map((entry) => ({
-        skill: entry.skill,
-        eligible: entry.sessionStartEligible,
-        hasBody: entry.body !== null,
-        bodySource: entry.bodySource,
-      })),
+    log.summary("session-start-engine-context:no-body-selected", {
+      eligibleSkills: skillEntries
+        .filter((entry) => entry.sessionStartEligible === "body")
+        .map((entry) => ({
+          skill: entry.skill,
+          bodySource: entry.bodySource,
+        })),
     });
   }
 
@@ -405,14 +404,15 @@ function main(): void {
 
     if (parts.length === 0) return;
 
-    log.summary("session-start-engine-context:complete", {
-      sessionId,
+    log.summary("session-start-engine-context:assembled", {
       tier,
       likelySkills,
-      resolvedSkills: skillEntries.map((entry) => ({
+      projectFacts,
+      skillEntries: skillEntries.map((entry) => ({
         skill: entry.skill,
         eligible: entry.sessionStartEligible,
-        source: entry.bodySource ?? entry.summarySource,
+        summarySource: entry.summarySource,
+        bodySource: entry.bodySource,
       })),
       emittedBytes: Buffer.byteLength(parts.join("\n\n"), "utf8"),
     });

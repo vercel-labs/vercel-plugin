@@ -83,7 +83,7 @@ function resolveSessionStartSkillEntries(projectRoot, skills) {
       }
     ];
   });
-  log.debug("session-start-engine-context:resolved-skills", {
+  log.summary("session-start-engine-context:resolved-skills", {
     projectRoot,
     requestedSkills: skills,
     resolvedSkills: entries.map((entry) => ({
@@ -149,10 +149,10 @@ function buildTier3Block(likelySkills, projectFacts, skillEntries) {
     (entry) => entry !== null && entry.sessionStartEligible === "body" && entry.body !== null && entry.body.trim() !== ""
   );
   if (bodyCandidate) {
-    log.debug("session-start-engine-context:body-selected", {
+    log.summary("session-start-engine-context:body-selected", {
       skill: bodyCandidate.skill,
-      source: bodyCandidate.bodySource,
-      bytes: Buffer.byteLength(bodyCandidate.body, "utf8")
+      bodySource: bodyCandidate.bodySource,
+      bodyBytes: Buffer.byteLength(bodyCandidate.body, "utf8")
     });
     lines.push("");
     lines.push(`### Loaded Skill(${bodyCandidate.skill})`);
@@ -162,12 +162,9 @@ function buildTier3Block(likelySkills, projectFacts, skillEntries) {
 [...truncated]` : bodyCandidate.body
     );
   } else {
-    log.debug("session-start-engine-context:body-missing", {
-      requestedSkills: displayedSkills,
-      candidates: skillEntries.map((entry) => ({
+    log.summary("session-start-engine-context:no-body-selected", {
+      eligibleSkills: skillEntries.filter((entry) => entry.sessionStartEligible === "body").map((entry) => ({
         skill: entry.skill,
-        eligible: entry.sessionStartEligible,
-        hasBody: entry.body !== null,
         bodySource: entry.bodySource
       }))
     });
@@ -239,14 +236,15 @@ function main() {
       }
     }
     if (parts.length === 0) return;
-    log.summary("session-start-engine-context:complete", {
-      sessionId,
+    log.summary("session-start-engine-context:assembled", {
       tier,
       likelySkills,
-      resolvedSkills: skillEntries.map((entry) => ({
+      projectFacts,
+      skillEntries: skillEntries.map((entry) => ({
         skill: entry.skill,
         eligible: entry.sessionStartEligible,
-        source: entry.bodySource ?? entry.summarySource
+        summarySource: entry.summarySource,
+        bodySource: entry.bodySource
       })),
       emittedBytes: Buffer.byteLength(parts.join("\n\n"), "utf8")
     });
