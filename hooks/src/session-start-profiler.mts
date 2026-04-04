@@ -1490,6 +1490,8 @@ async function main(): Promise<void> {
     projectRoot,
     nextActions: nextActions.map((action) => ({
       id: action.id,
+      title: action.title,
+      reason: action.reason,
       priority: action.priority,
       command: action.command,
     })),

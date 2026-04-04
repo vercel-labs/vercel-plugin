@@ -91,21 +91,79 @@ function normalizeNextActions(raw) {
     (value) => Boolean(value) && typeof value === "object"
   ).map((value) => ({
     id: typeof value.id === "string" ? value.id : "unknown",
-    title: typeof value.title === "string" ? value.title : "",
-    reason: typeof value.reason === "string" ? value.reason : "",
-    command: typeof value.command === "string" && value.command.trim() !== "" ? value.command : null,
+    title: typeof value.title === "string" ? value.title.trim() : "",
+    reason: typeof value.reason === "string" ? value.reason.trim() : "",
+    command: typeof value.command === "string" && value.command.trim() !== "" ? value.command.trim() : null,
     priority: typeof value.priority === "number" ? value.priority : 0
-  })).filter((value) => value.title !== "").sort((left, right) => right.priority - left.priority);
+  })).filter((value) => value.title !== "").sort(
+    (left, right) => right.priority - left.priority || left.title.localeCompare(right.title)
+  );
 }
-function renderFastLaneBlock(actions) {
-  if (actions.length === 0) return null;
-  return [
+function fastLaneBadge(action, index) {
+  if (index === 0) return "Start here";
+  if (action.priority >= 90) return "Do next";
+  if (action.priority >= 80) return "Worth doing";
+  return "Later";
+}
+function fastLaneDetail(action, index) {
+  if (action.reason) return action.reason;
+  if (index === 0) {
+    return "This is the highest-leverage move based on the current project state.";
+  }
+  if (action.command) {
+    return "Ready to run when you are.";
+  }
+  return null;
+}
+function buildFastLaneDisplay(actions) {
+  return actions.slice(0, 3).map((action, index) => ({
+    badge: fastLaneBadge(action, index),
+    headline: action.title,
+    detail: fastLaneDetail(action, index),
+    command: action.command
+  }));
+}
+function renderFastLaneBlock(actions, options) {
+  if (actions.length === 0) {
+    if (options.tier < 2) {
+      return { block: null, renderState: "hidden", primaryActionId: null };
+    }
+    return {
+      block: [
+        "## Fast Lane",
+        "_Nothing is obviously blocking setup right now. Keep moving in the part of the repo you understand best \u2014 the next shortcut will appear when the project state changes._"
+      ].join("\n"),
+      renderState: "empty",
+      primaryActionId: null
+    };
+  }
+  const displayActions = buildFastLaneDisplay(actions);
+  const lines = [
     "## Fast Lane",
-    ...actions.slice(0, 3).map(
-      (action) => `- ${action.title}${action.reason ? ` \u2014 ${action.reason}` : ""}${action.command ? ` (\`${action.command}\`)` : ""}`
-    )
-  ].join("\n");
+    "_A few good next moves, in the order most likely to keep momentum._",
+    ""
+  ];
+  for (const action of displayActions) {
+    lines.push(
+      `- **${action.badge}: ${action.headline}**${action.detail ? ` \u2014 ${action.detail}` : ""}`
+    );
+    if (action.command) {
+      lines.push(`  Run: \`${action.command}\``);
+    }
+  }
+  return {
+    block: lines.join("\n"),
+    renderState: "actions",
+    primaryActionId: actions[0]?.id ?? null
+  };
 }
+var __test__ = {
+  normalizeNextActions,
+  fastLaneBadge,
+  fastLaneDetail,
+  buildFastLaneDisplay,
+  renderFastLaneBlock
+};
 var STRONG_DEPENDENCY_PREFIXES = ["ai", "@ai-sdk/", "@vercel/"];
 function isStrongReason(reason) {
   if (reason.kind === "vercel-json") return true;
@@ -353,12 +411,14 @@ function main() {
     }
     const skillEntries = tier > 0 ? resolveSessionStartSkillEntries(projectRoot, likelySkills) : [];
     const parts = [];
-    const fastLaneBlock = renderFastLaneBlock(snapshot.nextActions);
-    if (fastLaneBlock) {
-      parts.push(fastLaneBlock);
+    const fastLane = renderFastLaneBlock(snapshot.nextActions, { tier });
+    if (fastLane.block) {
+      parts.push(fastLane.block);
       log.debug("session-start-engine-context:fast-lane-rendered", {
         sessionId,
-        actionCount: snapshot.nextActions.length,
+        tier,
+        renderState: fastLane.renderState,
+        primaryActionId: fastLane.primaryActionId,
         actions: snapshot.nextActions.map((action) => ({
           id: action.id,
           priority: action.priority,
@@ -398,6 +458,7 @@ if (isEntrypoint) {
   main();
 }
 export {
+  __test__,
   buildSessionStartBlock,
   computeSessionTier,
   resolveSessionStartSkillEntries

@@ -193,6 +193,21 @@ function loadSessionProfileSnapshot(
 // Next-action normalization and Fast Lane rendering
 // ---------------------------------------------------------------------------
 
+type FastLaneRenderState = "hidden" | "actions" | "empty";
+
+interface FastLaneRenderResult {
+  block: string | null;
+  renderState: FastLaneRenderState;
+  primaryActionId: ProfileNextAction["id"] | null;
+}
+
+interface FastLaneDisplayAction {
+  badge: string;
+  headline: string;
+  detail: string | null;
+  command: string | null;
+}
+
 function normalizeNextActions(raw: unknown): ProfileNextAction[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -202,28 +217,97 @@ function normalizeNextActions(raw: unknown): ProfileNextAction[] {
     )
     .map((value) => ({
       id: (typeof value.id === "string" ? value.id : "unknown") as ProfileNextAction["id"],
-      title: typeof value.title === "string" ? value.title : "",
-      reason: typeof value.reason === "string" ? value.reason : "",
+      title: typeof value.title === "string" ? value.title.trim() : "",
+      reason: typeof value.reason === "string" ? value.reason.trim() : "",
       command:
         typeof value.command === "string" && value.command.trim() !== ""
-          ? value.command
+          ? value.command.trim()
           : null,
       priority: typeof value.priority === "number" ? value.priority : 0,
     }))
     .filter((value) => value.title !== "")
-    .sort((left, right) => right.priority - left.priority);
+    .sort(
+      (left, right) =>
+        (right.priority - left.priority) ||
+        left.title.localeCompare(right.title),
+    );
 }
 
-function renderFastLaneBlock(actions: ProfileNextAction[]): string | null {
-  if (actions.length === 0) return null;
-  return [
-    "## Fast Lane",
-    ...actions.slice(0, 3).map(
-      (action) =>
-        `- ${action.title}${action.reason ? ` — ${action.reason}` : ""}${action.command ? ` (\`${action.command}\`)` : ""}`,
-    ),
-  ].join("\n");
+function fastLaneBadge(action: ProfileNextAction, index: number): string {
+  if (index === 0) return "Start here";
+  if (action.priority >= 90) return "Do next";
+  if (action.priority >= 80) return "Worth doing";
+  return "Later";
 }
+
+function fastLaneDetail(action: ProfileNextAction, index: number): string | null {
+  if (action.reason) return action.reason;
+  if (index === 0) {
+    return "This is the highest-leverage move based on the current project state.";
+  }
+  if (action.command) {
+    return "Ready to run when you are.";
+  }
+  return null;
+}
+
+function buildFastLaneDisplay(actions: ProfileNextAction[]): FastLaneDisplayAction[] {
+  return actions.slice(0, 3).map((action, index) => ({
+    badge: fastLaneBadge(action, index),
+    headline: action.title,
+    detail: fastLaneDetail(action, index),
+    command: action.command,
+  }));
+}
+
+function renderFastLaneBlock(
+  actions: ProfileNextAction[],
+  options: { tier: number },
+): FastLaneRenderResult {
+  if (actions.length === 0) {
+    if (options.tier < 2) {
+      return { block: null, renderState: "hidden", primaryActionId: null };
+    }
+    return {
+      block: [
+        "## Fast Lane",
+        "_Nothing is obviously blocking setup right now. Keep moving in the part of the repo you understand best — the next shortcut will appear when the project state changes._",
+      ].join("\n"),
+      renderState: "empty",
+      primaryActionId: null,
+    };
+  }
+
+  const displayActions = buildFastLaneDisplay(actions);
+  const lines: string[] = [
+    "## Fast Lane",
+    "_A few good next moves, in the order most likely to keep momentum._",
+    "",
+  ];
+
+  for (const action of displayActions) {
+    lines.push(
+      `- **${action.badge}: ${action.headline}**${action.detail ? ` — ${action.detail}` : ""}`,
+    );
+    if (action.command) {
+      lines.push(`  Run: \`${action.command}\``);
+    }
+  }
+
+  return {
+    block: lines.join("\n"),
+    renderState: "actions",
+    primaryActionId: actions[0]?.id ?? null,
+  };
+}
+
+export const __test__ = {
+  normalizeNextActions,
+  fastLaneBadge,
+  fastLaneDetail,
+  buildFastLaneDisplay,
+  renderFastLaneBlock,
+} as const;
 
 // ---------------------------------------------------------------------------
 // Tier computation
@@ -645,12 +729,14 @@ function main(): void {
     const parts: string[] = [];
 
     // Fast Lane: render cached next-actions near the top of the context
-    const fastLaneBlock = renderFastLaneBlock(snapshot.nextActions);
-    if (fastLaneBlock) {
-      parts.push(fastLaneBlock);
+    const fastLane = renderFastLaneBlock(snapshot.nextActions, { tier });
+    if (fastLane.block) {
+      parts.push(fastLane.block);
       log.debug("session-start-engine-context:fast-lane-rendered", {
         sessionId,
-        actionCount: snapshot.nextActions.length,
+        tier,
+        renderState: fastLane.renderState,
+        primaryActionId: fastLane.primaryActionId,
         actions: snapshot.nextActions.map((action) => ({
           id: action.id,
           priority: action.priority,
