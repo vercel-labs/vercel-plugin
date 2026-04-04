@@ -65,9 +65,8 @@ function getProfileNextActions(sessionId) {
   if (!sessionId) return [];
   const cache = safeReadJson(profileCachePath(sessionId));
   if (!cache || !Array.isArray(cache.nextActions)) return [];
-  const actions = cache.nextActions.filter(
-    (value) => Boolean(value) && typeof value === "object"
-  ).map((value) => ({
+  const rawActions = cache.nextActions;
+  const actions = rawActions.filter((value) => Boolean(value) && typeof value === "object").map((value) => ({
     id: typeof value.id === "string" ? value.id : "unknown",
     title: typeof value.title === "string" ? value.title : "",
     reason: typeof value.reason === "string" ? value.reason : "",

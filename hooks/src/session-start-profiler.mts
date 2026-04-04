@@ -56,6 +56,8 @@ import {
   type VercelCliRunResult,
 } from "./vercel-cli-delegator.mjs";
 import { formatOrchestratorActionPalette } from "./orchestrator-action-palette.mjs";
+import { getOrchestratorActionSpecs } from "./orchestrator-action-spec.mjs";
+import { buildOrchestratorRunnerCommand } from "./orchestrator-action-command.mjs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,79 +94,73 @@ export type ProjectFact =
 export interface ProfileNextAction {
   id:
     | "bootstrap-project"
-    | "link-vercel"
-    | "pull-env-local"
-    | "install-missing-skills";
+    | "install-missing"
+    | "vercel-link"
+    | "vercel-env-pull"
+    | "vercel-deploy";
   title: string;
   reason: string;
   command: string | null;
   priority: number;
 }
 
+const PROFILE_NEXT_ACTION_PRIORITY: Record<ProfileNextAction["id"], number> = {
+  "bootstrap-project": 100,
+  "vercel-link": 95,
+  "vercel-env-pull": 90,
+  "install-missing": 85,
+  "vercel-deploy": 70,
+};
+
 interface BuildProfileNextActionsParams {
-  greenfield: boolean;
-  vercelLinked: boolean;
-  hasEnvLocal: boolean;
-  missingSkills: string[];
-  zeroBundleReady: boolean;
+  pluginRoot: string;
+  projectRoot: string;
+  installPlan: SkillInstallPlan;
 }
 
 export function buildProfileNextActions({
-  greenfield,
-  vercelLinked,
-  hasEnvLocal,
-  missingSkills,
-  zeroBundleReady,
+  pluginRoot: pluginRootPath,
+  projectRoot,
+  installPlan,
 }: BuildProfileNextActionsParams): ProfileNextAction[] {
-  const actions: ProfileNextAction[] = [];
+  const actionMap = new Map<string, SkillInstallPlan["actions"][number]>(
+    installPlan.actions.map((action) => [action.id, action]),
+  );
 
-  if (greenfield) {
-    actions.push({
-      id: "bootstrap-project",
-      title: "Bootstrap the repo before feature work",
-      reason:
-        "Profiler marked the project as greenfield, so architecture/setup work should come before feature implementation.",
-      command: null,
-      priority: 100,
-    });
-  }
-
-  if (!vercelLinked) {
-    actions.push({
-      id: "link-vercel",
-      title: "Link this repo to a Vercel project",
-      reason:
-        "`.vercel/` is missing, so deploy and env delegation are not fully available yet.",
-      command: "vercel link",
-      priority: 95,
-    });
-  }
-
-  if (vercelLinked && !hasEnvLocal) {
-    actions.push({
-      id: "pull-env-local",
-      title: "Pull environment variables into `.env.local`",
-      reason:
-        "The repo is linked, but `.env.local` is still missing.",
-      command: "vercel env pull .env.local",
-      priority: 90,
-    });
-  }
-
-  if (missingSkills.length > 0) {
-    const preview = missingSkills.slice(0, 3).join(", ");
-    actions.push({
-      id: "install-missing-skills",
-      title: `Load full guidance for ${preview}${missingSkills.length > 3 ? "…" : ""}`,
-      reason: zeroBundleReady
-        ? "Bundled fallback is ready immediately, but full installed skill bodies are still missing."
-        : "The profiler detected useful skills that are not installed locally yet.",
-      command: null,
-      priority: 85,
-    });
-  }
-
-  return actions.sort((left, right) => right.priority - left.priority);
+  return getOrchestratorActionSpecs(installPlan)
+    .filter((spec) => spec.visible)
+    .map((spec): ProfileNextAction | null => {
+      if (
+        spec.id !== "bootstrap-project" &&
+        spec.id !== "install-missing" &&
+        spec.id !== "vercel-link" &&
+        spec.id !== "vercel-env-pull" &&
+        spec.id !== "vercel-deploy"
+      ) {
+        return null;
+      }
+      const planAction = actionMap.get(spec.id);
+      return {
+        id: spec.id,
+        title: spec.label,
+        reason: spec.description,
+        command:
+          spec.id === "bootstrap-project"
+            ? buildOrchestratorRunnerCommand({
+                pluginRoot: pluginRootPath,
+                projectRoot,
+                actionId: "bootstrap-project",
+                json: false,
+              })
+            : (typeof planAction?.command === "string" &&
+                planAction.command.trim() !== ""
+                ? planAction.command
+                : null),
+        priority: PROFILE_NEXT_ACTION_PRIORITY[spec.id],
+      };
+    })
+    .filter((action): action is ProfileNextAction => action !== null)
+    .sort((left, right) => right.priority - left.priority);
 }
 
 /**
@@ -1553,23 +1549,21 @@ async function main(): Promise<void> {
 
   // Compute executable next-actions from settled project state
   const nextActions = buildProfileNextActions({
-    greenfield: greenfield !== null,
-    vercelLinked,
-    hasEnvLocal,
-    missingSkills: skillCacheStatus.missingSkills,
-    zeroBundleReady: skillCacheStatus.zeroBundleReady,
+    pluginRoot: pluginRoot(),
+    projectRoot,
+    installPlan,
   });
 
-  if (nextActions.length > 0) {
-    log.debug("session-start-profiler-next-actions", {
-      projectRoot,
-      actionCount: nextActions.length,
-      actionIds: nextActions.map((action) => action.id),
-      missingSkillCount: skillCacheStatus.missingSkills.length,
-      vercelLinked,
-      hasEnvLocal,
-    });
-  }
+  log.debug("session-start-profiler:next-actions-built", {
+    projectRoot,
+    nextActionCount: nextActions.length,
+    nextActionIds: nextActions.map((action) => action.id),
+  });
+
+  log.debug("session-start-profiler:next-actions-normalized", {
+    projectRoot,
+    nextActionIds: nextActions.map((action) => action.id),
+  });
 
   // Write profile cache so SubagentStart hooks can read it without re-profiling
   if (sessionId) {
