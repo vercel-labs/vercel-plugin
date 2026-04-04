@@ -222,7 +222,7 @@ Return a final bootstrap summary in this format:
 
 ## next-forge Projects
 
-If the project was scaffolded with `npx next-forge init` (detected by `pnpm-workspace.yaml` + `packages/auth` + `packages/database` + `@repo/*` imports):
+If the project was scaffolded with `npx next-forge@latest init` (detected by `pnpm-workspace.yaml` + `packages/auth` + `packages/database` + `@repo/*` imports):
 
 1. Env files are per-app (`apps/app/.env.local`, `apps/web/.env.local`, `apps/api/.env.local`) plus `packages/database/.env`.
 2. Run `pnpm migrate` (not `db:push`) — it runs `prisma format` + `prisma generate` + `prisma db push`.
