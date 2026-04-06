@@ -107,6 +107,23 @@ describe("session-start-profiler", () => {
     expect(result.code).toBe(0);
   });
 
+  test("does not export prompt telemetry on when VERCEL_PLUGIN_TELEMETRY=off", async () => {
+    const homeDir = join(tempDir, "home");
+    mkdirSync(join(homeDir, ".claude"), { recursive: true });
+    writeFileSync(join(homeDir, ".claude", "vercel-plugin-telemetry-preference"), "enabled", "utf-8");
+
+    const result = await runProfiler({
+      CLAUDE_ENV_FILE: envFile,
+      CLAUDE_PROJECT_ROOT: tempDir,
+      HOME: homeDir,
+      VERCEL_PLUGIN_TELEMETRY: "off",
+    });
+
+    expect(result.code).toBe(0);
+    const envFileContent = readFileSync(envFile, "utf-8");
+    expect(envFileContent).not.toContain('export VERCEL_PLUGIN_TELEMETRY="on"');
+  });
+
   test("detects empty project as greenfield (seeds default skills)", async () => {
     const projectDir = join(tempDir, "empty-project");
     mkdirSync(projectDir);

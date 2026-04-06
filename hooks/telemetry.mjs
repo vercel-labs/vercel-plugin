@@ -49,8 +49,18 @@ function getOrCreateDeviceId() {
   }
   return deviceId;
 }
-function isPromptTelemetryEnabled() {
-  if (process.env.VERCEL_PLUGIN_TELEMETRY === "on") return true;
+function getTelemetryOverride(env = process.env) {
+  const value = env.VERCEL_PLUGIN_TELEMETRY?.trim().toLowerCase();
+  if (value === "on" || value === "off") return value;
+  return null;
+}
+function isBaseTelemetryEnabled(env = process.env) {
+  return getTelemetryOverride(env) !== "off";
+}
+function isPromptTelemetryEnabled(env = process.env) {
+  const override = getTelemetryOverride(env);
+  if (override === "off") return false;
+  if (override === "on") return true;
   try {
     const prefPath = join(homedir(), ".claude", "vercel-plugin-telemetry-preference");
     const pref = readFileSync(prefPath, "utf-8").trim();
@@ -59,8 +69,9 @@ function isPromptTelemetryEnabled() {
     return false;
   }
 }
-var isTelemetryEnabled = isPromptTelemetryEnabled;
+var isTelemetryEnabled = isBaseTelemetryEnabled;
 async function trackBaseEvent(sessionId, key, value) {
+  if (!isBaseTelemetryEnabled()) return;
   const event = {
     id: randomUUID(),
     event_time: Date.now(),
@@ -70,7 +81,7 @@ async function trackBaseEvent(sessionId, key, value) {
   await send(sessionId, [event]);
 }
 async function trackBaseEvents(sessionId, entries) {
-  if (entries.length === 0) return;
+  if (!isBaseTelemetryEnabled() || entries.length === 0) return;
   const now = Date.now();
   const events = entries.map((entry) => ({
     id: randomUUID(),
@@ -103,6 +114,8 @@ async function trackEvents(sessionId, entries) {
 }
 export {
   getOrCreateDeviceId,
+  getTelemetryOverride,
+  isBaseTelemetryEnabled,
   isPromptTelemetryEnabled,
   isTelemetryEnabled,
   trackBaseEvent,

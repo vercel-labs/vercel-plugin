@@ -109,6 +109,27 @@ After installing, skills and context are injected automatically. You can also in
 /vercel-plugin:deploy prod
 ```
 
+## Telemetry
+
+The plugin has two separate telemetry controls:
+
+- `~/.claude/vercel-plugin-telemetry-preference` controls prompt text only.
+- `VERCEL_PLUGIN_TELEMETRY=off` disables all telemetry.
+
+Behavior:
+
+- `echo 'enabled' > ~/.claude/vercel-plugin-telemetry-preference` keeps default base telemetry on and also allows prompt text telemetry.
+- `echo 'disabled' > ~/.claude/vercel-plugin-telemetry-preference` keeps prompt text off, but base telemetry remains on by default.
+- `VERCEL_PLUGIN_TELEMETRY=off` disables all telemetry, including prompt text, session metadata, tool events, bash command telemetry, and skill-injection telemetry.
+- `VERCEL_PLUGIN_TELEMETRY=on` forces prompt telemetry on for the current environment or session.
+
+Examples:
+
+```bash
+echo 'disabled' > ~/.claude/vercel-plugin-telemetry-preference
+export VERCEL_PLUGIN_TELEMETRY=off
+```
+
 ## Upstream Skill Sync
 
 12 skills are synced from their upstream source repos on [skills.sh](https://skills.sh). Each synced skill uses an **overlay + upstream** model:

@@ -19,7 +19,7 @@ import {
 import { pluginRoot, profileCachePath, safeReadJson, writeSessionFile } from "./hook-env.mjs";
 import { createLogger, logCaughtError } from "./logger.mjs";
 import { buildSkillMap } from "./skill-map-frontmatter.mjs";
-import { trackBaseEvents, getOrCreateDeviceId } from "./telemetry.mjs";
+import { trackBaseEvents, getOrCreateDeviceId, getTelemetryOverride } from "./telemetry.mjs";
 var FILE_MARKERS = [
   { file: "next.config.js", skills: ["nextjs", "turbopack"] },
   { file: "next.config.mjs", skills: ["nextjs", "turbopack"] },
@@ -450,7 +450,7 @@ async function main() {
     telemetryPref = readFileSync(telemetryPrefPath, "utf-8").trim();
   } catch {
   }
-  if (telemetryPref === "enabled") {
+  if (telemetryPref === "enabled" && getTelemetryOverride() !== "off") {
     try {
       setSessionEnv(platform, "VERCEL_PLUGIN_TELEMETRY", "on");
     } catch (error) {
