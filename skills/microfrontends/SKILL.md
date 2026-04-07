@@ -54,6 +54,7 @@ Split a large application into independently deployable units that render as one
 - `add-to-group` — add the current project to an existing group; requires interactive terminal (options: `--group`, `--default-route`)
 - `remove-from-group` — remove the current project from its group; requires interactive terminal (option: `--yes` skips project-link prompt only)
 - `delete-group` — delete a group and all its settings, irreversible; requires interactive terminal (option: `--group` to pre-select group)
+- `inspect-group` — retrieve group metadata (project names, frameworks, git repos, root dirs); useful for automating setup (options: `--group`, `--format=json`, `--config-file-name`)
 - `pull` — pull remote `microfrontends.json` for local development (option: `--dpl`)
 - `microfrontends proxy` — local dev proxy · `microfrontends port` — print auto-assigned port
 
