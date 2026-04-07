@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { shouldRefreshSessionVercelProjectLink } from "../hooks/src/hook-env.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const TELEMETRY_MODULE = join(ROOT, "hooks", "telemetry.mjs");
@@ -133,5 +134,19 @@ describe("telemetry controls", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toBe("{}");
     expect(existsSync(prefPath)).toBe(false);
+  });
+});
+
+describe("Vercel project link refresh", () => {
+  test("refreshes only when the cached link is missing or at least an hour old", () => {
+    const now = Date.now();
+
+    expect(shouldRefreshSessionVercelProjectLink(null, now, 3_600_000)).toBe(true);
+    expect(
+      shouldRefreshSessionVercelProjectLink({ lastResolvedAt: now - 3_599_999 }, now, 3_600_000),
+    ).toBe(false);
+    expect(
+      shouldRefreshSessionVercelProjectLink({ lastResolvedAt: now - 3_600_000 }, now, 3_600_000),
+    ).toBe(true);
   });
 });

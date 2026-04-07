@@ -10,6 +10,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   appendFileSync,
   closeSync,
+  existsSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -18,7 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLogger, logCaughtError, type Logger } from "./logger.mjs";
 
@@ -319,4 +320,204 @@ export function safeReadJson<T>(path: string): T | null {
     logCaughtError(log, "hook-env:safe-read-json-failed", error, { path });
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Vercel project linkage helpers
+// ---------------------------------------------------------------------------
+
+export const SESSION_VERCEL_PROJECT_LINK_KIND = "vercel-project-link";
+
+export interface VercelProjectLink {
+  projectId: string;
+  orgId: string;
+  source: "project.json" | "repo.json";
+}
+
+export interface SessionVercelProjectLinkState {
+  lastResolvedAt: number;
+  projectId?: string;
+  orgId?: string;
+}
+
+interface RepoProjectCandidate {
+  directory: string;
+  projectId: string;
+  orgId: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readJsonIfExists(path: string): unknown | null {
+  if (!existsSync(path)) return null;
+
+  try {
+    return JSON.parse(readFileSync(path, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+function normalizeRepoPath(pathValue: string): string {
+  const normalized = pathValue
+    .replaceAll("\\", "/")
+    .replace(/^\.\//, "")
+    .replace(/\/+$/, "");
+
+  return normalized === "" ? "." : normalized;
+}
+
+function pathDepth(pathValue: string): number {
+  return pathValue === "." ? 0 : pathValue.split("/").length;
+}
+
+function matchesRepoProjectDirectory(projectDirectory: string, currentPath: string): boolean {
+  if (projectDirectory === ".") {
+    return true;
+  }
+
+  return currentPath === projectDirectory || currentPath.startsWith(`${projectDirectory}/`);
+}
+
+function resolveProjectJsonLink(dir: string): VercelProjectLink | null {
+  const raw = readJsonIfExists(join(dir, ".vercel", "project.json"));
+  if (!isRecord(raw)) return null;
+
+  const projectId = asNonEmptyString(raw.projectId);
+  const orgId = asNonEmptyString(raw.orgId);
+  if (!projectId || !orgId) return null;
+
+  return {
+    projectId,
+    orgId,
+    source: "project.json",
+  };
+}
+
+function resolveRepoJsonLink(repoRoot: string, startPath: string): VercelProjectLink | null {
+  const raw = readJsonIfExists(join(repoRoot, ".vercel", "repo.json"));
+  if (!isRecord(raw) || !Array.isArray(raw.projects)) {
+    return null;
+  }
+
+  const repoOrgId = asNonEmptyString(raw.orgId);
+  const currentPath = normalizeRepoPath(relative(repoRoot, startPath));
+  const candidates: RepoProjectCandidate[] = raw.projects
+    .filter(isRecord)
+    .map((project) => {
+      const projectId = asNonEmptyString(project.id);
+      const orgId = asNonEmptyString(project.orgId) ?? repoOrgId;
+      const directory = normalizeRepoPath(asNonEmptyString(project.directory) ?? ".");
+
+      if (!projectId || !orgId) {
+        return null;
+      }
+
+      return {
+        directory,
+        projectId,
+        orgId,
+      };
+    })
+    .filter((candidate): candidate is RepoProjectCandidate => candidate !== null)
+    .filter((candidate) => matchesRepoProjectDirectory(candidate.directory, currentPath))
+    .sort((left, right) => pathDepth(right.directory) - pathDepth(left.directory));
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const deepestDepth = pathDepth(candidates[0].directory);
+  const deepestCandidates = candidates.filter((candidate) => pathDepth(candidate.directory) === deepestDepth);
+  if (deepestCandidates.length !== 1) {
+    return null;
+  }
+
+  return {
+    projectId: deepestCandidates[0].projectId,
+    orgId: deepestCandidates[0].orgId,
+    source: "repo.json",
+  };
+}
+
+export function resolveVercelProjectLink(startPath: string): VercelProjectLink | null {
+  let current = resolve(startPath);
+
+  while (true) {
+    const projectLink = resolveProjectJsonLink(current);
+    if (projectLink) {
+      return projectLink;
+    }
+
+    const repoJsonPath = join(current, ".vercel", "repo.json");
+    if (existsSync(repoJsonPath)) {
+      return resolveRepoJsonLink(current, resolve(startPath));
+    }
+
+    const parent = dirname(current);
+    if (parent === current) {
+      return null;
+    }
+
+    current = parent;
+  }
+}
+
+export function parseSessionVercelProjectLinkState(raw: string): SessionVercelProjectLinkState | null {
+  if (raw.trim() === "") return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isRecord(parsed)) return null;
+
+    const lastResolvedAt = parsed.lastResolvedAt;
+    if (typeof lastResolvedAt !== "number" || !Number.isFinite(lastResolvedAt)) {
+      return null;
+    }
+
+    const state: SessionVercelProjectLinkState = { lastResolvedAt };
+    const projectId = asNonEmptyString(parsed.projectId);
+    const orgId = asNonEmptyString(parsed.orgId);
+
+    if (projectId) {
+      state.projectId = projectId;
+    }
+    if (orgId) {
+      state.orgId = orgId;
+    }
+
+    return state;
+  } catch {
+    return null;
+  }
+}
+
+export function readSessionVercelProjectLinkState(sessionId: string): SessionVercelProjectLinkState | null {
+  try {
+    const raw = readFileSync(dedupFilePath(sessionId, SESSION_VERCEL_PROJECT_LINK_KIND), "utf-8");
+    return parseSessionVercelProjectLinkState(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function writeSessionVercelProjectLinkState(
+  sessionId: string,
+  state: SessionVercelProjectLinkState,
+): void {
+  writeSessionFile(sessionId, SESSION_VERCEL_PROJECT_LINK_KIND, JSON.stringify(state));
+}
+
+export function shouldRefreshSessionVercelProjectLink(
+  state: SessionVercelProjectLinkState | null,
+  now: number,
+  refreshMs: number,
+): boolean {
+  return !state || now - state.lastResolvedAt >= refreshMs;
 }

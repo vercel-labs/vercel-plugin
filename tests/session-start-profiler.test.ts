@@ -10,7 +10,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { readSessionFile } from "../hooks/src/hook-env.mts";
+import {
+  readSessionFile,
+  readSessionVercelProjectLinkState,
+  resolveVercelProjectLink,
+} from "../hooks/src/hook-env.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const PROFILER = join(ROOT, "hooks", "session-start-profiler.mjs");
@@ -67,6 +71,10 @@ function parseCsvEnvVar(envFileContent: string, key: string): string[] {
 
 function readGreenfieldState(): string {
   return readSessionFile(testSessionId, "greenfield");
+}
+
+function readVercelProjectLinkState() {
+  return readSessionVercelProjectLinkState(testSessionId);
 }
 
 function makeMockCommand(binDir: string, commandName: string, body: string): void {
@@ -570,6 +578,27 @@ describe("session-start-profiler", () => {
     expect(readGreenfieldState()).toBe("true");
   });
 
+  test("persists linked Vercel project IDs in session state when project.json is present", async () => {
+    const projectDir = join(tempDir, "linked-project");
+    mkdirSync(join(projectDir, ".vercel"), { recursive: true });
+    writeFileSync(
+      join(projectDir, ".vercel", "project.json"),
+      JSON.stringify({ projectId: "prj_linked", orgId: "team_linked" }),
+    );
+
+    const result = await runProfiler({
+      CLAUDE_ENV_FILE: envFile,
+      CLAUDE_PROJECT_ROOT: projectDir,
+    });
+
+    expect(result.code).toBe(0);
+    expect(readVercelProjectLinkState()).toMatchObject({
+      projectId: "prj_linked",
+      orgId: "team_linked",
+    });
+    expect(readVercelProjectLinkState()?.lastResolvedAt).toEqual(expect.any(Number));
+  });
+
   test("hooks.json registers profiler after seen-skills init", () => {
     const hooksJson = JSON.parse(
       readFileSync(join(ROOT, "hooks", "hooks.json"), "utf-8"),
@@ -781,6 +810,86 @@ describe("profileProject (unit)", () => {
     expect(result).toContain("turbopack");
     expect(result).toContain("turborepo");
     expect(result).toEqual([...result].sort());
+  });
+});
+
+describe("resolveVercelProjectLink (unit)", () => {
+  test("reads .vercel/project.json from the nearest parent", () => {
+    const projectDir = join(tempDir, "unit-linked-project");
+    const nestedDir = join(projectDir, "src", "app");
+    mkdirSync(join(projectDir, ".vercel"), { recursive: true });
+    mkdirSync(nestedDir, { recursive: true });
+    writeFileSync(
+      join(projectDir, ".vercel", "project.json"),
+      JSON.stringify({ projectId: "prj_parent", orgId: "team_parent" }),
+    );
+
+    expect(resolveVercelProjectLink(nestedDir)).toEqual({
+      projectId: "prj_parent",
+      orgId: "team_parent",
+      source: "project.json",
+    });
+  });
+
+  test("reads matching subproject from repo.json", () => {
+    const repoRoot = join(tempDir, "unit-repo-linked");
+    const webDir = join(repoRoot, "apps", "web");
+    mkdirSync(join(repoRoot, ".vercel"), { recursive: true });
+    mkdirSync(webDir, { recursive: true });
+    writeFileSync(
+      join(repoRoot, ".vercel", "repo.json"),
+      JSON.stringify({
+        orgId: "team_repo",
+        projects: [
+          { id: "prj_root", directory: "." },
+          { id: "prj_web", directory: "apps/web" },
+        ],
+      }),
+    );
+
+    expect(resolveVercelProjectLink(webDir)).toEqual({
+      projectId: "prj_web",
+      orgId: "team_repo",
+      source: "repo.json",
+    });
+  });
+
+  test("falls back from settings-only project.json to repo.json", () => {
+    const repoRoot = join(tempDir, "unit-repo-settings-only");
+    const webDir = join(repoRoot, "apps", "web");
+    mkdirSync(join(repoRoot, ".vercel"), { recursive: true });
+    mkdirSync(join(webDir, ".vercel"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, ".vercel", "repo.json"),
+      JSON.stringify({
+        orgId: "team_repo",
+        projects: [{ id: "prj_web", directory: "apps/web" }],
+      }),
+    );
+    writeFileSync(join(webDir, ".vercel", "project.json"), JSON.stringify({ settings: {} }));
+
+    expect(resolveVercelProjectLink(webDir)).toEqual({
+      projectId: "prj_web",
+      orgId: "team_repo",
+      source: "repo.json",
+    });
+  });
+
+  test("returns null for an ambiguous repo root with multiple linked subprojects", () => {
+    const repoRoot = join(tempDir, "unit-repo-ambiguous");
+    mkdirSync(join(repoRoot, ".vercel"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, ".vercel", "repo.json"),
+      JSON.stringify({
+        orgId: "team_repo",
+        projects: [
+          { id: "prj_web", directory: "apps/web" },
+          { id: "prj_api", directory: "apps/api" },
+        ],
+      }),
+    );
+
+    expect(resolveVercelProjectLink(repoRoot)).toBeNull();
   });
 });
 

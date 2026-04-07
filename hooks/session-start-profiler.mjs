@@ -15,7 +15,14 @@ import {
   normalizeInput,
   setSessionEnv
 } from "./compat.mjs";
-import { pluginRoot, profileCachePath, safeReadJson, writeSessionFile } from "./hook-env.mjs";
+import {
+  pluginRoot,
+  profileCachePath,
+  resolveVercelProjectLink,
+  safeReadJson,
+  writeSessionFile,
+  writeSessionVercelProjectLinkState
+} from "./hook-env.mjs";
 import { createLogger, logCaughtError } from "./logger.mjs";
 import { buildSkillMap } from "./skill-map-frontmatter.mjs";
 import { trackBaseEvents, getOrCreateDeviceId } from "./telemetry.mjs";
@@ -409,6 +416,7 @@ async function main() {
   const platform = detectSessionStartPlatform(hookInput);
   const sessionId = normalizeSessionStartSessionId(hookInput);
   const projectRoot = resolveSessionStartProjectRoot();
+  const vercelProjectLink = resolveVercelProjectLink(projectRoot);
   logBrokenSkillFrontmatterSummary();
   const greenfield = checkGreenfield(projectRoot);
   const cliStatus = checkVercelCli();
@@ -426,6 +434,13 @@ async function main() {
   if (sessionId) {
     writeSessionFile(sessionId, SESSION_GREENFIELD_KIND, greenfieldValue);
     writeSessionFile(sessionId, SESSION_LIKELY_SKILLS_KIND, likelySkillsValue);
+    if (vercelProjectLink) {
+      writeSessionVercelProjectLinkState(sessionId, {
+        lastResolvedAt: Date.now(),
+        projectId: vercelProjectLink.projectId,
+        orgId: vercelProjectLink.orgId
+      });
+    }
   }
   try {
     if (platform === "claude-code") {
@@ -470,14 +485,21 @@ async function main() {
   }
   if (sessionId) {
     const deviceId = getOrCreateDeviceId();
-    await trackBaseEvents(sessionId, [
+    const telemetryEntries = [
       { key: "session:device_id", value: deviceId },
       { key: "session:platform", value: process.platform },
       { key: "session:likely_skills", value: likelySkills.join(",") },
       { key: "session:greenfield", value: String(greenfield !== null) },
       { key: "session:vercel_cli_installed", value: String(cliStatus.installed) },
       { key: "session:vercel_cli_version", value: cliStatus.currentVersion || "" }
-    ]).catch(() => {
+    ];
+    if (vercelProjectLink) {
+      telemetryEntries.push(
+        { key: "session:vercel_project_id", value: vercelProjectLink.projectId },
+        { key: "session:vercel_org_id", value: vercelProjectLink.orgId }
+      );
+    }
+    await trackBaseEvents(sessionId, telemetryEntries).catch(() => {
     });
   }
   if (cursorOutput) {
