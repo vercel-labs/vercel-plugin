@@ -26,13 +26,13 @@ function truncateValue(value: string): string {
   return truncated + TRUNCATION_SUFFIX;
 }
 
-async function send(sessionId: string, events: TelemetryEvent[]): Promise<void> {
-  if (events.length === 0) return;
+async function send(sessionId: string, events: TelemetryEvent[]): Promise<boolean> {
+  if (events.length === 0) return false;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FLUSH_TIMEOUT_MS);
   try {
-    await fetch(BRIDGE_ENDPOINT, {
+    const response = await fetch(BRIDGE_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -42,8 +42,9 @@ async function send(sessionId: string, events: TelemetryEvent[]): Promise<void> 
       body: JSON.stringify(events),
       signal: controller.signal,
     });
+    return response.ok;
   } catch {
-    // Best-effort
+    return false;
   } finally {
     clearTimeout(timeout);
   }
@@ -119,8 +120,8 @@ export function isPromptTelemetryEnabled(env: NodeJS.ProcessEnv = process.env): 
 // Always-on base telemetry (session, tool, skill injection events)
 // ---------------------------------------------------------------------------
 
-export async function trackBaseEvent(sessionId: string, key: string, value: string): Promise<void> {
-  if (!isBaseTelemetryEnabled()) return;
+export async function trackBaseEvent(sessionId: string, key: string, value: string): Promise<boolean> {
+  if (!isBaseTelemetryEnabled()) return false;
 
   const event: TelemetryEvent = {
     id: randomUUID(),
@@ -129,14 +130,14 @@ export async function trackBaseEvent(sessionId: string, key: string, value: stri
     value: truncateValue(value),
   };
 
-  await send(sessionId, [event]);
+  return send(sessionId, [event]);
 }
 
 export async function trackBaseEvents(
   sessionId: string,
   entries: Array<{ key: string; value: string }>,
-): Promise<void> {
-  if (!isBaseTelemetryEnabled() || entries.length === 0) return;
+): Promise<boolean> {
+  if (!isBaseTelemetryEnabled() || entries.length === 0) return false;
 
   const now = Date.now();
   const events: TelemetryEvent[] = entries.map((entry) => ({
@@ -146,7 +147,7 @@ export async function trackBaseEvents(
     value: truncateValue(entry.value),
   }));
 
-  await send(sessionId, events);
+  return send(sessionId, events);
 }
 
 // ---------------------------------------------------------------------------

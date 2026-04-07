@@ -31,9 +31,11 @@ import { homedir, tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import {
   readSessionVercelProjectLinkState,
+  resolveHookProjectRoot,
   resolveVercelProjectLink,
   shouldRefreshSessionVercelProjectLink,
   writeSessionVercelProjectLinkState,
+  type SessionVercelProjectLinkState,
 } from "./hook-env.mjs";
 import { getTelemetryOverride, isPromptTelemetryEnabled, trackBaseEvents, trackEvents } from "./telemetry.mjs";
 
@@ -59,18 +61,6 @@ function resolvePrompt(input: Record<string, unknown>): string {
   return (input.prompt as string) || (input.message as string) || "";
 }
 
-function resolveProjectRoot(input: Record<string, unknown> | null): string {
-  const cwd = input && typeof input.cwd === "string" && input.cwd.trim() !== ""
-    ? input.cwd
-    : null;
-
-  return process.env.CLAUDE_PROJECT_ROOT
-    ?? process.env.CURSOR_PROJECT_DIR
-    ?? process.env.CLAUDE_PROJECT_DIR
-    ?? cwd
-    ?? process.cwd();
-}
-
 async function maybeTrackVercelProjectLink(sessionId: string, projectRoot: string): Promise<void> {
   const now = Date.now();
   const previousState = readSessionVercelProjectLinkState(sessionId);
@@ -79,29 +69,34 @@ async function maybeTrackVercelProjectLink(sessionId: string, projectRoot: strin
   }
 
   const nextLink = resolveVercelProjectLink(projectRoot);
-  writeSessionVercelProjectLinkState(
-    sessionId,
-    nextLink
-      ? {
-          lastResolvedAt: now,
-          projectId: nextLink.projectId,
-          orgId: nextLink.orgId,
-        }
-      : { lastResolvedAt: now },
+  const shouldTrackLink = !!nextLink && (
+    previousState?.lastSentProjectId !== nextLink.projectId
+    || previousState?.lastSentOrgId !== nextLink.orgId
   );
+  const trackedLink = shouldTrackLink
+    ? await trackBaseEvents(sessionId, [
+        { key: "session:vercel_project_id", value: nextLink.projectId },
+        { key: "session:vercel_org_id", value: nextLink.orgId },
+      ]).catch(() => false)
+    : false;
 
-  if (!nextLink) {
-    return;
+  const nextState: SessionVercelProjectLinkState = {
+    lastResolvedAt: now,
+    lastSentProjectId: previousState?.lastSentProjectId,
+    lastSentOrgId: previousState?.lastSentOrgId,
+  };
+
+  if (nextLink) {
+    nextState.projectId = nextLink.projectId;
+    nextState.orgId = nextLink.orgId;
   }
 
-  if (previousState?.projectId === nextLink.projectId && previousState?.orgId === nextLink.orgId) {
-    return;
+  if (trackedLink && nextLink) {
+    nextState.lastSentProjectId = nextLink.projectId;
+    nextState.lastSentOrgId = nextLink.orgId;
   }
 
-  await trackBaseEvents(sessionId, [
-    { key: "session:vercel_project_id", value: nextLink.projectId },
-    { key: "session:vercel_org_id", value: nextLink.orgId },
-  ]).catch(() => {});
+  writeSessionVercelProjectLinkState(sessionId, nextState);
 }
 
 async function main(): Promise<void> {
@@ -111,7 +106,7 @@ async function main(): Promise<void> {
   const telemetryOverride = getTelemetryOverride();
 
   if (telemetryOverride !== "off" && sessionId) {
-    await maybeTrackVercelProjectLink(sessionId, resolveProjectRoot(input));
+    await maybeTrackVercelProjectLink(sessionId, resolveHookProjectRoot(input));
   }
 
   // Prompt text tracking — opt-in only

@@ -6,6 +6,7 @@ import { homedir, tmpdir } from "os";
 import { join, dirname } from "path";
 import {
   readSessionVercelProjectLinkState,
+  resolveHookProjectRoot,
   resolveVercelProjectLink,
   shouldRefreshSessionVercelProjectLink,
   writeSessionVercelProjectLinkState
@@ -29,10 +30,6 @@ function resolveSessionId(input) {
 function resolvePrompt(input) {
   return input.prompt || input.message || "";
 }
-function resolveProjectRoot(input) {
-  const cwd = input && typeof input.cwd === "string" && input.cwd.trim() !== "" ? input.cwd : null;
-  return process.env.CLAUDE_PROJECT_ROOT ?? process.env.CURSOR_PROJECT_DIR ?? process.env.CLAUDE_PROJECT_DIR ?? cwd ?? process.cwd();
-}
 async function maybeTrackVercelProjectLink(sessionId, projectRoot) {
   const now = Date.now();
   const previousState = readSessionVercelProjectLinkState(sessionId);
@@ -40,25 +37,25 @@ async function maybeTrackVercelProjectLink(sessionId, projectRoot) {
     return;
   }
   const nextLink = resolveVercelProjectLink(projectRoot);
-  writeSessionVercelProjectLinkState(
-    sessionId,
-    nextLink ? {
-      lastResolvedAt: now,
-      projectId: nextLink.projectId,
-      orgId: nextLink.orgId
-    } : { lastResolvedAt: now }
-  );
-  if (!nextLink) {
-    return;
-  }
-  if (previousState?.projectId === nextLink.projectId && previousState?.orgId === nextLink.orgId) {
-    return;
-  }
-  await trackBaseEvents(sessionId, [
+  const shouldTrackLink = !!nextLink && (previousState?.lastSentProjectId !== nextLink.projectId || previousState?.lastSentOrgId !== nextLink.orgId);
+  const trackedLink = shouldTrackLink ? await trackBaseEvents(sessionId, [
     { key: "session:vercel_project_id", value: nextLink.projectId },
     { key: "session:vercel_org_id", value: nextLink.orgId }
-  ]).catch(() => {
-  });
+  ]).catch(() => false) : false;
+  const nextState = {
+    lastResolvedAt: now,
+    lastSentProjectId: previousState?.lastSentProjectId,
+    lastSentOrgId: previousState?.lastSentOrgId
+  };
+  if (nextLink) {
+    nextState.projectId = nextLink.projectId;
+    nextState.orgId = nextLink.orgId;
+  }
+  if (trackedLink && nextLink) {
+    nextState.lastSentProjectId = nextLink.projectId;
+    nextState.lastSentOrgId = nextLink.orgId;
+  }
+  writeSessionVercelProjectLinkState(sessionId, nextState);
 }
 async function main() {
   const input = parseStdin();
@@ -66,7 +63,7 @@ async function main() {
   const prompt = input ? resolvePrompt(input) : "";
   const telemetryOverride = getTelemetryOverride();
   if (telemetryOverride !== "off" && sessionId) {
-    await maybeTrackVercelProjectLink(sessionId, resolveProjectRoot(input));
+    await maybeTrackVercelProjectLink(sessionId, resolveHookProjectRoot(input));
   }
   if (isPromptTelemetryEnabled() && sessionId && prompt.length >= MIN_PROMPT_LENGTH) {
     await trackEvents(sessionId, [

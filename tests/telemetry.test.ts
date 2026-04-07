@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { shouldRefreshSessionVercelProjectLink } from "../hooks/src/hook-env.mts";
+import {
+  parseSessionVercelProjectLinkState,
+  resolveHookProjectRoot,
+  shouldRefreshSessionVercelProjectLink,
+} from "../hooks/src/hook-env.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const TELEMETRY_MODULE = join(ROOT, "hooks", "telemetry.mjs");
@@ -138,15 +142,74 @@ describe("telemetry controls", () => {
 });
 
 describe("Vercel project link refresh", () => {
-  test("refreshes only when the cached link is missing or at least an hour old", () => {
+  test("prefers per-prompt roots over stale session env roots", () => {
+    const promptRoot = join(tempHome, "apps", "web");
+    const workspaceRoot = join(tempHome, "apps", "api");
+    const envRoot = join(tempHome, "stale-session-root");
+
+    expect(resolveHookProjectRoot({ cwd: promptRoot }, { CLAUDE_PROJECT_ROOT: envRoot })).toBe(promptRoot);
+    expect(
+      resolveHookProjectRoot(
+        { workspace_roots: [workspaceRoot] },
+        { CLAUDE_PROJECT_ROOT: envRoot },
+      ),
+    ).toBe(workspaceRoot);
+  });
+
+  test("parses last sent project metadata from session state", () => {
+    expect(
+      parseSessionVercelProjectLinkState(JSON.stringify({
+        lastResolvedAt: 123,
+        projectId: "prj_current",
+        orgId: "team_current",
+        lastSentProjectId: "prj_sent",
+        lastSentOrgId: "team_sent",
+      })),
+    ).toEqual({
+      lastResolvedAt: 123,
+      projectId: "prj_current",
+      orgId: "team_current",
+      lastSentProjectId: "prj_sent",
+      lastSentOrgId: "team_sent",
+    });
+  });
+
+  test("refreshes when the cached link is missing, unsent, or at least an hour old", () => {
     const now = Date.now();
 
     expect(shouldRefreshSessionVercelProjectLink(null, now, 3_600_000)).toBe(true);
     expect(
-      shouldRefreshSessionVercelProjectLink({ lastResolvedAt: now - 3_599_999 }, now, 3_600_000),
+      shouldRefreshSessionVercelProjectLink(
+        { lastResolvedAt: now - 1, projectId: "prj_unsent", orgId: "team_unsent" },
+        now,
+        3_600_000,
+      ),
+    ).toBe(true);
+    expect(
+      shouldRefreshSessionVercelProjectLink(
+        {
+          lastResolvedAt: now - 3_599_999,
+          projectId: "prj_sent",
+          orgId: "team_sent",
+          lastSentProjectId: "prj_sent",
+          lastSentOrgId: "team_sent",
+        },
+        now,
+        3_600_000,
+      ),
     ).toBe(false);
     expect(
-      shouldRefreshSessionVercelProjectLink({ lastResolvedAt: now - 3_600_000 }, now, 3_600_000),
+      shouldRefreshSessionVercelProjectLink(
+        {
+          lastResolvedAt: now - 3_600_000,
+          projectId: "prj_sent",
+          orgId: "team_sent",
+          lastSentProjectId: "prj_sent",
+          lastSentOrgId: "team_sent",
+        },
+        now,
+        3_600_000,
+      ),
     ).toBe(true);
   });
 });

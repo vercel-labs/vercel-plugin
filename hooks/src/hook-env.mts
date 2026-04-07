@@ -338,6 +338,8 @@ export interface SessionVercelProjectLinkState {
   lastResolvedAt: number;
   projectId?: string;
   orgId?: string;
+  lastSentProjectId?: string;
+  lastSentOrgId?: string;
 }
 
 interface RepoProjectCandidate {
@@ -362,6 +364,25 @@ function readJsonIfExists(path: string): unknown | null {
 
 function asNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+export function resolveHookProjectRoot(
+  input: Record<string, unknown> | null,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const workspaceRoot = input && Array.isArray(input.workspace_roots)
+    ? input.workspace_roots.find((entry) => typeof entry === "string" && entry.trim() !== "")
+    : null;
+  const cwd = input && typeof input.cwd === "string" && input.cwd.trim() !== ""
+    ? input.cwd
+    : null;
+
+  return cwd
+    ?? (typeof workspaceRoot === "string" ? workspaceRoot : null)
+    ?? asNonEmptyString(env.CURSOR_PROJECT_DIR)
+    ?? asNonEmptyString(env.CLAUDE_PROJECT_ROOT)
+    ?? asNonEmptyString(env.CLAUDE_PROJECT_DIR)
+    ?? process.cwd();
 }
 
 function normalizeRepoPath(pathValue: string): string {
@@ -484,12 +505,20 @@ export function parseSessionVercelProjectLinkState(raw: string): SessionVercelPr
     const state: SessionVercelProjectLinkState = { lastResolvedAt };
     const projectId = asNonEmptyString(parsed.projectId);
     const orgId = asNonEmptyString(parsed.orgId);
+    const lastSentProjectId = asNonEmptyString(parsed.lastSentProjectId);
+    const lastSentOrgId = asNonEmptyString(parsed.lastSentOrgId);
 
     if (projectId) {
       state.projectId = projectId;
     }
     if (orgId) {
       state.orgId = orgId;
+    }
+    if (lastSentProjectId) {
+      state.lastSentProjectId = lastSentProjectId;
+    }
+    if (lastSentOrgId) {
+      state.lastSentOrgId = lastSentOrgId;
     }
 
     return state;
@@ -514,10 +543,18 @@ export function writeSessionVercelProjectLinkState(
   writeSessionFile(sessionId, SESSION_VERCEL_PROJECT_LINK_KIND, JSON.stringify(state));
 }
 
+function hasUnsentSessionVercelProjectLink(state: SessionVercelProjectLinkState | null): boolean {
+  if (!state?.projectId || !state.orgId) {
+    return false;
+  }
+
+  return state.lastSentProjectId !== state.projectId || state.lastSentOrgId !== state.orgId;
+}
+
 export function shouldRefreshSessionVercelProjectLink(
   state: SessionVercelProjectLinkState | null,
   now: number,
   refreshMs: number,
 ): boolean {
-  return !state || now - state.lastResolvedAt >= refreshMs;
+  return !state || hasUnsentSessionVercelProjectLink(state) || now - state.lastResolvedAt >= refreshMs;
 }

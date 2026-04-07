@@ -213,6 +213,11 @@ function readJsonIfExists(path) {
 function asNonEmptyString(value) {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
+function resolveHookProjectRoot(input, env = process.env) {
+  const workspaceRoot = input && Array.isArray(input.workspace_roots) ? input.workspace_roots.find((entry) => typeof entry === "string" && entry.trim() !== "") : null;
+  const cwd = input && typeof input.cwd === "string" && input.cwd.trim() !== "" ? input.cwd : null;
+  return cwd ?? (typeof workspaceRoot === "string" ? workspaceRoot : null) ?? asNonEmptyString(env.CURSOR_PROJECT_DIR) ?? asNonEmptyString(env.CLAUDE_PROJECT_ROOT) ?? asNonEmptyString(env.CLAUDE_PROJECT_DIR) ?? process.cwd();
+}
 function normalizeRepoPath(pathValue) {
   const normalized = pathValue.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/+$/, "");
   return normalized === "" ? "." : normalized;
@@ -302,11 +307,19 @@ function parseSessionVercelProjectLinkState(raw) {
     const state = { lastResolvedAt };
     const projectId = asNonEmptyString(parsed.projectId);
     const orgId = asNonEmptyString(parsed.orgId);
+    const lastSentProjectId = asNonEmptyString(parsed.lastSentProjectId);
+    const lastSentOrgId = asNonEmptyString(parsed.lastSentOrgId);
     if (projectId) {
       state.projectId = projectId;
     }
     if (orgId) {
       state.orgId = orgId;
+    }
+    if (lastSentProjectId) {
+      state.lastSentProjectId = lastSentProjectId;
+    }
+    if (lastSentOrgId) {
+      state.lastSentOrgId = lastSentOrgId;
     }
     return state;
   } catch {
@@ -324,8 +337,14 @@ function readSessionVercelProjectLinkState(sessionId) {
 function writeSessionVercelProjectLinkState(sessionId, state) {
   writeSessionFile(sessionId, SESSION_VERCEL_PROJECT_LINK_KIND, JSON.stringify(state));
 }
+function hasUnsentSessionVercelProjectLink(state) {
+  if (!state?.projectId || !state.orgId) {
+    return false;
+  }
+  return state.lastSentProjectId !== state.projectId || state.lastSentOrgId !== state.orgId;
+}
 function shouldRefreshSessionVercelProjectLink(state, now, refreshMs) {
-  return !state || now - state.lastResolvedAt >= refreshMs;
+  return !state || hasUnsentSessionVercelProjectLink(state) || now - state.lastResolvedAt >= refreshMs;
 }
 export {
   SESSION_VERCEL_PROJECT_LINK_KIND,
@@ -342,6 +361,7 @@ export {
   readSessionVercelProjectLinkState,
   removeAllSessionDedupArtifacts,
   removeSessionClaimDir,
+  resolveHookProjectRoot,
   resolveVercelProjectLink,
   safeReadFile,
   safeReadJson,
