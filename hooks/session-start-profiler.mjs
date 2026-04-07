@@ -7,6 +7,7 @@ import {
   readdirSync,
   writeFileSync
 } from "fs";
+import { homedir } from "os";
 import { delimiter, join, resolve } from "path";
 import { execFileSync } from "child_process";
 import { fileURLToPath } from "url";
@@ -297,6 +298,51 @@ function checkVercelCli() {
   const needsUpdate = versionComparison === null ? !!(currentVersion && latestVersion && currentVersion !== latestVersion) : versionComparison < 0;
   return { installed: true, currentVersion, latestVersion, needsUpdate };
 }
+function getVercelCliDataDirs(env = process.env, homeDir = homedir()) {
+  const directories = [];
+  if (process.platform === "darwin") {
+    directories.push(join(homeDir, "Library", "Application Support", "com.vercel.cli"));
+    directories.push(join(homeDir, "Library", "Application Support", "now"));
+  } else if (process.platform === "win32") {
+    if (typeof env.APPDATA === "string" && env.APPDATA.trim() !== "") {
+      directories.push(join(env.APPDATA, "com.vercel.cli"));
+      directories.push(join(env.APPDATA, "now"));
+    }
+  } else {
+    const xdgDataHome = typeof env.XDG_DATA_HOME === "string" && env.XDG_DATA_HOME.trim() !== "" ? env.XDG_DATA_HOME : join(homeDir, ".local", "share");
+    directories.push(join(xdgDataHome, "com.vercel.cli"));
+    directories.push(join(xdgDataHome, "now"));
+  }
+  directories.push(join(homeDir, ".now"));
+  return [...new Set(directories)];
+}
+function readPersistedVercelCliUserId(env = process.env, homeDir = homedir()) {
+  for (const configDir of getVercelCliDataDirs(env, homeDir)) {
+    try {
+      const parsed = JSON.parse(readFileSync(join(configDir, "auth.json"), "utf8"));
+      if (typeof parsed.userId === "string" && parsed.userId.trim() !== "") {
+        return parsed.userId;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+function buildSessionStartTelemetryEntries(args) {
+  const entries = [
+    { key: "session:device_id", value: args.deviceId },
+    { key: "session:platform", value: process.platform },
+    { key: "session:likely_skills", value: args.likelySkills.join(",") },
+    { key: "session:greenfield", value: String(args.greenfield) },
+    { key: "session:vercel_cli_installed", value: String(args.cliStatus.installed) },
+    { key: "session:vercel_cli_version", value: args.cliStatus.currentVersion || "" }
+  ];
+  if (args.cliStatus.installed && args.vercelCliUserId) {
+    entries.push({ key: "session:vercel_cli_user_id", value: args.vercelCliUserId });
+  }
+  return entries;
+}
 function parseSessionStartInput(raw) {
   try {
     if (!raw.trim()) return null;
@@ -470,14 +516,14 @@ async function main() {
   }
   if (sessionId) {
     const deviceId = getOrCreateDeviceId();
-    await trackBaseEvents(sessionId, [
-      { key: "session:device_id", value: deviceId },
-      { key: "session:platform", value: process.platform },
-      { key: "session:likely_skills", value: likelySkills.join(",") },
-      { key: "session:greenfield", value: String(greenfield !== null) },
-      { key: "session:vercel_cli_installed", value: String(cliStatus.installed) },
-      { key: "session:vercel_cli_version", value: cliStatus.currentVersion || "" }
-    ]).catch(() => {
+    const vercelCliUserId = cliStatus.installed ? readPersistedVercelCliUserId() : null;
+    await trackBaseEvents(sessionId, buildSessionStartTelemetryEntries({
+      deviceId,
+      likelySkills,
+      greenfield: greenfield !== null,
+      cliStatus,
+      vercelCliUserId
+    })).catch(() => {
     });
   }
   if (cursorOutput) {
@@ -493,6 +539,7 @@ if (isSessionStartProfilerEntrypoint) {
 export {
   buildSessionStartProfilerEnvVars,
   buildSessionStartProfilerUserMessages,
+  buildSessionStartTelemetryEntries,
   checkGreenfield,
   detectSessionStartPlatform,
   formatSessionStartProfilerCursorOutput,
@@ -501,5 +548,6 @@ export {
   parseSessionStartInput,
   profileBootstrapSignals,
   profileProject,
+  readPersistedVercelCliUserId,
   resolveSessionStartProjectRoot
 };

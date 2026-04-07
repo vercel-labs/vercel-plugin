@@ -784,6 +784,80 @@ describe("profileProject (unit)", () => {
   });
 });
 
+describe("session-start telemetry helpers (unit)", () => {
+  test("reads persisted Vercel CLI userId from auth.json", async () => {
+    const { readPersistedVercelCliUserId } = await import("../hooks/session-start-profiler.mjs");
+    const homeDir = join(tempDir, "home");
+    const env: Record<string, string> = {};
+    const authDir = process.platform === "win32"
+      ? (() => {
+        const appData = join(homeDir, "AppData", "Roaming");
+        env.APPDATA = appData;
+        return join(appData, "com.vercel.cli");
+      })()
+      : process.platform === "darwin"
+      ? join(homeDir, "Library", "Application Support", "com.vercel.cli")
+      : (() => {
+        const xdgDataHome = join(homeDir, ".local", "share");
+        env.XDG_DATA_HOME = xdgDataHome;
+        return join(xdgDataHome, "com.vercel.cli");
+      })();
+    mkdirSync(authDir, { recursive: true });
+    writeFileSync(
+      join(authDir, "auth.json"),
+      JSON.stringify({ token: "redacted", userId: "user_123" }),
+      "utf-8",
+    );
+
+    expect(readPersistedVercelCliUserId(env, homeDir)).toBe("user_123");
+  });
+
+  test("includes Vercel CLI userId in session telemetry only when present", async () => {
+    const { buildSessionStartTelemetryEntries } = await import("../hooks/session-start-profiler.mjs");
+
+    const withUserId = buildSessionStartTelemetryEntries({
+      deviceId: "device_123",
+      likelySkills: ["nextjs", "vercel-cli"],
+      greenfield: false,
+      cliStatus: {
+        installed: true,
+        currentVersion: "44.7.3",
+        needsUpdate: false,
+      },
+      vercelCliUserId: "user_123",
+    });
+    expect(withUserId).toContainEqual({
+      key: "session:vercel_cli_user_id",
+      value: "user_123",
+    });
+
+    const withoutUserId = buildSessionStartTelemetryEntries({
+      deviceId: "device_123",
+      likelySkills: ["nextjs", "vercel-cli"],
+      greenfield: false,
+      cliStatus: {
+        installed: true,
+        currentVersion: "44.7.3",
+        needsUpdate: false,
+      },
+      vercelCliUserId: null,
+    });
+    expect(withoutUserId.find((entry) => entry.key === "session:vercel_cli_user_id")).toBeUndefined();
+
+    const cliMissing = buildSessionStartTelemetryEntries({
+      deviceId: "device_123",
+      likelySkills: ["nextjs"],
+      greenfield: false,
+      cliStatus: {
+        installed: false,
+        needsUpdate: false,
+      },
+      vercelCliUserId: "user_123",
+    });
+    expect(cliMissing.find((entry) => entry.key === "session:vercel_cli_user_id")).toBeUndefined();
+  });
+});
+
 describe("logBrokenSkillFrontmatterSummary (unit)", () => {
   test("emits one summary warning when a skill has malformed frontmatter", async () => {
     const { logBrokenSkillFrontmatterSummary } = await import("../hooks/session-start-profiler.mjs");
