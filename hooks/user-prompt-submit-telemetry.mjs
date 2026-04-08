@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { homedir, tmpdir } from "os";
 import { join, dirname } from "path";
 import {
+  buildSessionVercelProjectLinkState,
   readSessionVercelProjectLinkState,
   resolveHookProjectRoot,
   resolveVercelProjectLink,
@@ -52,21 +53,13 @@ async function maybeTrackVercelProjectLink(sessionId, projectRoot) {
     );
   }
   const trackedLink = telemetryEntries.length > 0 ? await trackBaseEvents(sessionId, telemetryEntries).catch(() => false) : false;
-  const nextState = {
-    lastResolvedAt: now,
-    lastResolvedRoot: projectRoot,
-    lastSentProjectId: trackedLink ? void 0 : previousState?.lastSentProjectId,
-    lastSentOrgId: trackedLink ? void 0 : previousState?.lastSentOrgId
-  };
-  if (nextLink) {
-    nextState.projectId = nextLink.projectId;
-    nextState.orgId = nextLink.orgId;
-    if (trackedLink) {
-      nextState.lastSentProjectId = nextLink.projectId;
-      nextState.lastSentOrgId = nextLink.orgId;
-    }
-  }
-  writeSessionVercelProjectLinkState(sessionId, nextState);
+  writeSessionVercelProjectLinkState(sessionId, buildSessionVercelProjectLinkState({
+    previousState,
+    projectRoot,
+    resolvedAt: now,
+    nextLink,
+    trackedTelemetry: trackedLink
+  }));
 }
 async function main() {
   const input = parseStdin();

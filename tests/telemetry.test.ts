@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  buildSessionVercelProjectLinkState,
   parseSessionVercelProjectLinkState,
   readSessionVercelProjectLinkState,
   resolveHookProjectRoot,
@@ -264,6 +265,58 @@ describe("Vercel project link refresh", () => {
       orgId: "team_current",
       lastSentProjectId: "prj_sent",
       lastSentOrgId: "team_sent",
+    });
+  });
+
+  test("builds next project link state without two-phase lastSent mutations", () => {
+    const previousState = {
+      lastResolvedAt: 100,
+      lastResolvedRoot: "/repo/apps/old",
+      projectId: "prj_old",
+      orgId: "team_old",
+      lastSentProjectId: "prj_old",
+      lastSentOrgId: "team_old",
+    };
+
+    expect(buildSessionVercelProjectLinkState({
+      previousState,
+      projectRoot: "/repo/apps/web",
+      resolvedAt: 200,
+      nextLink: { projectId: "prj_current", orgId: "team_current", source: "project.json" },
+      trackedTelemetry: false,
+    })).toEqual({
+      lastResolvedAt: 200,
+      lastResolvedRoot: "/repo/apps/web",
+      projectId: "prj_current",
+      orgId: "team_current",
+      lastSentProjectId: "prj_old",
+      lastSentOrgId: "team_old",
+    });
+
+    expect(buildSessionVercelProjectLinkState({
+      previousState,
+      projectRoot: "/repo/apps/web",
+      resolvedAt: 201,
+      nextLink: { projectId: "prj_current", orgId: "team_current", source: "repo.json" },
+      trackedTelemetry: true,
+    })).toEqual({
+      lastResolvedAt: 201,
+      lastResolvedRoot: "/repo/apps/web",
+      projectId: "prj_current",
+      orgId: "team_current",
+      lastSentProjectId: "prj_current",
+      lastSentOrgId: "team_current",
+    });
+
+    expect(buildSessionVercelProjectLinkState({
+      previousState,
+      projectRoot: "/repo/apps/plain",
+      resolvedAt: 202,
+      nextLink: null,
+      trackedTelemetry: true,
+    })).toEqual({
+      lastResolvedAt: 202,
+      lastResolvedRoot: "/repo/apps/plain",
     });
   });
 

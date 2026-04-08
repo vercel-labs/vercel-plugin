@@ -680,6 +680,27 @@ describe("session-start-profiler", () => {
     expect(readVercelProjectLinkState()?.lastResolvedAt).toEqual(expect.any(Number));
   });
 
+  test("skips linked project resolution and state writes when base telemetry is disabled", async () => {
+    const projectDir = join(tempDir, "telemetry-off-linked-project");
+    mkdirSync(join(projectDir, ".vercel"), { recursive: true });
+    writeFileSync(
+      join(projectDir, ".vercel", "project.json"),
+      JSON.stringify({ projectId: "prj_linked", orgId: "team_linked" }),
+    );
+
+    const result = await runProfilerWithCapture({
+      env: {
+        CLAUDE_ENV_FILE: envFile,
+        CLAUDE_PROJECT_ROOT: projectDir,
+        VERCEL_PLUGIN_TELEMETRY: "off",
+      },
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.requests).toHaveLength(0);
+    expect(readVercelProjectLinkState()).toBeNull();
+  });
+
   test("prefers payload cwd over stale env roots when resolving linked Vercel project telemetry", async () => {
     const staleRoot = join(tempDir, "stale-linked-root");
     const currentRoot = join(tempDir, "current-linked-root");

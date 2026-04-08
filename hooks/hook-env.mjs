@@ -345,6 +345,25 @@ function readSessionVercelProjectLinkState(sessionId) {
 function writeSessionVercelProjectLinkState(sessionId, state) {
   writeSessionFile(sessionId, SESSION_VERCEL_PROJECT_LINK_KIND, JSON.stringify(state));
 }
+function buildSessionVercelProjectLinkState(args) {
+  const nextState = {
+    lastResolvedAt: args.resolvedAt,
+    lastResolvedRoot: args.projectRoot
+  };
+  if (args.nextLink) {
+    nextState.projectId = args.nextLink.projectId;
+    nextState.orgId = args.nextLink.orgId;
+  }
+  const lastSentProjectId = args.trackedTelemetry ? args.nextLink?.projectId : args.previousState?.lastSentProjectId;
+  const lastSentOrgId = args.trackedTelemetry ? args.nextLink?.orgId : args.previousState?.lastSentOrgId;
+  if (lastSentProjectId !== void 0) {
+    nextState.lastSentProjectId = lastSentProjectId;
+  }
+  if (lastSentOrgId !== void 0) {
+    nextState.lastSentOrgId = lastSentOrgId;
+  }
+  return nextState;
+}
 function hasUnsentSessionVercelProjectLink(state) {
   if (!state) {
     return false;
@@ -357,6 +376,7 @@ function shouldRefreshSessionVercelProjectLink(state, currentProjectRoot, now, r
 export {
   SESSION_VERCEL_PROJECT_LINK_KIND,
   appendAuditLog,
+  buildSessionVercelProjectLinkState,
   dedupClaimDirPath,
   dedupFilePath,
   generateVerificationId,

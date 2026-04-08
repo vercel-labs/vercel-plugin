@@ -552,6 +552,40 @@ export function writeSessionVercelProjectLinkState(
   writeSessionFile(sessionId, SESSION_VERCEL_PROJECT_LINK_KIND, JSON.stringify(state));
 }
 
+export function buildSessionVercelProjectLinkState(args: {
+  previousState: SessionVercelProjectLinkState | null;
+  projectRoot: string;
+  resolvedAt: number;
+  nextLink: VercelProjectLink | null;
+  trackedTelemetry: boolean;
+}): SessionVercelProjectLinkState {
+  const nextState: SessionVercelProjectLinkState = {
+    lastResolvedAt: args.resolvedAt,
+    lastResolvedRoot: args.projectRoot,
+  };
+
+  if (args.nextLink) {
+    nextState.projectId = args.nextLink.projectId;
+    nextState.orgId = args.nextLink.orgId;
+  }
+
+  const lastSentProjectId = args.trackedTelemetry
+    ? args.nextLink?.projectId
+    : args.previousState?.lastSentProjectId;
+  const lastSentOrgId = args.trackedTelemetry
+    ? args.nextLink?.orgId
+    : args.previousState?.lastSentOrgId;
+
+  if (lastSentProjectId !== undefined) {
+    nextState.lastSentProjectId = lastSentProjectId;
+  }
+  if (lastSentOrgId !== undefined) {
+    nextState.lastSentOrgId = lastSentOrgId;
+  }
+
+  return nextState;
+}
+
 function hasUnsentSessionVercelProjectLink(state: SessionVercelProjectLinkState | null): boolean {
   if (!state) {
     return false;

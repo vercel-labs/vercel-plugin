@@ -16,6 +16,7 @@ import {
   setSessionEnv
 } from "./compat.mjs";
 import {
+  buildSessionVercelProjectLinkState,
   pluginRoot,
   profileCachePath,
   readSessionVercelProjectLinkState,
@@ -27,7 +28,7 @@ import {
 } from "./hook-env.mjs";
 import { createLogger, logCaughtError } from "./logger.mjs";
 import { buildSkillMap } from "./skill-map-frontmatter.mjs";
-import { trackBaseEvents, getOrCreateDeviceId } from "./telemetry.mjs";
+import { getOrCreateDeviceId, isBaseTelemetryEnabled, trackBaseEvents } from "./telemetry.mjs";
 var FILE_MARKERS = [
   { file: "next.config.js", skills: ["nextjs", "turbopack"] },
   { file: "next.config.mjs", skills: ["nextjs", "turbopack"] },
@@ -418,9 +419,7 @@ async function main() {
   const platform = detectSessionStartPlatform(hookInput);
   const sessionId = normalizeSessionStartSessionId(hookInput);
   const projectRoot = resolveHookProjectRoot(hookInput);
-  const previousVercelProjectLinkState = sessionId ? readSessionVercelProjectLinkState(sessionId) : null;
-  const vercelProjectLink = resolveVercelProjectLink(projectRoot);
-  const vercelProjectLinkResolvedAt = Date.now();
+  const telemetryEnabled = isBaseTelemetryEnabled();
   logBrokenSkillFrontmatterSummary();
   const greenfield = checkGreenfield(projectRoot);
   const cliStatus = checkVercelCli();
@@ -480,10 +479,11 @@ async function main() {
       });
     }
   }
-  if (sessionId) {
-    const deviceId = getOrCreateDeviceId();
+  if (sessionId && telemetryEnabled) {
+    const previousVercelProjectLinkState = readSessionVercelProjectLinkState(sessionId);
+    const vercelProjectLink = resolveVercelProjectLink(projectRoot);
     const telemetryEntries = [
-      { key: "session:device_id", value: deviceId },
+      { key: "session:device_id", value: getOrCreateDeviceId() },
       { key: "session:platform", value: process.platform },
       { key: "session:likely_skills", value: likelySkills.join(",") },
       { key: "session:greenfield", value: String(greenfield !== null) },
@@ -502,21 +502,13 @@ async function main() {
       );
     }
     const trackedBaseTelemetry = await trackBaseEvents(sessionId, telemetryEntries).catch(() => false);
-    const nextVercelProjectLinkState = {
-      lastResolvedAt: vercelProjectLinkResolvedAt,
-      lastResolvedRoot: projectRoot,
-      lastSentProjectId: trackedBaseTelemetry ? void 0 : previousVercelProjectLinkState?.lastSentProjectId,
-      lastSentOrgId: trackedBaseTelemetry ? void 0 : previousVercelProjectLinkState?.lastSentOrgId
-    };
-    if (vercelProjectLink) {
-      nextVercelProjectLinkState.projectId = vercelProjectLink.projectId;
-      nextVercelProjectLinkState.orgId = vercelProjectLink.orgId;
-      if (trackedBaseTelemetry) {
-        nextVercelProjectLinkState.lastSentProjectId = vercelProjectLink.projectId;
-        nextVercelProjectLinkState.lastSentOrgId = vercelProjectLink.orgId;
-      }
-    }
-    writeSessionVercelProjectLinkState(sessionId, nextVercelProjectLinkState);
+    writeSessionVercelProjectLinkState(sessionId, buildSessionVercelProjectLinkState({
+      previousState: previousVercelProjectLinkState,
+      projectRoot,
+      resolvedAt: Date.now(),
+      nextLink: vercelProjectLink,
+      trackedTelemetry: trackedBaseTelemetry
+    }));
   }
   if (cursorOutput) {
     process.stdout.write(cursorOutput);
