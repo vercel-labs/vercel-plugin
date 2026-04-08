@@ -7,6 +7,29 @@ import {
 import { resolveProjectStatePaths } from "./project-state-paths.mjs";
 import { formatCommandWithCwd } from "./registry-client.mjs";
 import { buildVercelCliCommand as buildVercelCliCommand2, vercelSubcommands } from "./vercel-cli-command.mjs";
+function deriveRegistryInstallSet(args) {
+  const groupMap = /* @__PURE__ */ new Map();
+  const nonRegistryMissingSkills = [];
+  for (const skill of args.missingSkills) {
+    const meta = args.registryMetadata.get(skill);
+    if (!meta) {
+      nonRegistryMissingSkills.push(skill);
+      continue;
+    }
+    let group = groupMap.get(meta.registry);
+    if (!group) {
+      group = { requestedSkills: [], installTargets: [] };
+      groupMap.set(meta.registry, group);
+    }
+    group.requestedSkills.push(skill);
+    group.installTargets.push({ installName: meta.registrySlug ?? skill });
+  }
+  const groups = [];
+  for (const [registry, group] of groupMap) {
+    groups.push({ registry, ...group });
+  }
+  return { groups, nonRegistryMissingSkills };
+}
 function uniqueSorted(values) {
   return [...new Set(values.filter((value) => value.trim() !== ""))].sort();
 }
@@ -163,6 +186,7 @@ function formatSkillInstallPalette(plan) {
 export {
   buildSkillInstallPlan,
   buildVercelCliCommand2 as buildVercelCliCommand,
+  deriveRegistryInstallSet,
   formatSkillInstallPalette,
   serializeSkillInstallPlan,
   vercelSubcommands

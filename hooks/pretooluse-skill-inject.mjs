@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // hooks/src/pretooluse-skill-inject.mts
-import { readFileSync, readdirSync, realpathSync } from "fs";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "fs";
 import { join, resolve } from "path";
 import { fileURLToPath } from "url";
 import {
@@ -35,8 +35,12 @@ import { resolveProjectStatePaths, resolveVercelPluginHome } from "./project-sta
 import { resolveVercelJsonSkills, isVercelJsonPath, VERCEL_JSON_SKILLS } from "./vercel-config.mjs";
 import { createLogger, logDecision } from "./logger.mjs";
 import { trackBaseEvents } from "./telemetry.mjs";
+import { triggerOnDemandInstall } from "./on-demand-skill-install.mjs";
+import { loadRegistrySkillMetadata } from "./registry-skill-metadata.mjs";
 var MAX_SKILLS = 10;
 var DEFAULT_INJECTION_BUDGET_BYTES = 1e5;
+var MAX_MANIFEST_SUMMARY_REINJECTS = parseInt(process.env.VERCEL_PLUGIN_MAX_MANIFEST_SUMMARY_REINJECTS ?? "3", 10);
+var MANIFEST_SUMMARY_COUNT_PREFIX = "manifest-summary-count-";
 var SETUP_MODE_BOOTSTRAP_SKILL = "bootstrap";
 var SETUP_MODE_PRIORITY_BOOST = 50;
 var PLUGIN_ROOT = resolvePluginRoot();
@@ -592,9 +596,34 @@ function deduplicateSkills({ matchedEntries, matched, toolName, toolInput, injec
 function skillInvocationMessage(skill, platform) {
   return platform === "cursor" ? `Load the /${skill} skill.` : `You must run the Skill(${skill}) tool.`;
 }
-function summaryFallbackText(payload, platform) {
+function hasSkillCommand(skill) {
+  try {
+    const commandPath = join(PLUGIN_ROOT, "commands", `${skill}.md`);
+    return existsSync(commandPath);
+  } catch {
+    return false;
+  }
+}
+function getManifestSummaryCount(sessionId, skill) {
+  const val = readSessionFile(sessionId, `${MANIFEST_SUMMARY_COUNT_PREFIX}${skill}`);
+  return val ? parseInt(val, 10) || 0 : 0;
+}
+function incrementManifestSummaryCount(sessionId, skill) {
+  const count = getManifestSummaryCount(sessionId, skill) + 1;
+  writeSessionFile(sessionId, `${MANIFEST_SUMMARY_COUNT_PREFIX}${skill}`, String(count));
+  return count;
+}
+function summaryFallbackText(payload, platform, registryMetadata) {
+  let invocationLine;
+  if (hasSkillCommand(payload.skill)) {
+    invocationLine = skillInvocationMessage(payload.skill, platform);
+  } else if (registryMetadata?.has(payload.skill)) {
+    invocationLine = `Guidance for ${payload.skill}. Installing from registry \u2014 full guidance will load on next action.`;
+  } else {
+    invocationLine = `Guidance for ${payload.skill}.`;
+  }
   return [
-    skillInvocationMessage(payload.skill, platform),
+    invocationLine,
     payload.summary.trim() !== "" ? `Summary: ${payload.summary.trim()}` : null,
     payload.docs.length > 0 ? `Docs: ${payload.docs.join(", ")}` : null
   ].filter((line) => Boolean(line)).join("\n");
@@ -604,6 +633,7 @@ function injectSkills(rankedSkills, options) {
   const platform = optPlatform ?? "claude-code";
   const root = pluginRoot || PLUGIN_ROOT;
   const l = logger || log;
+  const registryMeta = loadRegistrySkillMetadata(root);
   const budget = budgetBytes ?? getInjectionBudget();
   const ceiling = maxSkills ?? MAX_SKILLS;
   const store = optStore ?? createSkillStore({
@@ -614,6 +644,7 @@ function injectSkills(rankedSkills, options) {
   const parts = [];
   const loaded = [];
   const summaryOnly = [];
+  const manifestSummaryOnly = [];
   const droppedByCap = [];
   const droppedByBudget = [];
   const skippedByConcurrentClaim = [];
@@ -642,11 +673,19 @@ function injectSkills(rankedSkills, options) {
       l.issue("SKILL_PAYLOAD_MISSING", `No cached body or shipped rules metadata found for skill "${skill}"`, `Install "${skill}" into ~/.vercel-plugin before retrying`, { skill });
       continue;
     }
-    const wrapped = payload.mode === "summary" ? summaryFallbackText(payload, platform) : skillInvocationMessage(skill, platform);
+    const isManifestSummary = payload.mode === "summary";
+    let wrapped;
+    if (isManifestSummary) {
+      wrapped = summaryFallbackText(payload, platform, registryMeta);
+    } else if (hasSkillCommand(skill)) {
+      wrapped = skillInvocationMessage(skill, platform);
+    } else {
+      wrapped = payload.body ?? summaryFallbackText(payload, platform, registryMeta);
+    }
     const byteLen = Buffer.byteLength(wrapped, "utf-8");
     if (loaded.length > 0 && usedBytes + byteLen > budget) {
       if (payload.mode === "body") {
-        const summaryWrapped = summaryFallbackText(payload, platform);
+        const summaryWrapped = summaryFallbackText(payload, platform, registryMeta);
         const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
         if (usedBytes + summaryByteLen <= budget) {
           if (!canInjectSkill(skill)) {
@@ -666,7 +705,7 @@ function injectSkills(rankedSkills, options) {
       continue;
     }
     if (forceSummarySkills?.has(skill)) {
-      const summaryWrapped = summaryFallbackText(payload, platform);
+      const summaryWrapped = summaryFallbackText(payload, platform, registryMeta);
       const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
       if (usedBytes + summaryByteLen <= budget || loaded.length === 0) {
         if (!canInjectSkill(skill)) {
@@ -681,16 +720,27 @@ function injectSkills(rankedSkills, options) {
         continue;
       }
     }
-    if (!canInjectSkill(skill)) {
+    if (isManifestSummary && sessionId) {
+      const reinjectCount = getManifestSummaryCount(sessionId, skill);
+      if (reinjectCount >= MAX_MANIFEST_SUMMARY_REINJECTS) {
+        l.debug("manifest-summary-cap-reached", { skill, reinjectCount, max: MAX_MANIFEST_SUMMARY_REINJECTS });
+        if (!canInjectSkill(skill)) {
+          continue;
+        }
+      }
+    } else if (!canInjectSkill(skill)) {
       continue;
     }
     parts.push(wrapped);
     loaded.push(skill);
     usedBytes += byteLen;
-    if (injectedSkills) injectedSkills.add(skill);
-    if (payload.mode === "summary") {
+    if (isManifestSummary) {
       summaryOnly.push(skill);
-      l.debug("skill-summary-fallback", { skill, source: payload.source });
+      manifestSummaryOnly.push(skill);
+      if (sessionId) incrementManifestSummaryCount(sessionId, skill);
+      l.debug("skill-manifest-summary", { skill, source: payload.source, reinjectCount: sessionId ? getManifestSummaryCount(sessionId, skill) : 0 });
+    } else {
+      if (injectedSkills) injectedSkills.add(skill);
     }
   }
   if (droppedByCap.length > 0 || droppedByBudget.length > 0 || summaryOnly.length > 0 || skippedByConcurrentClaim.length > 0) {
@@ -707,7 +757,7 @@ function injectSkills(rankedSkills, options) {
     });
   }
   l.debug("skills-injected", { injected: loaded, summaryOnly, skippedByConcurrentClaim, totalParts: parts.length, usedBytes, budgetBytes: budget });
-  return { parts, loaded, summaryOnly, droppedByCap, droppedByBudget, skippedByConcurrentClaim };
+  return { parts, loaded, summaryOnly, manifestSummaryOnly, droppedByCap, droppedByBudget, skippedByConcurrentClaim };
 }
 function formatPlatformOutput(platform, additionalContext, env) {
   if (platform === "cursor") {
@@ -866,7 +916,39 @@ function run() {
   const matchResult = matchSkills(toolName, toolInput, compiledSkills, log);
   if (!matchResult) return "{}";
   if (log.active) timing.match = Math.round(log.now() - tMatch);
-  const { matchedEntries, matchReasons, matched } = matchResult;
+  let { matchedEntries, matchReasons, matched } = matchResult;
+  const projectFacts = parseFactSet(process.env.VERCEL_PLUGIN_PROJECT_FACTS);
+  if (projectFacts.size === 0) {
+    if (sessionId) {
+      const gf = readSessionFile(sessionId, "greenfield");
+      if (gf === "true") projectFacts.add("greenfield");
+    }
+    if (cwd) {
+      try {
+        const entries = readdirSync(cwd);
+        if (!entries.some((e) => e === ".env" || e.startsWith(".env."))) {
+          projectFacts.add("no-env-files");
+        }
+      } catch {
+      }
+    }
+  }
+  if (projectFacts.size > 0) {
+    const suppressedSkills = [];
+    matchedEntries = matchedEntries.filter((entry) => {
+      const cfg = skills.skillMap[entry.skill];
+      const suppress = cfg?.suppressWhenProjectFacts;
+      if (suppress && suppress.some((fact) => projectFacts.has(fact))) {
+        suppressedSkills.push(entry.skill);
+        matched.delete(entry.skill);
+        return false;
+      }
+      return true;
+    });
+    if (suppressedSkills.length > 0) {
+      log.debug("suppress-by-project-facts", { suppressed: suppressedSkills, facts: [...projectFacts] });
+    }
+  }
   const tsxReview = checkTsxReviewTrigger(toolName, toolInput, injectedSkills, dedupOff, sessionId, log);
   const devServerVerify = checkDevServerVerify(toolName, toolInput, injectedSkills, dedupOff, sessionId, log);
   const vercelEnvHelp = checkVercelEnvHelp(toolName, toolInput, injectedSkills, dedupOff, log);
@@ -987,22 +1069,6 @@ function run() {
       log.debug("dev-server-companion-inject-past-guard", { skill: companion, iterationCount: devServerVerify.iterationCount, max: DEV_SERVER_VERIFY_MAX_ITERATIONS });
     }
   }
-  const projectFacts = parseFactSet(process.env.VERCEL_PLUGIN_PROJECT_FACTS);
-  if (projectFacts.size === 0) {
-    if (sessionId) {
-      const gf = readSessionFile(sessionId, "greenfield");
-      if (gf === "true") projectFacts.add("greenfield");
-    }
-    if (cwd) {
-      try {
-        const entries = readdirSync(cwd);
-        if (!entries.some((e) => e === ".env" || e.startsWith(".env."))) {
-          projectFacts.add("no-env-files");
-        }
-      } catch {
-      }
-    }
-  }
   const runtimeFacts = /* @__PURE__ */ new Set();
   if (isClientReactFile(toolName, toolInput)) {
     runtimeFacts.add("client-react-file");
@@ -1055,7 +1121,7 @@ function run() {
     return formatPlatformOutput(platform, void 0, envUpdates2);
   }
   const tSkillRead = log.active ? log.now() : 0;
-  const { parts, loaded, summaryOnly, droppedByCap, droppedByBudget } = injectSkills(rankedSkills, {
+  const { parts, loaded, summaryOnly, manifestSummaryOnly, droppedByCap, droppedByBudget } = injectSkills(rankedSkills, {
     pluginRoot: PLUGIN_ROOT,
     projectRoot: cwd,
     skillStore,
@@ -1069,6 +1135,23 @@ function run() {
     platform
   });
   if (log.active) timing.skill_read = Math.round(log.now() - tSkillRead);
+  if (manifestSummaryOnly.length > 0 && sessionId && cwd) {
+    const onDemandResult = triggerOnDemandInstall({
+      summaryOnlySkills: manifestSummaryOnly,
+      sessionId,
+      projectRoot: cwd,
+      pluginRoot: PLUGIN_ROOT,
+      toolTarget,
+      logger: log
+    });
+    if (onDemandResult.triggered.length > 0) {
+      log.debug("on-demand-install-triggered", {
+        triggered: onDemandResult.triggered,
+        alreadyAttempted: onDemandResult.alreadyAttempted,
+        noRegistry: onDemandResult.noRegistry
+      });
+    }
+  }
   if (tsxReviewInjected && loaded.includes(TSX_REVIEW_SKILL)) {
     parts.push(REVIEW_MARKER);
     const prevCount = getTsxEditCount(sessionId);

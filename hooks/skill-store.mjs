@@ -13,6 +13,7 @@ import {
   compileSkillPatterns
 } from "./patterns.mjs";
 import { safeReadFile, safeReadJson } from "./hook-env.mjs";
+import { loadRegistrySkillMetadata } from "./registry-skill-metadata.mjs";
 function hasCompiledMatchers(entry) {
   if (!entry) return false;
   return entry.compiledPaths.length > 0 || entry.compiledBash.length > 0 || entry.compiledImports.length > 0;
@@ -93,6 +94,11 @@ function normalizeManifestSkill(raw) {
   }
   if (raw.greenfield === true || raw.greenfield === "true") {
     skill.greenfield = true;
+  }
+  if (Array.isArray(raw.suppressWhenProjectFacts) && raw.suppressWhenProjectFacts.length > 0) {
+    skill.suppressWhenProjectFacts = raw.suppressWhenProjectFacts.filter(
+      (f) => typeof f === "string" && f.length > 0
+    );
   }
   if (raw.promptSignals && typeof raw.promptSignals === "object" && !Array.isArray(raw.promptSignals)) {
     skill.promptSignals = raw.promptSignals;
@@ -298,6 +304,17 @@ function createSkillStore(options, logger) {
   });
   let cachedSkillSet;
   let cachedInstalled;
+  let nameToSlugMap;
+  function getNameToSlugMap() {
+    if (nameToSlugMap) return nameToSlugMap;
+    nameToSlugMap = /* @__PURE__ */ new Map();
+    for (const [name, meta] of loadRegistrySkillMetadata(options.pluginRoot)) {
+      if (meta.registrySlug !== name) {
+        nameToSlugMap.set(name, meta.registrySlug);
+      }
+    }
+    return nameToSlugMap;
+  }
   function loadCachedSkillSet(logger2) {
     if (cachedSkillSet !== void 0) return cachedSkillSet;
     const rootResults = roots.map((root) => loadRootSkillSet(root, logger2)).filter(
@@ -348,16 +365,33 @@ function createSkillStore(options, logger) {
         if (!root.skillsDir) continue;
         const path = join(root.skillsDir, name, "SKILL.md");
         const raw = safeReadFile(path);
-        if (raw === null) continue;
-        const { body } = extractFrontmatter(raw);
-        return {
-          skill: name,
-          source: root.source,
-          root,
-          path,
-          raw,
-          body: body.trimStart()
-        };
+        if (raw !== null) {
+          const { body } = extractFrontmatter(raw);
+          return {
+            skill: name,
+            source: root.source,
+            root,
+            path,
+            raw,
+            body: body.trimStart()
+          };
+        }
+        const slug = getNameToSlugMap().get(name);
+        if (slug) {
+          const slugPath = join(root.skillsDir, slug, "SKILL.md");
+          const slugRaw = safeReadFile(slugPath);
+          if (slugRaw !== null) {
+            const { body } = extractFrontmatter(slugRaw);
+            return {
+              skill: name,
+              source: root.source,
+              root,
+              path: slugPath,
+              raw: slugRaw,
+              body: body.trimStart()
+            };
+          }
+        }
       }
       return null;
     },
@@ -367,8 +401,15 @@ function createSkillStore(options, logger) {
       const root = loaded?.origins[name];
       if (!config || !root) return null;
       if (root.skillsDir) {
-        const path = join(root.skillsDir, name, "SKILL.md");
-        const raw = safeReadFile(path);
+        let resolvedPath = join(root.skillsDir, name, "SKILL.md");
+        let raw = safeReadFile(resolvedPath);
+        if (raw === null) {
+          const slug = getNameToSlugMap().get(name);
+          if (slug) {
+            resolvedPath = join(root.skillsDir, slug, "SKILL.md");
+            raw = safeReadFile(resolvedPath);
+          }
+        }
         if (raw !== null) {
           const { body } = extractFrontmatter(raw);
           const trimmedBody = body.trimStart();
@@ -377,14 +418,14 @@ function createSkillStore(options, logger) {
             skill: name,
             source: root.source,
             mode,
-            path
+            path: resolvedPath
           });
           return {
             skill: name,
             source: root.source,
             root,
             mode,
-            path,
+            path: resolvedPath,
             raw,
             body: trimmedBody === "" ? null : trimmedBody,
             summary: config.summary ?? "",

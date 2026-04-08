@@ -537,7 +537,15 @@ function buildSessionStartProfilerUserMessages(greenfield, cliStatus) {
   const messages = [];
   if (greenfield) {
     messages.push(
-      "This is a greenfield project. Skip exploration \u2014 there is no existing code to discover. Start executing immediately."
+      [
+        "This is a greenfield project. Skip exploration \u2014 there is no existing code to discover. Start executing immediately.",
+        "",
+        "IMPORTANT: Use official scaffolding CLIs to initialize projects \u2014 never manually write package.json or config files from scratch.",
+        "- Next.js: `npx create-next-app@latest .` (or with flags like `--ts --tailwind --eslint --app --src-dir`)",
+        "- Vite: `npm create vite@latest . -- --template react-ts`",
+        "- Remix: `npx create-remix@latest .`",
+        "These ensure latest stable versions, correct dependency ranges, and proper project structure."
+      ].join("\n")
     );
   }
   if (!cliStatus.installed) {

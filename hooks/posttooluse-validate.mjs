@@ -2,8 +2,8 @@
 
 // hooks/src/posttooluse-validate.mts
 import { createHash } from "crypto";
-import { readFileSync, realpathSync } from "fs";
-import { resolve } from "path";
+import { existsSync, readFileSync, realpathSync } from "fs";
+import { join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { detectPlatform } from "./compat.mjs";
 import {
@@ -444,7 +444,14 @@ function markValidated(filePath, hash, sessionId) {
   }
   return next;
 }
-function formatOutput(violations, matchedSkills, filePath, logger, platform = "claude-code", env, chainResult) {
+function hasSkillCommand(skill, pluginRoot) {
+  try {
+    return existsSync(join(pluginRoot, "commands", `${skill}.md`));
+  } catch {
+    return false;
+  }
+}
+function formatOutput(violations, matchedSkills, filePath, logger, platform = "claude-code", env, chainResult, pluginRoot) {
   const l = logger || log;
   const hasChains = chainResult && chainResult.injected.length > 0;
   if (violations.length === 0 && !hasChains) {
@@ -468,16 +475,22 @@ function formatOutput(violations, matchedSkills, filePath, logger, platform = "c
     if (violation.upgradeToSkill && !emittedUpgradeSkills.has(violation.upgradeToSkill)) {
       emittedUpgradeSkills.add(violation.upgradeToSkill);
       const reason = violation.upgradeWhy ? ` Reason: ${violation.upgradeWhy}` : "";
-      const prefix = violation.upgradeMode === "hard" ? "REQUIRED: " : "";
-      lines.push("");
-      lines.push(`${prefix}Use the Skill tool now to load ${violation.upgradeToSkill}.${reason}`);
-      lines.push(
-        `<!-- skillUpgrade: ${JSON.stringify({
-          from: violation.skill,
-          to: violation.upgradeToSkill,
-          line: violation.line
-        })} -->`
-      );
+      const effectiveRoot = pluginRoot || PLUGIN_ROOT;
+      if (hasSkillCommand(violation.upgradeToSkill, effectiveRoot)) {
+        const prefix = violation.upgradeMode === "hard" ? "REQUIRED: " : "";
+        lines.push("");
+        lines.push(`${prefix}Use the Skill tool now to load ${violation.upgradeToSkill}.${reason}`);
+        lines.push(
+          `<!-- skillUpgrade: ${JSON.stringify({
+            from: violation.skill,
+            to: violation.upgradeToSkill,
+            line: violation.line
+          })} -->`
+        );
+      } else {
+        lines.push("");
+        lines.push(`Consider installing ${violation.upgradeToSkill} from the registry for detailed guidance.${reason}`);
+      }
     }
     return lines.join("\n");
   };
@@ -596,7 +609,7 @@ function run() {
   const validatedFiles = markValidated(filePath, hash, sessionId);
   const hasOutput = violations.length > 0 || chainResult.injected.length > 0;
   const cursorEnv = platform === "cursor" && hasOutput ? { [VALIDATED_FILES_ENV_KEY]: validatedFiles } : void 0;
-  const result = formatOutput(violations, matchedSkills, filePath, log, platform, cursorEnv, chainResult);
+  const result = formatOutput(violations, matchedSkills, filePath, log, platform, cursorEnv, chainResult, PLUGIN_ROOT);
   log.complete("posttooluse-validate-done", {
     matchedCount: matchedSkills.length,
     injectedCount: violations.filter((v) => v.severity === "error").length
