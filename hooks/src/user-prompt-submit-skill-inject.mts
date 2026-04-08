@@ -37,6 +37,7 @@ import { loadSkills, injectSkills, applyCoInjectRules, parseFactSet } from "./pr
 import type { LoadedSkills } from "./pretooluse-skill-inject.mjs";
 import { loadRegistrySkillMetadata } from "./registry-skill-metadata.mjs";
 import { buildSkillsAddCommand } from "./skills-cli-command.mjs";
+import { triggerOnDemandInstall } from "./on-demand-skill-install.mjs";
 import {
   COMPACTION_REINJECT_MIN_PRIORITY,
   parseSeenSkills,
@@ -1045,6 +1046,30 @@ export function run(): string {
     });
   }
 
+  // Suppress skills based on project facts (e.g., next-upgrade in greenfield)
+  const promptProjectFacts = parseFactSet(process.env.VERCEL_PLUGIN_PROJECT_FACTS);
+  if (promptProjectFacts.size === 0 && sessionId) {
+    const gf = readSessionFile(sessionId, "greenfield");
+    if (gf === "true") promptProjectFacts.add("greenfield");
+  }
+  if (promptProjectFacts.size > 0) {
+    const suppressedByFacts: string[] = [];
+    for (const [skill, r] of Object.entries(report.perSkillResults)) {
+      const cfg = skills.skillMap[skill];
+      const suppress = cfg?.suppressWhenProjectFacts;
+      if (suppress && suppress.some((fact) => promptProjectFacts.has(fact))) {
+        r.matched = false;
+        r.suppressed = true;
+        r.reason = `suppressed by project fact: ${suppress.find((f) => promptProjectFacts.has(f))}`;
+        suppressedByFacts.push(skill);
+      }
+    }
+    if (suppressedByFacts.length > 0) {
+      report.selectedSkills = report.selectedSkills.filter((s: string) => !suppressedByFacts.includes(s));
+      log.debug("suppress-by-project-facts", { suppressed: suppressedByFacts, facts: [...promptProjectFacts] });
+    }
+  }
+
   const allMatchedPromptSkills = Object.entries(report.perSkillResults)
     .filter(([, r]) => r.matched)
     .map(([skill]) => skill);
@@ -1169,16 +1194,40 @@ export function run(): string {
 
       const nonInteractive = process.env.VERCEL_PLUGIN_NONINTERACTIVE === "1";
 
+      // Build framework-specific scaffolding guidance based on matched skills
+      const matchedSkillNames = new Set(allMatched);
+      const scaffoldingLines: string[] = [];
+
+      if (matchedSkillNames.has("nextjs") || matchedSkillNames.has("next-cache-components")) {
+        scaffoldingLines.push(
+          "**Scaffold first**: Run `npx create-next-app@latest .` (with flags like `--ts --tailwind --eslint --app --src-dir`) to initialize the project.",
+          "This ensures the latest Next.js version with correct deps. Do NOT manually write package.json or config files.",
+        );
+      }
+      if (matchedSkillNames.has("ai-sdk")) {
+        scaffoldingLines.push(
+          "**AI SDK**: After scaffolding, add the AI SDK with `npm install ai @ai-sdk/openai` (or the relevant provider package).",
+        );
+      }
+
+      const scaffoldingBlock = scaffoldingLines.length > 0
+        ? `### Project Scaffolding\n${scaffoldingLines.join("\n")}\n\n`
+        : "";
+
       const setupNote = `\nRECOMMENDED SETUP: After installing skills, run \`vercel link\` to connect to a Vercel project, then \`vercel env pull\` to get OIDC credentials. This enables AI Gateway routing with automatic auth — no API keys needed.\n`;
 
       const discoveryPrompt = nonInteractive
-        ? `Vercel plugin is active. Recommended starters for this task:\n\n` +
+        ? `Vercel plugin is active.\n\n` +
+          `${scaffoldingBlock}` +
+          `Recommended starters for this task:\n\n` +
           `${bundleLines}\n\n` +
           `Install commands:\n${bundleCommands}\n\n` +
           `Install the most relevant starters from the project root before writing code.\n` +
           `After installing, skill guidance will be loaded automatically.\n` +
           `${setupNote}`
-        : `Vercel plugin is active. I can preload relevant guidance for this project.\n\n` +
+        : `Vercel plugin is active.\n\n` +
+          `${scaffoldingBlock}` +
+          `I can preload relevant guidance for this project.\n\n` +
           `Recommended starters:\n${bundleLines}\n\n` +
           `Ask the user: "Which starters would you like? Type the numbers (e.g. 1,2), 'all', or just keep going and I'll stay lightweight."\n\n` +
           `Install commands:\n${bundleCommands}\n\n` +
@@ -1344,7 +1393,28 @@ export function run(): string {
   });
   if (log.active) timing.inject = Math.round(log.now() - tInject);
 
-  const { parts, loaded, summaryOnly } = injectResult;
+  const { parts, loaded, summaryOnly, manifestSummaryOnly } = injectResult;
+
+  // On-demand background install for summary-only skills
+  // This includes both manifest-summary skills (no cached body) and skills injected
+  // at summary level due to budget constraints. Skills with registry backing get
+  // queued for async installation so the full body is available on next tool use.
+  if (summaryOnly && summaryOnly.length > 0 && sessionId && cwd) {
+    const onDemandResult = triggerOnDemandInstall({
+      summaryOnlySkills: summaryOnly,
+      sessionId,
+      projectRoot: cwd,
+      pluginRoot: PLUGIN_ROOT,
+      logger: log,
+    });
+    if (onDemandResult.triggered.length > 0) {
+      log.debug("on-demand-install-triggered", {
+        triggered: onDemandResult.triggered,
+        alreadyAttempted: onDemandResult.alreadyAttempted,
+        noRegistry: onDemandResult.noRegistry,
+      });
+    }
+  }
 
   let syncedSeenSkills = seenState;
   if (hasFileDedup) {

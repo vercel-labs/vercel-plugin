@@ -19,7 +19,7 @@
  */
 
 import type { SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import { readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -63,9 +63,13 @@ import type { VercelJsonRouting } from "./vercel-config.mjs";
 import { createLogger, logDecision } from "./logger.mjs";
 import type { Logger } from "./logger.mjs";
 import { trackBaseEvents } from "./telemetry.mjs";
+import { triggerOnDemandInstall } from "./on-demand-skill-install.mjs";
+import { loadRegistrySkillMetadata } from "./registry-skill-metadata.mjs";
 
 const MAX_SKILLS = 10;
 const DEFAULT_INJECTION_BUDGET_BYTES = 100_000;
+const MAX_MANIFEST_SUMMARY_REINJECTS = parseInt(process.env.VERCEL_PLUGIN_MAX_MANIFEST_SUMMARY_REINJECTS ?? "3", 10);
+const MANIFEST_SUMMARY_COUNT_PREFIX = "manifest-summary-count-";
 const SETUP_MODE_BOOTSTRAP_SKILL = "bootstrap";
 const SETUP_MODE_PRIORITY_BOOST = 50;
 const PLUGIN_ROOT = resolvePluginRoot();
@@ -1026,6 +1030,10 @@ export interface InjectResult {
   parts: string[];
   loaded: string[];
   summaryOnly: string[];
+  /** Skills that are summary-only because no cached body exists (manifest fallback).
+   *  These should trigger on-demand install and should NOT be dedup-marked as "seen"
+   *  so they can reinject with full body on the next tool use. */
+  manifestSummaryOnly: string[];
   droppedByCap: string[];
   droppedByBudget: string[];
   skippedByConcurrentClaim: string[];
@@ -1042,12 +1050,42 @@ function skillInvocationMessage(skill: string, platform: HookPlatform): string {
     : `You must run the Skill(${skill}) tool.`;
 }
 
+/** Check if a skill has a registered command file in the commands/ directory. */
+function hasSkillCommand(skill: string): boolean {
+  try {
+    const commandPath = join(PLUGIN_ROOT, "commands", `${skill}.md`);
+    return existsSync(commandPath);
+  } catch {
+    return false;
+  }
+}
+
+function getManifestSummaryCount(sessionId: string, skill: string): number {
+  const val = readSessionFile(sessionId, `${MANIFEST_SUMMARY_COUNT_PREFIX}${skill}`);
+  return val ? parseInt(val, 10) || 0 : 0;
+}
+
+function incrementManifestSummaryCount(sessionId: string, skill: string): number {
+  const count = getManifestSummaryCount(sessionId, skill) + 1;
+  writeSessionFile(sessionId, `${MANIFEST_SUMMARY_COUNT_PREFIX}${skill}`, String(count));
+  return count;
+}
+
 function summaryFallbackText(
   payload: ResolvedSkillPayload,
   platform: HookPlatform,
+  registryMetadata?: Map<string, { registry: string; registrySlug: string }>,
 ): string {
+  let invocationLine: string;
+  if (hasSkillCommand(payload.skill)) {
+    invocationLine = skillInvocationMessage(payload.skill, platform);
+  } else if (registryMetadata?.has(payload.skill)) {
+    invocationLine = `Guidance for ${payload.skill}. Installing from registry — full guidance will load on next action.`;
+  } else {
+    invocationLine = `Guidance for ${payload.skill}.`;
+  }
   return [
-    skillInvocationMessage(payload.skill, platform),
+    invocationLine,
     payload.summary.trim() !== "" ? `Summary: ${payload.summary.trim()}` : null,
     payload.docs.length > 0 ? `Docs: ${payload.docs.join(", ")}` : null,
   ]
@@ -1060,6 +1098,7 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
   const platform: HookPlatform = optPlatform ?? "claude-code";
   const root = pluginRoot || PLUGIN_ROOT;
   const l = logger || log;
+  const registryMeta = loadRegistrySkillMetadata(root);
   const budget = budgetBytes ?? getInjectionBudget();
   const ceiling = maxSkills ?? MAX_SKILLS;
   const store = optStore ?? createSkillStore({
@@ -1070,6 +1109,7 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
   const parts: string[] = [];
   const loaded: string[] = [];
   const summaryOnly: string[] = [];
+  const manifestSummaryOnly: string[] = [];
   const droppedByCap: string[] = [];
   const droppedByBudget: string[] = [];
   const skippedByConcurrentClaim: string[] = [];
@@ -1105,17 +1145,26 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
       continue;
     }
 
-    // Build injection text: full invocation message for body mode, summary fallback otherwise
-    const wrapped = payload.mode === "summary"
-      ? summaryFallbackText(payload, platform)
-      : skillInvocationMessage(skill, platform);
+    // Manifest-summary: no cached body exists. These skip dedup so the full
+    // body can reinject after on-demand install, but are capped at N reinjects.
+    const isManifestSummary = payload.mode === "summary";
+
+    // Build injection text
+    let wrapped: string;
+    if (isManifestSummary) {
+      wrapped = summaryFallbackText(payload, platform, registryMeta);
+    } else if (hasSkillCommand(skill)) {
+      wrapped = skillInvocationMessage(skill, platform);
+    } else {
+      wrapped = payload.body ?? summaryFallbackText(payload, platform, registryMeta);
+    }
     const byteLen = Buffer.byteLength(wrapped, "utf-8");
 
     // Budget check: always allow the first skill, then enforce budget
     if (loaded.length > 0 && usedBytes + byteLen > budget) {
       // Try summary-only fallback for body-mode skills over budget
       if (payload.mode === "body") {
-        const summaryWrapped = summaryFallbackText(payload, platform);
+        const summaryWrapped = summaryFallbackText(payload, platform, registryMeta);
         const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
         if (usedBytes + summaryByteLen <= budget) {
           if (!canInjectSkill(skill)) {
@@ -1137,7 +1186,7 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
 
     // Force summary-only for dedup-bypassed companion skills
     if (forceSummarySkills?.has(skill)) {
-      const summaryWrapped = summaryFallbackText(payload, platform);
+      const summaryWrapped = summaryFallbackText(payload, platform, registryMeta);
       const summaryByteLen = Buffer.byteLength(summaryWrapped, "utf-8");
       if (usedBytes + summaryByteLen <= budget || loaded.length === 0) {
         if (!canInjectSkill(skill)) {
@@ -1153,17 +1202,33 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
       }
     }
 
-    if (!canInjectSkill(skill)) {
+    // Manifest-summary skills skip dedup but are capped at MAX_MANIFEST_SUMMARY_REINJECTS.
+    // After the cap, fall through to normal dedup.
+    if (isManifestSummary && sessionId) {
+      const reinjectCount = getManifestSummaryCount(sessionId, skill);
+      if (reinjectCount >= MAX_MANIFEST_SUMMARY_REINJECTS) {
+        // Cap reached — fall through to normal dedup
+        l.debug("manifest-summary-cap-reached", { skill, reinjectCount, max: MAX_MANIFEST_SUMMARY_REINJECTS });
+        if (!canInjectSkill(skill)) {
+          continue;
+        }
+      }
+      // Under cap — skip dedup, will increment count below
+    } else if (!canInjectSkill(skill)) {
       continue;
     }
+
     parts.push(wrapped);
     loaded.push(skill);
     usedBytes += byteLen;
-    if (injectedSkills) injectedSkills.add(skill);
 
-    if (payload.mode === "summary") {
+    if (isManifestSummary) {
       summaryOnly.push(skill);
-      l.debug("skill-summary-fallback", { skill, source: payload.source });
+      manifestSummaryOnly.push(skill);
+      if (sessionId) incrementManifestSummaryCount(sessionId, skill);
+      l.debug("skill-manifest-summary", { skill, source: payload.source, reinjectCount: sessionId ? getManifestSummaryCount(sessionId, skill) : 0 });
+    } else {
+      if (injectedSkills) injectedSkills.add(skill);
     }
   }
 
@@ -1183,7 +1248,7 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
 
   l.debug("skills-injected", { injected: loaded, summaryOnly, skippedByConcurrentClaim, totalParts: parts.length, usedBytes, budgetBytes: budget });
 
-  return { parts, loaded, summaryOnly, droppedByCap, droppedByBudget, skippedByConcurrentClaim };
+  return { parts, loaded, summaryOnly, manifestSummaryOnly, droppedByCap, droppedByBudget, skippedByConcurrentClaim };
 }
 
 // ---------------------------------------------------------------------------
@@ -1425,7 +1490,44 @@ function run(): string {
   if (!matchResult) return "{}";
   if (log.active) timing.match = Math.round(log.now() - tMatch);
 
-  const { matchedEntries, matchReasons, matched } = matchResult;
+  let { matchedEntries, matchReasons, matched } = matchResult;
+
+  // Stage 3.4: Suppress skills based on project facts
+  // Read project facts early so suppressWhenProjectFacts filtering happens
+  // before dedup and ranking.
+  const projectFacts = parseFactSet(process.env.VERCEL_PLUGIN_PROJECT_FACTS);
+  if (projectFacts.size === 0) {
+    // Env var not propagated — read from session file + filesystem
+    if (sessionId) {
+      const gf = readSessionFile(sessionId, "greenfield");
+      if (gf === "true") projectFacts.add("greenfield");
+    }
+    if (cwd) {
+      try {
+        const entries = readdirSync(cwd);
+        if (!entries.some(e => e === ".env" || e.startsWith(".env."))) {
+          projectFacts.add("no-env-files");
+        }
+      } catch {}
+    }
+  }
+
+  if (projectFacts.size > 0) {
+    const suppressedSkills: string[] = [];
+    matchedEntries = matchedEntries.filter((entry) => {
+      const cfg = skills.skillMap[entry.skill];
+      const suppress = cfg?.suppressWhenProjectFacts;
+      if (suppress && suppress.some((fact) => projectFacts.has(fact))) {
+        suppressedSkills.push(entry.skill);
+        matched.delete(entry.skill);
+        return false;
+      }
+      return true;
+    });
+    if (suppressedSkills.length > 0) {
+      log.debug("suppress-by-project-facts", { suppressed: suppressedSkills, facts: [...projectFacts] });
+    }
+  }
 
   // Stage 3.5: TSX review trigger — check before dedup to inform synthetic injection
   const tsxReview = checkTsxReviewTrigger(toolName, toolInput, injectedSkills, dedupOff, sessionId, log);
@@ -1583,24 +1685,6 @@ function run(): string {
     }
   }
 
-  // Read project facts from env var (set by profiler) or compute from
-  // session files and filesystem when env var isn't propagated to hooks.
-  const projectFacts = parseFactSet(process.env.VERCEL_PLUGIN_PROJECT_FACTS);
-  if (projectFacts.size === 0) {
-    // Env var not propagated — read from session file + filesystem
-    if (sessionId) {
-      const gf = readSessionFile(sessionId, "greenfield");
-      if (gf === "true") projectFacts.add("greenfield");
-    }
-    if (cwd) {
-      try {
-        const entries = readdirSync(cwd);
-        if (!entries.some(e => e === ".env" || e.startsWith(".env."))) {
-          projectFacts.add("no-env-files");
-        }
-      } catch {}
-    }
-  }
   const runtimeFacts = new Set<string>();
   if (isClientReactFile(toolName, toolInput)) {
     runtimeFacts.add("client-react-file");
@@ -1657,7 +1741,7 @@ function run(): string {
 
   // Stage 5: injectSkills (enforces byte budget + MAX_SKILLS ceiling)
   const tSkillRead = log.active ? log.now() : 0;
-  const { parts, loaded, summaryOnly, droppedByCap, droppedByBudget } = injectSkills(rankedSkills, {
+  const { parts, loaded, summaryOnly, manifestSummaryOnly, droppedByCap, droppedByBudget } = injectSkills(rankedSkills, {
     pluginRoot: PLUGIN_ROOT,
     projectRoot: cwd,
     skillStore,
@@ -1671,6 +1755,28 @@ function run(): string {
     platform,
   });
   if (log.active) timing.skill_read = Math.round(log.now() - tSkillRead);
+
+  // Stage 5.1: On-demand background install for summary-only skills
+  // This includes both manifest-summary skills (no cached body) and skills injected
+  // at summary level due to budget constraints. Skills with registry backing get
+  // queued for async installation so the full body is available on next tool use.
+  if (summaryOnly.length > 0 && sessionId && cwd) {
+    const onDemandResult = triggerOnDemandInstall({
+      summaryOnlySkills: summaryOnly,
+      sessionId,
+      projectRoot: cwd,
+      pluginRoot: PLUGIN_ROOT,
+      toolTarget,
+      logger: log,
+    });
+    if (onDemandResult.triggered.length > 0) {
+      log.debug("on-demand-install-triggered", {
+        triggered: onDemandResult.triggered,
+        alreadyAttempted: onDemandResult.alreadyAttempted,
+        noRegistry: onDemandResult.noRegistry,
+      });
+    }
+  }
 
   // Append review marker if tsx review was triggered and skill was loaded
   if (tsxReviewInjected && loaded.includes(TSX_REVIEW_SKILL)) {

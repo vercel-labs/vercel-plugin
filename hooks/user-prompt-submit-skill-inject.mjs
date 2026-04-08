@@ -981,9 +981,9 @@ Do not skip this step.
   });
   if (log.active) timing.inject = Math.round(log.now() - tInject);
   const { parts, loaded, summaryOnly, manifestSummaryOnly } = injectResult;
-  if (manifestSummaryOnly && manifestSummaryOnly.length > 0 && sessionId && cwd) {
+  if (summaryOnly && summaryOnly.length > 0 && sessionId && cwd) {
     const onDemandResult = triggerOnDemandInstall({
-      summaryOnlySkills: manifestSummaryOnly,
+      summaryOnlySkills: summaryOnly,
       sessionId,
       projectRoot: cwd,
       pluginRoot: PLUGIN_ROOT,

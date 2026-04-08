@@ -1135,9 +1135,9 @@ function run() {
     platform
   });
   if (log.active) timing.skill_read = Math.round(log.now() - tSkillRead);
-  if (manifestSummaryOnly.length > 0 && sessionId && cwd) {
+  if (summaryOnly.length > 0 && sessionId && cwd) {
     const onDemandResult = triggerOnDemandInstall({
-      summaryOnlySkills: manifestSummaryOnly,
+      summaryOnlySkills: summaryOnly,
       sessionId,
       projectRoot: cwd,
       pluginRoot: PLUGIN_ROOT,

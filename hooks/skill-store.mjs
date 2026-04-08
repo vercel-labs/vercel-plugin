@@ -433,6 +433,40 @@ function createSkillStore(options, logger) {
           };
         }
       }
+      if (!root.skillsDir) {
+        const slug = getNameToSlugMap().get(name);
+        const candidates = slug ? [name, slug] : [name];
+        for (const cacheRoot of roots) {
+          if (!cacheRoot.skillsDir) continue;
+          for (const candidate of candidates) {
+            const candidatePath = join(cacheRoot.skillsDir, candidate, "SKILL.md");
+            const candidateRaw = safeReadFile(candidatePath);
+            if (candidateRaw !== null) {
+              const { body: candidateBody } = extractFrontmatter(candidateRaw);
+              const trimmed = candidateBody.trimStart();
+              const candidateMode = trimmed === "" ? "summary" : "body";
+              payloadLogger?.debug?.("skill-store-payload-resolved", {
+                skill: name,
+                source: cacheRoot.source,
+                mode: candidateMode,
+                path: candidatePath,
+                resolvedVia: "cross-root-slug-lookup"
+              });
+              return {
+                skill: name,
+                source: cacheRoot.source,
+                root: cacheRoot,
+                mode: candidateMode,
+                path: candidatePath,
+                raw: candidateRaw,
+                body: trimmed === "" ? null : trimmed,
+                summary: config.summary ?? "",
+                docs: config.docs ?? []
+              };
+            }
+          }
+        }
+      }
       payloadLogger?.debug?.("skill-store-payload-resolved", {
         skill: name,
         source: root.source,
