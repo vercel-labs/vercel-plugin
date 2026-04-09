@@ -1,1 +1,0 @@
-- [feedback_version_bump.md](feedback_version_bump.md) — Always bump patch version when making changes
