@@ -534,7 +534,45 @@ describe("posttooluse-validate.mjs", () => {
       expect(meta.warnCount).toBe(0);
     });
 
-    test("emits hard skill upgrade instructions once per target skill", () => {
+    test("emits registry-install fallback when upgrade skill has no command file", () => {
+      const violations = [
+        {
+          skill: "legacy-sdk",
+          line: 3,
+          message: "Use the ai-sdk skill",
+          severity: "error" as const,
+          matchedText: "legacy",
+          upgradeToSkill: "ai-sdk",
+          upgradeWhy: "legacy provider rules are outdated",
+          upgradeMode: "hard" as const,
+        },
+        {
+          skill: "legacy-router",
+          line: 11,
+          message: "Use the nextjs skill",
+          severity: "warn" as const,
+          matchedText: "router",
+          upgradeToSkill: "nextjs",
+        },
+      ];
+      // No pluginRoot with command files → should fall back to registry message
+      const result = formatOutput(violations, ["legacy-sdk", "legacy-router"], "/test/file.ts");
+      const parsed = JSON.parse(result);
+      const ctx = parsed.hookSpecificOutput.additionalContext;
+
+      expect(ctx).toContain("Consider installing ai-sdk from the registry for detailed guidance. Reason: legacy provider rules are outdated");
+      expect(ctx).toContain("Consider installing nextjs from the registry for detailed guidance.");
+      expect(ctx).not.toContain("Use the Skill tool now to load");
+    });
+
+    test("emits Skill tool instruction when upgrade skill has a command file", () => {
+      // Create a temp pluginRoot with a commands/ dir containing the skill
+      const tmpRoot = mkdtempSync(join(tmpdir(), "validate-cmd-"));
+      const cmdDir = join(tmpRoot, "commands");
+      mkdirSync(cmdDir, { recursive: true });
+      writeFileSync(join(cmdDir, "ai-sdk.md"), "# ai-sdk command");
+      writeFileSync(join(cmdDir, "nextjs.md"), "# nextjs command");
+
       const violations = [
         {
           skill: "legacy-sdk",
@@ -565,7 +603,10 @@ describe("posttooluse-validate.mjs", () => {
           upgradeToSkill: "nextjs",
         },
       ];
-      const result = formatOutput(violations, ["legacy-sdk", "legacy-router"], "/test/file.ts");
+      const result = formatOutput(
+        violations, ["legacy-sdk", "legacy-router"], "/test/file.ts",
+        undefined, undefined, undefined, undefined, tmpRoot,
+      );
       const parsed = JSON.parse(result);
       const ctx = parsed.hookSpecificOutput.additionalContext;
 
@@ -575,6 +616,8 @@ describe("posttooluse-validate.mjs", () => {
       expect((ctx.match(/<!-- skillUpgrade: \{\"from\":\"legacy-sdk\",\"to\":\"ai-sdk\",\"line\":3\} -->/g) ?? []).length).toBe(1);
       expect(ctx).toContain("\n\nUse the Skill tool now to load nextjs.");
       expect(ctx).toContain('<!-- skillUpgrade: {"from":"legacy-router","to":"nextjs","line":11} -->');
+
+      rmSync(tmpRoot, { recursive: true, force: true });
     });
 
     test("output conforms to SyncHookJSONOutput schema", () => {

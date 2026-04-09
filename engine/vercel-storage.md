@@ -1,6 +1,5 @@
 ---
 name: vercel-storage
-priority: 7
 docs: https://vercel.com/docs/storage
 sitemap: https://vercel.com/sitemap/docs.xml
 pathPatterns:

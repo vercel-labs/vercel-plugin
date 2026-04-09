@@ -1,6 +1,5 @@
 ---
 name: agent-browser-verify
-priority: 2
 docs: https://docs.anthropic.com/en/docs/claude-code/sub-agents
 bashPatterns:
   - "\\bnext\\s+dev\\b"

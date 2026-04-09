@@ -1,6 +1,6 @@
 ---
 name: vercel-sandbox
-priority: 4
+registry: vercel-labs/agent-browser
 docs: https://vercel.com/docs/sandbox
 sitemap: https://vercel.com/sitemap/docs.xml
 bashPatterns:

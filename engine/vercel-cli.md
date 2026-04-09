@@ -1,8 +1,7 @@
 ---
 name: vercel-cli
+registry: vercel/vercel
 greenfield: true
-registry: vercel-labs/agent-skills
-registrySlug: vercel-cli-with-tokens
 priority: 4
 docs: https://vercel.com/docs/cli
 sitemap: https://vercel.com/sitemap/docs.xml

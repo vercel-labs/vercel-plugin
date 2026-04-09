@@ -1,6 +1,5 @@
 ---
 name: vercel-api
-priority: 7
 docs: https://vercel.com/docs/rest-api
 sitemap: https://vercel.com/sitemap/docs.xml
 pathPatterns:

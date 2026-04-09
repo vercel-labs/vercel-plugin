@@ -1,6 +1,5 @@
 ---
 name: routing-middleware
-priority: 6
 docs:
   - https://nextjs.org/docs/app/building-your-application/routing/middleware
   - https://vercel.com/docs/routing-middleware

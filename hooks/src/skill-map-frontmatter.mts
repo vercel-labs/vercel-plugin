@@ -109,6 +109,8 @@ export interface SkillConfig {
   docs: string[];
   sitemap?: string;
   greenfield?: boolean;
+  /** Suppress this skill when ANY of these project facts are present. */
+  suppressWhenProjectFacts?: string[];
   pathPatterns: string[];
   bashPatterns: string[];
   importPatterns: string[];

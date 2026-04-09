@@ -1,6 +1,7 @@
 ---
 name: turbopack
-priority: 4
+suppressWhenProjectFacts:
+  - greenfield
 docs:
   - https://turbo.build/pack/docs
   - https://nextjs.org/docs/architecture/turbopack

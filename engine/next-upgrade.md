@@ -1,7 +1,9 @@
 ---
 name: next-upgrade
-registry: vercel/vercel-skills
+registry: vercel-labs/next-skills
 priority: 6
+suppressWhenProjectFacts:
+  - greenfield
 docs:
   - https://nextjs.org/docs/app/guides/upgrading
   - https://nextjs.org/docs/app/guides/upgrading/codemods

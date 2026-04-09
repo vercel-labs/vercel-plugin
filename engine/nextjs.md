@@ -1,8 +1,8 @@
 ---
 name: nextjs
-greenfield: true
-registry: vercel/vercel-skills
+registry: vercel-labs/next-skills
 registrySlug: next-best-practices
+greenfield: true
 priority: 5
 docs:
   - https://nextjs.org/docs

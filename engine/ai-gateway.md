@@ -1,6 +1,5 @@
 ---
 name: ai-gateway
-greenfield: true
 priority: 7
 docs:
   - https://vercel.com/docs/ai-gateway

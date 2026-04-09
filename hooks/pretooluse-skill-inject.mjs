@@ -720,7 +720,7 @@ function injectSkills(rankedSkills, options) {
         continue;
       }
     }
-    if (isManifestSummary && sessionId) {
+    if (isManifestSummary && sessionId && registryMeta.has(skill)) {
       const reinjectCount = getManifestSummaryCount(sessionId, skill);
       if (reinjectCount >= MAX_MANIFEST_SUMMARY_REINJECTS) {
         l.debug("manifest-summary-cap-reached", { skill, reinjectCount, max: MAX_MANIFEST_SUMMARY_REINJECTS });
@@ -1135,9 +1135,9 @@ function run() {
     platform
   });
   if (log.active) timing.skill_read = Math.round(log.now() - tSkillRead);
-  if (summaryOnly.length > 0 && sessionId && cwd) {
+  if (manifestSummaryOnly.length > 0 && sessionId && cwd) {
     const onDemandResult = triggerOnDemandInstall({
-      summaryOnlySkills: summaryOnly,
+      summaryOnlySkills: manifestSummaryOnly,
       sessionId,
       projectRoot: cwd,
       pluginRoot: PLUGIN_ROOT,

@@ -1202,9 +1202,10 @@ export function injectSkills(rankedSkills: string[], options?: InjectOptions): I
       }
     }
 
-    // Manifest-summary skills skip dedup but are capped at MAX_MANIFEST_SUMMARY_REINJECTS.
-    // After the cap, fall through to normal dedup.
-    if (isManifestSummary && sessionId) {
+    // Manifest-summary skills with registry backing skip dedup so they can
+    // reinject with full body after on-demand install completes. Skills without
+    // registry backing can never upgrade — dedup them normally to save context.
+    if (isManifestSummary && sessionId && registryMeta.has(skill)) {
       const reinjectCount = getManifestSummaryCount(sessionId, skill);
       if (reinjectCount >= MAX_MANIFEST_SUMMARY_REINJECTS) {
         // Cap reached — fall through to normal dedup
@@ -1756,13 +1757,13 @@ function run(): string {
   });
   if (log.active) timing.skill_read = Math.round(log.now() - tSkillRead);
 
-  // Stage 5.1: On-demand background install for summary-only skills
-  // This includes both manifest-summary skills (no cached body) and skills injected
-  // at summary level due to budget constraints. Skills with registry backing get
-  // queued for async installation so the full body is available on next tool use.
-  if (summaryOnly.length > 0 && sessionId && cwd) {
+  // Stage 5.1: On-demand background install for manifest-summary-only skills
+  // Only triggers for skills with no cached body (manifest fallback). Skills
+  // that have cached bodies but were injected as summary due to budget constraints
+  // are already installed — no need to re-install them.
+  if (manifestSummaryOnly.length > 0 && sessionId && cwd) {
     const onDemandResult = triggerOnDemandInstall({
-      summaryOnlySkills: summaryOnly,
+      summaryOnlySkills: manifestSummaryOnly,
       sessionId,
       projectRoot: cwd,
       pluginRoot: PLUGIN_ROOT,

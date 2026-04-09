@@ -1,6 +1,5 @@
 ---
 name: vercel-services
-priority: 7
 docs: https://vercel.com/docs/services
 sitemap: https://vercel.com/sitemap/docs.xml
 pathPatterns:

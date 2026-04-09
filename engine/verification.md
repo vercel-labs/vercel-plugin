@@ -1,6 +1,5 @@
 ---
 name: verification
-priority: 7
 docs: https://vercel.com/docs/projects/project-configuration
 sitemap: https://vercel.com/sitemap/docs.xml
 bashPatterns:

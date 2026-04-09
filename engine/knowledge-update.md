@@ -1,6 +1,5 @@
 ---
 name: knowledge-update
-priority: 10
 docs: https://vercel.com/docs
 pathPatterns:
   - "vercel.ts"

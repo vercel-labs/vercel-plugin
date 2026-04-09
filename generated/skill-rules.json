@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-04-04T18:28:43.895Z",
+  "generatedAt": "2026-04-09T04:54:50.408Z",
   "version": 3,
   "skills": {
     "agent-browser-verify": {
-      "priority": 2,
+      "priority": 5,
       "summary": "Guidance for agent-browser-verify. Install from registry for full content.",
       "pathPatterns": [],
       "pathRegexSources": [],
@@ -223,7 +223,7 @@
       "docs": [
         "https://docs.anthropic.com/en/docs/claude-code/sub-agents"
       ],
-      "registry": "vercel/vercel-skills",
+      "registry": "vercel-labs/agent-browser",
       "chainTo": [
         {
           "pattern": "localhost:\\d+|127\\.0\\.0\\.1:\\d+",
@@ -340,7 +340,7 @@
         "https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot-with-tool-calling"
       ],
       "sitemap": "https://sdk.vercel.ai/sitemap.xml",
-      "registry": "vercel/vercel-skills",
+      "registry": "vercel/ai-elements",
       "validate": [
         {
           "pattern": "part\\.text\\b",
@@ -541,7 +541,6 @@
           "https": "//sdk.vercel.ai/docs/ai-sdk-core/settings"
         }
       ],
-      "greenfield": true,
       "sitemap": "https://vercel.com/sitemap/docs.xml",
       "validate": [
         {
@@ -783,7 +782,7 @@
       ],
       "greenfield": true,
       "sitemap": "https://sdk.vercel.ai/sitemap.xml",
-      "registry": "vercel/vercel-skills",
+      "registry": "vercel/ai",
       "validate": [
         {
           "pattern": "from\\s+['\"]openai['\"]",
@@ -1285,7 +1284,7 @@
       "sessionStartEligible": "none"
     },
     "auth": {
-      "priority": 6,
+      "priority": 5,
       "summary": "Guidance for auth. Install from registry for full content.",
       "pathPatterns": [
         "middleware.ts",
@@ -1460,7 +1459,7 @@
       "sessionStartEligible": "none"
     },
     "bootstrap": {
-      "priority": 8,
+      "priority": 5,
       "summary": "Guidance for bootstrap. Install from registry for full content.",
       "pathPatterns": [
         ".env.example",
@@ -1597,7 +1596,7 @@
       "sessionStartEligible": "none"
     },
     "chat-sdk": {
-      "priority": 8,
+      "priority": 5,
       "summary": "Guidance for chat-sdk. Install from registry for full content.",
       "pathPatterns": [
         "app/api/chat/**",
@@ -1744,6 +1743,7 @@
         }
       ],
       "sitemap": "https://sdk.vercel.ai/sitemap.xml",
+      "registry": "vercel/chat",
       "chainTo": [
         {
           "pattern": "from\\s+[''\"\"]openai[''\"\"]",
@@ -1832,7 +1832,7 @@
       "sessionStartEligible": "none"
     },
     "cron-jobs": {
-      "priority": 6,
+      "priority": 5,
       "summary": "Guidance for cron-jobs. Install from registry for full content.",
       "pathPatterns": [
         "vercel.json",
@@ -1890,6 +1890,44 @@
       "hasRealBody": false,
       "sessionStartEligible": "none"
     },
+    "deploy-to-vercel": {
+      "priority": 5,
+      "summary": "",
+      "pathPatterns": [],
+      "pathRegexSources": [],
+      "bashPatterns": [
+        "\\bvercel deploy\\b",
+        "\\bvercel --prod\\b"
+      ],
+      "bashRegexSources": [
+        "\\bvercel deploy\\b",
+        "\\bvercel --prod\\b"
+      ],
+      "importPatterns": [],
+      "importRegexSources": [],
+      "docs": [
+        {
+          "https": "//vercel.com/docs/deployments"
+        }
+      ],
+      "registry": "vercel-labs/agent-skills",
+      "promptSignals": {
+        "phrases": [
+          "deploy to vercel",
+          "deploy my app",
+          "push this live",
+          "create a preview deployment",
+          "deploy and give me the link"
+        ],
+        "anyOf": [
+          "deploy",
+          "vercel"
+        ],
+        "minScore": 6
+      },
+      "hasRealBody": false,
+      "sessionStartEligible": "summary"
+    },
     "deployments-cicd": {
       "priority": 6,
       "summary": "Guidance for deployments-cicd. Install from registry for full content.",
@@ -1938,7 +1976,7 @@
         }
       ],
       "sitemap": "https://vercel.com/sitemap/docs.xml",
-      "registry": "vercel/vercel-skills",
+      "registry": "vercel-labs/agent-skills",
       "registrySlug": "vercel-deploy",
       "validate": [
         {
@@ -1981,6 +2019,65 @@
       },
       "hasRealBody": false,
       "sessionStartEligible": "none"
+    },
+    "electron": {
+      "priority": 5,
+      "summary": "",
+      "pathPatterns": [
+        "electron/**",
+        "src/electron/**",
+        "electron.config.*",
+        "electron-builder.*"
+      ],
+      "pathRegexSources": [
+        "^electron\\/.*$",
+        "^src\\/electron\\/.*$",
+        "^electron\\.config\\.[^/]*$",
+        "^electron-builder\\.[^/]*$"
+      ],
+      "bashPatterns": [
+        "\\belectron\\b",
+        "\\belectron-builder\\b"
+      ],
+      "bashRegexSources": [
+        "\\belectron\\b",
+        "\\belectron-builder\\b"
+      ],
+      "importPatterns": [
+        "electron"
+      ],
+      "importRegexSources": [
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]electron(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        }
+      ],
+      "docs": [
+        {
+          "https": "//www.electronjs.org/docs"
+        }
+      ],
+      "registry": "vercel-labs/agent-browser",
+      "promptSignals": {
+        "phrases": [
+          "automate electron",
+          "electron app",
+          "automate desktop app",
+          "control VS Code",
+          "automate Slack",
+          "automate Discord"
+        ],
+        "anyOf": [
+          "electron",
+          "desktop app"
+        ],
+        "noneOf": [
+          "electron microscope"
+        ],
+        "minScore": 6
+      },
+      "hasRealBody": false,
+      "sessionStartEligible": "summary"
     },
     "env-vars": {
       "priority": 7,
@@ -2026,7 +2123,6 @@
       "docs": [
         "https://vercel.com/docs/environment-variables"
       ],
-      "greenfield": true,
       "sitemap": "https://vercel.com/sitemap/docs.xml",
       "chainTo": [
         {
@@ -2059,7 +2155,7 @@
       "sessionStartEligible": "none"
     },
     "investigation-mode": {
-      "priority": 8,
+      "priority": 5,
       "summary": "Debug stuck/hung apps: check logs → workflow runs → browser → deployment",
       "pathPatterns": [
         "**/middleware.{ts,js,mjs}",
@@ -2480,7 +2576,7 @@
       "sessionStartEligible": "none"
     },
     "knowledge-update": {
-      "priority": 10,
+      "priority": 5,
       "summary": "Guidance for knowledge-update. Install from registry for full content.",
       "pathPatterns": [
         "vercel.ts"
@@ -2508,7 +2604,7 @@
       "sessionStartEligible": "none"
     },
     "marketplace": {
-      "priority": 3,
+      "priority": 5,
       "summary": "Guidance for marketplace. Install from registry for full content.",
       "pathPatterns": [
         "integration.json"
@@ -2639,7 +2735,7 @@
           "https": "//nextjs.org/docs/app/api-reference/directives/use-cache"
         }
       ],
-      "registry": "vercel/vercel-skills",
+      "registry": "vercel-labs/next-skills",
       "chainTo": [
         {
           "pattern": "use cache",
@@ -2707,7 +2803,7 @@
       "sessionStartEligible": "none"
     },
     "next-forge": {
-      "priority": 6,
+      "priority": 5,
       "summary": "next-forge monorepo SaaS starter (Turborepo, Clerk, Prisma/Neon, Stripe, Resend, shadcn/ui, Sentry, PostHog). See => skill:next-forge for full guide.",
       "pathPatterns": [
         "pnpm-workspace.yaml",
@@ -2914,6 +3010,7 @@
           "https": "//github.com/haydenbleasel/next-forge"
         }
       ],
+      "registry": "vercel/next-forge",
       "validate": [
         {
           "pattern": "\"pipeline\"\\s*:",
@@ -3049,7 +3146,10 @@
           "https": "//nextjs.org/docs/app/guides/upgrading/codemods"
         }
       ],
-      "registry": "vercel/vercel-skills",
+      "suppressWhenProjectFacts": [
+        "greenfield"
+      ],
+      "registry": "vercel-labs/next-skills",
       "chainTo": [
         {
           "pattern": "getServerSideProps|getStaticProps|next/router|next/head|next/document",
@@ -3177,7 +3277,7 @@
       ],
       "greenfield": true,
       "sitemap": "https://nextjs.org/sitemap.xml",
-      "registry": "vercel/vercel-skills",
+      "registry": "vercel-labs/next-skills",
       "registrySlug": "next-best-practices",
       "validate": [
         {
@@ -3567,7 +3667,7 @@
       "sessionStartEligible": "none"
     },
     "observability": {
-      "priority": 6,
+      "priority": 5,
       "summary": "Guidance for observability. Install from registry for full content.",
       "pathPatterns": [
         "instrumentation.ts",
@@ -3891,7 +3991,7 @@
           "https": "//react.dev/learn"
         }
       ],
-      "registry": "vercel/vercel-skills",
+      "registry": "vercel-labs/agent-skills",
       "registrySlug": "vercel-react-best-practices",
       "validate": [
         {
@@ -3935,7 +4035,7 @@
       "sessionStartEligible": "none"
     },
     "routing-middleware": {
-      "priority": 6,
+      "priority": 5,
       "summary": "Guidance for routing-middleware. Install from registry for full content.",
       "pathPatterns": [
         "middleware.ts",
@@ -4078,7 +4178,7 @@
       "sessionStartEligible": "none"
     },
     "runtime-cache": {
-      "priority": 6,
+      "priority": 5,
       "summary": "Guidance for runtime-cache. Install from registry for full content.",
       "pathPatterns": [
         "lib/cache/**",
@@ -4156,7 +4256,7 @@
       "sessionStartEligible": "none"
     },
     "shadcn": {
-      "priority": 6,
+      "priority": 5,
       "summary": "Guidance for shadcn. Install from registry for full content.",
       "pathPatterns": [
         "components.json",
@@ -4202,6 +4302,7 @@
           "https": "//ui.shadcn.com/docs/components"
         }
       ],
+      "registry": "vercel-labs/json-render",
       "validate": [
         {
           "pattern": "\"base\"\\s*:\\s*\"base-ui\"",
@@ -4258,7 +4359,7 @@
       "sessionStartEligible": "none"
     },
     "sign-in-with-vercel": {
-      "priority": 6,
+      "priority": 5,
       "summary": "Guidance for sign-in-with-vercel. Install from registry for full content.",
       "pathPatterns": [
         "app/api/auth/**",
@@ -4319,7 +4420,7 @@
       "sessionStartEligible": "none"
     },
     "turbopack": {
-      "priority": 4,
+      "priority": 5,
       "summary": "Guidance for turbopack. Install from registry for full content.",
       "pathPatterns": [
         "next.config.*"
@@ -4344,6 +4445,9 @@
         {
           "https": "//nextjs.org/docs/architecture/turbopack"
         }
+      ],
+      "suppressWhenProjectFacts": [
+        "greenfield"
       ],
       "sitemap": "https://turbo.build/sitemap.xml",
       "chainTo": [
@@ -4408,7 +4512,7 @@
         "https://turborepo.dev/docs"
       ],
       "sitemap": "https://turborepo.dev/sitemap.xml",
-      "registry": "vercel/vercel-skills",
+      "registry": "vercel/turborepo",
       "validate": [
         {
           "pattern": "\"pipeline\"\\s*:",
@@ -4548,7 +4652,7 @@
       "sessionStartEligible": "none"
     },
     "vercel-agent": {
-      "priority": 4,
+      "priority": 5,
       "summary": "Guidance for vercel-agent. Install from registry for full content.",
       "pathPatterns": [
         ".github/workflows/vercel*.yml",
@@ -4619,7 +4723,7 @@
       "sessionStartEligible": "none"
     },
     "vercel-api": {
-      "priority": 7,
+      "priority": 5,
       "summary": "Guidance for vercel-api. Install from registry for full content.",
       "pathPatterns": [
         ".mcp.json",
@@ -4729,8 +4833,7 @@
       ],
       "greenfield": true,
       "sitemap": "https://vercel.com/sitemap/docs.xml",
-      "registry": "vercel-labs/agent-skills",
-      "registrySlug": "vercel-cli-with-tokens",
+      "registry": "vercel/vercel",
       "chainTo": [
         {
           "pattern": "\"crons\"\\s*:",
@@ -4835,8 +4938,66 @@
       "hasRealBody": false,
       "sessionStartEligible": "none"
     },
+    "vercel-composition-patterns": {
+      "priority": 5,
+      "summary": "",
+      "pathPatterns": [
+        "src/components/**",
+        "components/**",
+        "src/ui/**"
+      ],
+      "pathRegexSources": [
+        "^src\\/components\\/.*$",
+        "^components\\/.*$",
+        "^src\\/ui\\/.*$"
+      ],
+      "bashPatterns": [],
+      "bashRegexSources": [],
+      "importPatterns": [
+        "createContext",
+        "forwardRef",
+        "React.Children"
+      ],
+      "importRegexSources": [
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]createContext(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        },
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]forwardRef(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        },
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]React\\.Children(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        }
+      ],
+      "docs": [
+        {
+          "https": "//react.dev/learn/passing-data-deeply-with-context"
+        }
+      ],
+      "registry": "vercel-labs/agent-skills",
+      "promptSignals": {
+        "phrases": [
+          "composition pattern",
+          "compound component",
+          "render prop",
+          "component architecture",
+          "boolean prop proliferation"
+        ],
+        "anyOf": [
+          "composition",
+          "compound",
+          "render props"
+        ],
+        "minScore": 6
+      },
+      "hasRealBody": false,
+      "sessionStartEligible": "summary"
+    },
     "vercel-flags": {
-      "priority": 6,
+      "priority": 5,
       "summary": "Guidance for vercel-flags. Install from registry for full content.",
       "pathPatterns": [
         "flags.ts",
@@ -4977,7 +5138,7 @@
       "sessionStartEligible": "none"
     },
     "vercel-functions": {
-      "priority": 8,
+      "priority": 5,
       "summary": "Guidance for vercel-functions. Install from registry for full content.",
       "pathPatterns": [
         "api/**/*.*",
@@ -5322,8 +5483,142 @@
       "hasRealBody": false,
       "sessionStartEligible": "none"
     },
+    "vercel-react-native-skills": {
+      "priority": 5,
+      "summary": "",
+      "pathPatterns": [
+        "app.json",
+        "app.config.*",
+        "expo-*.config.*",
+        "src/screens/**",
+        "screens/**",
+        "ios/**",
+        "android/**"
+      ],
+      "pathRegexSources": [
+        "^app\\.json$",
+        "^app\\.config\\.[^/]*$",
+        "^expo-[^/]*\\.config\\.[^/]*$",
+        "^src\\/screens\\/.*$",
+        "^screens\\/.*$",
+        "^ios\\/.*$",
+        "^android\\/.*$"
+      ],
+      "bashPatterns": [
+        "\\bexpo\\b",
+        "\\breact-native\\b",
+        "\\bnpx expo\\b"
+      ],
+      "bashRegexSources": [
+        "\\bexpo\\b",
+        "\\breact-native\\b",
+        "\\bnpx expo\\b"
+      ],
+      "importPatterns": [
+        "react-native",
+        "expo",
+        "expo-",
+        "@react-native"
+      ],
+      "importRegexSources": [
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]react-native(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        },
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]expo(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        },
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]expo-(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        },
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]@react-native(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        }
+      ],
+      "docs": [
+        {
+          "https": "//reactnative.dev/docs"
+        },
+        {
+          "https": "//docs.expo.dev"
+        }
+      ],
+      "registry": "vercel-labs/agent-skills",
+      "promptSignals": {
+        "phrases": [
+          "react native",
+          "expo app",
+          "mobile app",
+          "native module"
+        ],
+        "anyOf": [
+          "react native",
+          "expo",
+          "mobile"
+        ],
+        "noneOf": [
+          "react native web"
+        ],
+        "minScore": 6
+      },
+      "hasRealBody": false,
+      "sessionStartEligible": "summary"
+    },
+    "vercel-react-view-transitions": {
+      "priority": 5,
+      "summary": "",
+      "pathPatterns": [],
+      "pathRegexSources": [],
+      "bashPatterns": [],
+      "bashRegexSources": [],
+      "importPatterns": [
+        "ViewTransition",
+        "startViewTransition",
+        "addTransitionType"
+      ],
+      "importRegexSources": [
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]ViewTransition(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        },
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]startViewTransition(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        },
+        {
+          "source": "(?:from\\s+|require\\s*\\(\\s*|import\\s*\\(\\s*)['\"]addTransitionType(?:\\/[^'\"]*)?['\"]",
+          "flags": "m"
+        }
+      ],
+      "docs": [
+        {
+          "https": "//react.dev/reference/react/ViewTransition"
+        }
+      ],
+      "registry": "vercel-labs/agent-skills",
+      "promptSignals": {
+        "phrases": [
+          "view transition",
+          "page transition",
+          "route animation",
+          "shared element animation",
+          "ViewTransition"
+        ],
+        "anyOf": [
+          "view transition",
+          "page animation",
+          "route transition"
+        ],
+        "minScore": 6
+      },
+      "hasRealBody": false,
+      "sessionStartEligible": "summary"
+    },
     "vercel-sandbox": {
-      "priority": 4,
+      "priority": 5,
       "summary": "Guidance for vercel-sandbox. Install from registry for full content.",
       "pathPatterns": [],
       "pathRegexSources": [],
@@ -5352,6 +5647,7 @@
         "https://vercel.com/docs/sandbox"
       ],
       "sitemap": "https://vercel.com/sitemap/docs.xml",
+      "registry": "vercel-labs/agent-browser",
       "chainTo": [
         {
           "pattern": "from\\s+[''\"\"]vm2[''\"\"]|require\\s*\\(\\s*[''\"\"]vm2[''\"\"\\)]|new\\s+VM\\(",
@@ -5521,7 +5817,7 @@
       "sessionStartEligible": "none"
     },
     "vercel-services": {
-      "priority": 7,
+      "priority": 5,
       "summary": "Deploy multiple services in one Vercel project — e.g. a Python backend alongside a JS frontend",
       "pathPatterns": [
         "backend/**",
@@ -5671,7 +5967,7 @@
       "sessionStartEligible": "none"
     },
     "vercel-storage": {
-      "priority": 7,
+      "priority": 5,
       "summary": "Guidance for vercel-storage. Install from registry for full content.",
       "pathPatterns": [
         "lib/blob/**",
@@ -6017,7 +6313,7 @@
       "sessionStartEligible": "none"
     },
     "verification": {
-      "priority": 7,
+      "priority": 5,
       "summary": "Verify full user story: browser + server + data flow + env",
       "pathPatterns": [],
       "pathRegexSources": [],
@@ -6165,6 +6461,96 @@
       "hasRealBody": false,
       "sessionStartEligible": "none"
     },
+    "web-design-guidelines": {
+      "priority": 4,
+      "summary": "",
+      "pathPatterns": [],
+      "pathRegexSources": [],
+      "bashPatterns": [],
+      "bashRegexSources": [],
+      "importPatterns": [],
+      "importRegexSources": [],
+      "docs": [
+        {
+          "https": "//interfaces.rauno.me"
+        }
+      ],
+      "registry": "vercel-labs/agent-skills",
+      "promptSignals": {
+        "phrases": [
+          "review my UI",
+          "check accessibility",
+          "audit design",
+          "review UX",
+          "web interface guidelines",
+          "design review"
+        ],
+        "anyOf": [
+          "accessibility",
+          "design audit",
+          "UX review"
+        ],
+        "minScore": 6
+      },
+      "hasRealBody": false,
+      "sessionStartEligible": "summary"
+    },
+    "workflow-init": {
+      "priority": 7,
+      "summary": "",
+      "pathPatterns": [],
+      "pathRegexSources": [],
+      "bashPatterns": [
+        "\\bpnpm add workflow\\b",
+        "\\bnpm install workflow\\b",
+        "\\byarn add workflow\\b",
+        "\\bbun add workflow\\b"
+      ],
+      "bashRegexSources": [
+        "\\bpnpm add workflow\\b",
+        "\\bnpm install workflow\\b",
+        "\\byarn add workflow\\b",
+        "\\bbun add workflow\\b"
+      ],
+      "importPatterns": [],
+      "importRegexSources": [],
+      "docs": [
+        {
+          "https": "//vercel.com/docs/workflow"
+        },
+        {
+          "https": "//useworkflow.dev"
+        }
+      ],
+      "registry": "vercel/workflow",
+      "promptSignals": {
+        "phrases": [
+          "install workflow",
+          "set up workflow",
+          "add durable workflows",
+          "configure workflow sdk",
+          "init workflow"
+        ],
+        "anyOf": [
+          "install",
+          "setup",
+          "configure"
+        ],
+        "allOf": [
+          [
+            "workflow",
+            "install"
+          ],
+          [
+            "workflow",
+            "setup"
+          ]
+        ],
+        "minScore": 6
+      },
+      "hasRealBody": false,
+      "sessionStartEligible": "summary"
+    },
     "workflow": {
       "priority": 9,
       "summary": "Guidance for workflow. Install from registry for full content.",
@@ -6275,6 +6661,7 @@
         }
       ],
       "sitemap": "https://vercel.com/sitemap/docs.xml",
+      "registry": "vercel/workflow",
       "validate": [
         {
           "pattern": "experimental_createWorkflow",

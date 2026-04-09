@@ -121,8 +121,11 @@ async function main() {
   const allSkills = [...vercelSkills, ...labsSkills];
   console.log(`  Fetched ${vercelSkills.length} vercel/ + ${labsSkills.length} vercel-labs/ = ${allSkills.length} total`);
 
-  // 2. Filter out our own repo
-  const filtered = allSkills.filter(s => s.source !== "vercel-labs/vercel-plugin");
+  // 2. Filter out our own repo (both orgs)
+  const filtered = allSkills.filter(s =>
+    s.source !== "vercel-labs/vercel-plugin" &&
+    s.source !== "vercel/vercel-plugin"
+  );
 
   // 3. Build slug → { source, installs } map (highest installs wins)
   const slugMap = new Map<string, { source: string; installs: number }>();

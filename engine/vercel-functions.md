@@ -1,6 +1,5 @@
 ---
 name: vercel-functions
-priority: 8
 docs:
   - https://vercel.com/docs/functions
   - https://vercel.com/docs/functions/runtimes

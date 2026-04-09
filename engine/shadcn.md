@@ -1,6 +1,6 @@
 ---
 name: shadcn
-priority: 6
+registry: vercel-labs/json-render
 docs:
   - https://ui.shadcn.com/docs
   - https://ui.shadcn.com/docs/components

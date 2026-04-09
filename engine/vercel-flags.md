@@ -1,6 +1,5 @@
 ---
 name: vercel-flags
-priority: 6
 docs:
   - https://vercel.com/docs/workflow-collaboration/feature-flags
   - https://flags-sdk.dev

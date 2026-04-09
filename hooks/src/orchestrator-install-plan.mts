@@ -67,6 +67,59 @@ export interface SkillInstallPlan {
 }
 
 // ---------------------------------------------------------------------------
+// Registry install set
+// ---------------------------------------------------------------------------
+
+export interface RegistryInstallGroup {
+  registry: string;
+  requestedSkills: string[];
+  installTargets: Array<{ installName: string }>;
+}
+
+export interface RegistryInstallSet {
+  groups: RegistryInstallGroup[];
+  nonRegistryMissingSkills: string[];
+}
+
+/**
+ * Groups missing skills by their registry so each registry gets a single
+ * `npx skills add` invocation. Skills without registry backing are
+ * collected into `nonRegistryMissingSkills`.
+ */
+export function deriveRegistryInstallSet(args: {
+  missingSkills: string[];
+  registryMetadata: Map<string, { registry: string; registrySlug: string }>;
+}): RegistryInstallSet {
+  const groupMap = new Map<
+    string,
+    { requestedSkills: string[]; installTargets: Array<{ installName: string }> }
+  >();
+  const nonRegistryMissingSkills: string[] = [];
+
+  for (const skill of args.missingSkills) {
+    const meta = args.registryMetadata.get(skill);
+    if (!meta) {
+      nonRegistryMissingSkills.push(skill);
+      continue;
+    }
+    let group = groupMap.get(meta.registry);
+    if (!group) {
+      group = { requestedSkills: [], installTargets: [] };
+      groupMap.set(meta.registry, group);
+    }
+    group.requestedSkills.push(skill);
+    group.installTargets.push({ installName: meta.registrySlug ?? skill });
+  }
+
+  const groups: RegistryInstallGroup[] = [];
+  for (const [registry, group] of groupMap) {
+    groups.push({ registry, ...group });
+  }
+
+  return { groups, nonRegistryMissingSkills };
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

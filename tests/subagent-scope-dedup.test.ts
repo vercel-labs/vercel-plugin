@@ -75,6 +75,7 @@ async function runPreToolUse(
       ...process.env,
       VERCEL_PLUGIN_INJECTION_BUDGET: UNLIMITED_BUDGET,
       VERCEL_PLUGIN_LOG_LEVEL: "off",
+      VERCEL_PLUGIN_MAX_MANIFEST_SUMMARY_REINJECTS: "0",
       ...env,
     },
   });

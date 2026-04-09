@@ -22,8 +22,8 @@
 
 import type { SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import { createHash } from "node:crypto";
-import { appendFileSync, readFileSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { appendFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { detectPlatform, type HookPlatform } from "./compat.mjs";
 import {
@@ -750,6 +750,15 @@ export function markValidated(
 // Pipeline stage 5: formatOutput
 // ---------------------------------------------------------------------------
 
+/** Check if a skill has a registered command file in the commands/ directory. */
+function hasSkillCommand(skill: string, pluginRoot: string): boolean {
+  try {
+    return existsSync(join(pluginRoot, "commands", `${skill}.md`));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Format validation violations into the hook output JSON.
  * Error-severity violations produce mandatory fix instructions.
@@ -764,6 +773,7 @@ export function formatOutput(
   platform: HookPlatform = "claude-code",
   env?: Record<string, string>,
   chainResult?: ChainResult,
+  pluginRoot?: string,
 ): string {
   const l = logger || log;
   const hasChains = chainResult && chainResult.injected.length > 0;
@@ -797,16 +807,22 @@ export function formatOutput(
     if (violation.upgradeToSkill && !emittedUpgradeSkills.has(violation.upgradeToSkill)) {
       emittedUpgradeSkills.add(violation.upgradeToSkill);
       const reason = violation.upgradeWhy ? ` Reason: ${violation.upgradeWhy}` : "";
-      const prefix = violation.upgradeMode === "hard" ? "REQUIRED: " : "";
-      lines.push("");
-      lines.push(`${prefix}Use the Skill tool now to load ${violation.upgradeToSkill}.${reason}`);
-      lines.push(
-        `<!-- skillUpgrade: ${JSON.stringify({
-          from: violation.skill,
-          to: violation.upgradeToSkill,
-          line: violation.line,
-        })} -->`,
-      );
+      const effectiveRoot = pluginRoot || PLUGIN_ROOT;
+      if (hasSkillCommand(violation.upgradeToSkill, effectiveRoot)) {
+        const prefix = violation.upgradeMode === "hard" ? "REQUIRED: " : "";
+        lines.push("");
+        lines.push(`${prefix}Use the Skill tool now to load ${violation.upgradeToSkill}.${reason}`);
+        lines.push(
+          `<!-- skillUpgrade: ${JSON.stringify({
+            from: violation.skill,
+            to: violation.upgradeToSkill,
+            line: violation.line,
+          })} -->`,
+        );
+      } else {
+        lines.push("");
+        lines.push(`Consider installing ${violation.upgradeToSkill} from the registry for detailed guidance.${reason}`);
+      }
     }
     return lines.join("\n");
   };
@@ -973,7 +989,7 @@ export function run(): string {
   const cursorEnv = platform === "cursor" && hasOutput
     ? { [VALIDATED_FILES_ENV_KEY]: validatedFiles }
     : undefined;
-  const result = formatOutput(violations, matchedSkills, filePath, log, platform, cursorEnv, chainResult);
+  const result = formatOutput(violations, matchedSkills, filePath, log, platform, cursorEnv, chainResult, PLUGIN_ROOT);
 
   log.complete("posttooluse-validate-done", {
     matchedCount: matchedSkills.length,

@@ -1,6 +1,5 @@
 ---
 name: runtime-cache
-priority: 6
 docs: https://nextjs.org/docs/app/building-your-application/caching
 sitemap: https://nextjs.org/sitemap.xml
 pathPatterns:

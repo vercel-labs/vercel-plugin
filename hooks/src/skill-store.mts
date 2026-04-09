@@ -29,6 +29,7 @@ import {
   type ManifestSkill,
 } from "./patterns.mjs";
 import { safeReadFile, safeReadJson } from "./hook-env.mjs";
+import { loadRegistrySkillMetadata } from "./registry-skill-metadata.mjs";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -251,6 +252,11 @@ function normalizeManifestSkill(raw: RawManifestSkill): SkillConfig {
   }
   if (raw.greenfield === true || raw.greenfield === "true") {
     skill.greenfield = true;
+  }
+  if (Array.isArray(raw.suppressWhenProjectFacts) && raw.suppressWhenProjectFacts.length > 0) {
+    skill.suppressWhenProjectFacts = raw.suppressWhenProjectFacts.filter(
+      (f: unknown): f is string => typeof f === "string" && f.length > 0,
+    );
   }
   if (
     raw.promptSignals &&
@@ -525,6 +531,20 @@ export function createSkillStore(
   let cachedSkillSet: LoadedSkillSet | null | undefined;
   let cachedInstalled: string[] | undefined;
 
+  // Lazy cache: engine skill name → registrySlug (for resolving skills
+  // installed under their registrySlug directory name).
+  let nameToSlugMap: Map<string, string> | undefined;
+  function getNameToSlugMap(): Map<string, string> {
+    if (nameToSlugMap) return nameToSlugMap;
+    nameToSlugMap = new Map<string, string>();
+    for (const [name, meta] of loadRegistrySkillMetadata(options.pluginRoot)) {
+      if (meta.registrySlug !== name) {
+        nameToSlugMap.set(name, meta.registrySlug);
+      }
+    }
+    return nameToSlugMap;
+  }
+
   function loadCachedSkillSet(
     logger?: SkillStoreLogger,
   ): LoadedSkillSet | null {
@@ -595,17 +615,35 @@ export function createSkillStore(
         if (!root.skillsDir) continue;
         const path = join(root.skillsDir, name, "SKILL.md");
         const raw = safeReadFile(path);
-        if (raw === null) continue;
+        if (raw !== null) {
+          const { body } = extractFrontmatter(raw);
+          return {
+            skill: name,
+            source: root.source,
+            root,
+            path,
+            raw,
+            body: body.trimStart(),
+          };
+        }
 
-        const { body } = extractFrontmatter(raw);
-        return {
-          skill: name,
-          source: root.source,
-          root,
-          path,
-          raw,
-          body: body.trimStart(),
-        };
+        // Fallback: skill may be installed under its registrySlug
+        const slug = getNameToSlugMap().get(name);
+        if (slug) {
+          const slugPath = join(root.skillsDir, slug, "SKILL.md");
+          const slugRaw = safeReadFile(slugPath);
+          if (slugRaw !== null) {
+            const { body } = extractFrontmatter(slugRaw);
+            return {
+              skill: name,
+              source: root.source,
+              root,
+              path: slugPath,
+              raw: slugRaw,
+              body: body.trimStart(),
+            };
+          }
+        }
       }
       return null;
     },
@@ -621,8 +659,18 @@ export function createSkillStore(
 
       // Try reading a cached body from a root with a skillsDir
       if (root.skillsDir) {
-        const path = join(root.skillsDir, name, "SKILL.md");
-        const raw = safeReadFile(path);
+        // Try by engine name first, then by registrySlug alias
+        let resolvedPath = join(root.skillsDir, name, "SKILL.md");
+        let raw = safeReadFile(resolvedPath);
+
+        if (raw === null) {
+          const slug = getNameToSlugMap().get(name);
+          if (slug) {
+            resolvedPath = join(root.skillsDir, slug, "SKILL.md");
+            raw = safeReadFile(resolvedPath);
+          }
+        }
+
         if (raw !== null) {
           const { body } = extractFrontmatter(raw);
           const trimmedBody = body.trimStart();
@@ -631,19 +679,58 @@ export function createSkillStore(
             skill: name,
             source: root.source,
             mode,
-            path,
+            path: resolvedPath,
           });
           return {
             skill: name,
             source: root.source,
             root,
             mode,
-            path,
+            path: resolvedPath,
             raw,
             body: trimmedBody === "" ? null : trimmedBody,
             summary: config.summary ?? "",
             docs: config.docs ?? [],
           };
+        }
+      }
+
+      // Before falling back to summary-only, check ALL cache roots for a body
+      // installed under the registrySlug name. This handles the case where the
+      // origin is rules-manifest (no skillsDir) but the skill was installed
+      // into a project-cache under its registrySlug directory name.
+      if (!root.skillsDir) {
+        const slug = getNameToSlugMap().get(name);
+        const candidates = slug ? [name, slug] : [name];
+        for (const cacheRoot of roots) {
+          if (!cacheRoot.skillsDir) continue;
+          for (const candidate of candidates) {
+            const candidatePath = join(cacheRoot.skillsDir, candidate, "SKILL.md");
+            const candidateRaw = safeReadFile(candidatePath);
+            if (candidateRaw !== null) {
+              const { body: candidateBody } = extractFrontmatter(candidateRaw);
+              const trimmed = candidateBody.trimStart();
+              const candidateMode = trimmed === "" ? "summary" : "body";
+              payloadLogger?.debug?.("skill-store-payload-resolved", {
+                skill: name,
+                source: cacheRoot.source,
+                mode: candidateMode,
+                path: candidatePath,
+                resolvedVia: "cross-root-slug-lookup",
+              });
+              return {
+                skill: name,
+                source: cacheRoot.source,
+                root: cacheRoot,
+                mode: candidateMode,
+                path: candidatePath,
+                raw: candidateRaw,
+                body: trimmed === "" ? null : trimmed,
+                summary: config.summary ?? "",
+                docs: config.docs ?? [],
+              };
+            }
+          }
         }
       }
 

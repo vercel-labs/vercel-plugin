@@ -1,6 +1,6 @@
 ---
 name: next-cache-components
-registry: vercel/vercel-skills
+registry: vercel-labs/next-skills
 priority: 6
 docs:
   - https://nextjs.org/docs/app/getting-started/cache-components

@@ -1,6 +1,5 @@
 ---
 name: sign-in-with-vercel
-priority: 6
 docs: https://vercel.com/docs/sign-in-with-vercel
 sitemap: https://vercel.com/sitemap/docs.xml
 pathPatterns:

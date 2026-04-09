@@ -1,6 +1,5 @@
 ---
 name: vercel-agent
-priority: 4
 docs:
   - https://vercel.com/docs
   - https://sdk.vercel.ai/docs

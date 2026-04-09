@@ -1395,13 +1395,11 @@ export function run(): string {
 
   const { parts, loaded, summaryOnly, manifestSummaryOnly } = injectResult;
 
-  // On-demand background install for summary-only skills
-  // This includes both manifest-summary skills (no cached body) and skills injected
-  // at summary level due to budget constraints. Skills with registry backing get
-  // queued for async installation so the full body is available on next tool use.
-  if (summaryOnly && summaryOnly.length > 0 && sessionId && cwd) {
+  // On-demand background install for manifest-summary-only skills
+  // Only triggers for skills with no cached body (manifest fallback).
+  if (manifestSummaryOnly && manifestSummaryOnly.length > 0 && sessionId && cwd) {
     const onDemandResult = triggerOnDemandInstall({
-      summaryOnlySkills: summaryOnly,
+      summaryOnlySkills: manifestSummaryOnly,
       sessionId,
       projectRoot: cwd,
       pluginRoot: PLUGIN_ROOT,

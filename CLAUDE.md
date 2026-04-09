@@ -4,7 +4,8 @@
 
 - **Build hooks**: `bun run build:hooks` (compiles `hooks/src/*.mts` → `hooks/*.mjs` via tsup)
 - **Build manifest**: `bun run build:manifest` (compiles `engine/*.md` → `generated/skill-rules.json`)
-- **Build all**: `bun run build` (hooks + manifest)
+- **Build registry**: `bun run build:registry` (syncs registry/registrySlug fields from skills.sh API)
+- **Build all**: `bun run build` (hooks + registry sync + manifest)
 - **Test**: `bun test` (typecheck + test files)
 - **Single test**: `bun test tests/<file>.test.ts`
 - **Typecheck only**: `bun run typecheck` (tsc on hooks/tsconfig.json)
@@ -13,6 +14,17 @@
 - **Playground**: `bun run playground:generate` (generate static skill files for external tools)
 
 Run `bun run build:hooks` after editing any `.mts` file. A pre-commit hook auto-compiles when `.mts` files are staged.
+
+## Verification Checklist
+
+After any hook source change, **always** run these steps before considering the work done:
+
+1. `bun run build:hooks` — compile `.mts` → `.mjs`
+2. `bun run typecheck` — catch missing exports, bad imports, type errors
+3. `node -e "import('./<hook>.mjs')"` — verify the compiled hook actually imports without `SyntaxError` (typecheck alone won't catch missing ESM exports from compiled `.mjs` files)
+4. `bun test tests/<relevant>.test.ts` — run the hook's test suite
+
+When adding a new function that will be imported by another module, confirm the export exists in the **compiled `.mjs`** output, not just the `.mts` source. ESM import failures crash the entire hook at load time, silently disabling it for the whole session.
 
 ## Architecture
 

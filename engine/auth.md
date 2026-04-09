@@ -1,6 +1,5 @@
 ---
 name: auth
-priority: 6
 docs:
   - https://authjs.dev/getting-started
   - https://nextjs.org/docs/app/building-your-application/authentication

@@ -1,6 +1,5 @@
 ---
 name: env-vars
-greenfield: true
 priority: 7
 docs: https://vercel.com/docs/environment-variables
 sitemap: https://vercel.com/sitemap/docs.xml

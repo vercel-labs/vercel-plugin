@@ -1,6 +1,5 @@
 ---
 name: bootstrap
-priority: 8
 docs:
   - https://vercel.com/docs/getting-started-with-vercel
   - https://nextjs.org/docs/getting-started/installation

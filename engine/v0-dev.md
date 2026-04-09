@@ -1,6 +1,5 @@
 ---
 name: v0-dev
-priority: 5
 docs:
   - https://v0.dev/docs
   - https://vercel.com/docs/v0

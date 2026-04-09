@@ -388,6 +388,9 @@ function buildFromEngine(engineDir: string): { manifest: any; warnings: string[]
       entry.docs = Array.isArray(config.docs) ? config.docs : [config.docs];
     }
     if (config.greenfield) entry.greenfield = true;
+    if (Array.isArray(config.suppressWhenProjectFacts) && config.suppressWhenProjectFacts.length > 0) {
+      entry.suppressWhenProjectFacts = config.suppressWhenProjectFacts;
+    }
     if (config.sitemap) entry.sitemap = config.sitemap;
     if (config.registry) entry.registry = config.registry;
     if (config.registrySlug) entry.registrySlug = config.registrySlug;

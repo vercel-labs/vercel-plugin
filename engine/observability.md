@@ -1,6 +1,5 @@
 ---
 name: observability
-priority: 6
 docs:
   - https://vercel.com/docs/observability
   - https://vercel.com/docs/observability/otel-overview

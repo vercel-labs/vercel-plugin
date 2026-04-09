@@ -1,6 +1,5 @@
 ---
 name: marketplace
-priority: 3
 docs: https://vercel.com/docs/integrations
 sitemap: https://vercel.com/sitemap/docs.xml
 pathPatterns:

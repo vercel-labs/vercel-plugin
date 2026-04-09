@@ -1,6 +1,5 @@
 ---
 name: investigation-mode
-priority: 8
 docs: https://docs.anthropic.com/en/docs/claude-code/sub-agents
 pathPatterns:
   - "**/middleware.{ts,js,mjs}"
