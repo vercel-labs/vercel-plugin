@@ -32,7 +32,7 @@ import {
 import { pluginRoot, profileCachePath, safeReadJson, writeSessionFile } from "./hook-env.mjs";
 import { createLogger, logCaughtError, type Logger } from "./logger.mjs";
 import { buildSkillMap } from "./skill-map-frontmatter.mjs";
-import { trackBaseEvents, getOrCreateDeviceId } from "./telemetry.mjs";
+import { trackDauActiveToday } from "./telemetry.mjs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -696,18 +696,8 @@ async function main(): Promise<void> {
     }
   }
 
-  // Base telemetry — enabled by default unless VERCEL_PLUGIN_TELEMETRY=off
-  if (sessionId) {
-    const deviceId = getOrCreateDeviceId();
-    await trackBaseEvents(sessionId, [
-      { key: "session:device_id", value: deviceId },
-      { key: "session:platform", value: process.platform },
-      { key: "session:likely_skills", value: likelySkills.join(",") },
-      { key: "session:greenfield", value: String(greenfield !== null) },
-      { key: "session:vercel_cli_installed", value: String(cliStatus.installed) },
-      { key: "session:vercel_cli_version", value: cliStatus.currentVersion || "" },
-    ]).catch(() => {});
-  }
+  // DAU phone-home — enabled by default unless VERCEL_PLUGIN_TELEMETRY=off
+  await trackDauActiveToday().catch(() => {});
 
   if (cursorOutput) {
     process.stdout.write(cursorOutput);

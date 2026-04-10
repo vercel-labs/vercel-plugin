@@ -838,9 +838,6 @@ export function run(): string {
   const { prompt, sessionId, cwd } = parsed;
   const promptEnvBefore = capturePromptEnvSnapshot();
 
-  // prompt:text telemetry is handled by user-prompt-submit-telemetry.mts
-  // where it is awaited before process.exit(), ensuring reliable delivery.
-
   const normalizedPrompt = normalizePromptText(prompt);
 
   if (!normalizedPrompt) {
@@ -1050,20 +1047,17 @@ export function run(): string {
       droppedByCap,
       droppedByBudget,
     }, cwd);
-  }
 
-  // Base telemetry — enabled by default unless VERCEL_PLUGIN_TELEMETRY=off
-  if (sessionId && loaded.length > 0) {
-    const telemetryEntries: Array<{ key: string; value: string }> = [];
-    for (const skill of loaded) {
-      const r = report.perSkillResults[skill];
-      telemetryEntries.push(
-        { key: "prompt:skill", value: skill },
-        { key: "prompt:score", value: String(r?.score ?? 0) },
-        { key: "prompt:hook", value: "UserPromptSubmit" },
-      );
+    if (sessionId) {
+      const telemetryEntries: Array<{ key: string; value: string }> = [];
+      for (const skill of loaded) {
+        telemetryEntries.push(
+          { key: "skill:injected", value: skill },
+          { key: "skill:hook", value: "UserPromptSubmit" },
+        );
+      }
+      trackBaseEvents(sessionId, telemetryEntries).catch(() => {});
     }
-    trackBaseEvents(sessionId, telemetryEntries).catch(() => {});
   }
 
   let outputEnv: Record<string, string> | undefined;

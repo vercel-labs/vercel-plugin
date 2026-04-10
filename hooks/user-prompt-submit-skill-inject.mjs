@@ -706,19 +706,17 @@ function run() {
       droppedByCap,
       droppedByBudget
     }, cwd);
-  }
-  if (sessionId && loaded.length > 0) {
-    const telemetryEntries = [];
-    for (const skill of loaded) {
-      const r = report.perSkillResults[skill];
-      telemetryEntries.push(
-        { key: "prompt:skill", value: skill },
-        { key: "prompt:score", value: String(r?.score ?? 0) },
-        { key: "prompt:hook", value: "UserPromptSubmit" }
-      );
+    if (sessionId) {
+      const telemetryEntries = [];
+      for (const skill of loaded) {
+        telemetryEntries.push(
+          { key: "skill:injected", value: skill },
+          { key: "skill:hook", value: "UserPromptSubmit" }
+        );
+      }
+      trackBaseEvents(sessionId, telemetryEntries).catch(() => {
+      });
     }
-    trackBaseEvents(sessionId, telemetryEntries).catch(() => {
-    });
   }
   let outputEnv;
   const envFile = nonEmptyString(process.env.CLAUDE_ENV_FILE);

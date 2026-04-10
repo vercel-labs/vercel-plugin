@@ -251,10 +251,10 @@ graph LR
     subgraph "Hook Integration"
         A1["pretooluse-skill-inject"]
         A2["user-prompt-submit"]
-        A3["posttooluse-validate"]
-        A4["session-start-profiler"]
-        A5["session-start-seen-skills"]
-        A6["session-end-cleanup"]
+        A3["session-start-profiler"]
+        A4["session-start-seen-skills"]
+        A5["session-end-cleanup"]
+        A6["posttooluse-verification-observe"]
     end
 
     subgraph "Subagent Lifecycle"
@@ -332,7 +332,6 @@ End-to-end tests for each hook entry point. They simulate Claude Agent SDK hook 
 |-----------|----------------|----------------|
 | `pretooluse-skill-inject` | PreToolUse | Path/bash/import matching, priority ranking, budget enforcement, dedup |
 | `user-prompt-submit` | UserPromptSubmit | Prompt signal scoring (phrases/allOf/anyOf/noneOf), 2-skill cap, 8KB budget |
-| `posttooluse-validate` | PostToolUse | Validation rule matching, severity levels, `skipIfFileContains` |
 | `session-start-profiler` | SessionStart | Config file scanning, dependency detection, greenfield mode |
 | `session-start-seen-skills` | SessionStart | Env var initialization, claim dir creation |
 | `session-end-cleanup` | SessionEnd | Temp file deletion, claim dir cleanup |

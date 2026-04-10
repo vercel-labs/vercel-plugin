@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 
@@ -9,7 +9,7 @@ const TRUNCATION_SUFFIX = "[TRUNCATED]";
 const BRIDGE_ENDPOINT = "https://telemetry.vercel.com/api/vercel-plugin/v1/events";
 const FLUSH_TIMEOUT_MS = 3_000;
 
-const DEVICE_ID_PATH = join(homedir(), ".claude", "vercel-plugin-device-id");
+const DAU_STAMP_PATH = join(homedir(), ".config", "vercel-plugin", "dau-stamp");
 
 export interface TelemetryEvent {
   id: string;
@@ -49,70 +49,92 @@ async function send(sessionId: string, events: TelemetryEvent[]): Promise<void> 
   }
 }
 
+async function sendDau(events: TelemetryEvent[]): Promise<boolean> {
+  if (events.length === 0) return false;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FLUSH_TIMEOUT_MS);
+  try {
+    const response = await fetch(BRIDGE_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-vercel-plugin-topic-id": "dau",
+      },
+      body: JSON.stringify(events),
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Device ID — stable anonymous identifier per machine (always-on)
+// DAU stamp — local once-per-day throttle (always-on unless opted out)
 // ---------------------------------------------------------------------------
 
-/**
- * Returns a stable anonymous device ID. Creates one on first call.
- * The ID is a random UUID stored at ~/.claude/vercel-plugin-device-id
- * and is not tied to any user account or PII.
- */
-export function getOrCreateDeviceId(): string {
-  try {
-    const existing = readFileSync(DEVICE_ID_PATH, "utf-8").trim();
-    if (existing.length > 0) return existing;
-  } catch {
-    // File doesn't exist yet
-  }
+export function getDauStampPath(): string {
+  return DAU_STAMP_PATH;
+}
 
-  const deviceId = randomUUID();
+function utcDayStamp(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+export function shouldSendDauPing(now: Date = new Date()): boolean {
   try {
-    mkdirSync(dirname(DEVICE_ID_PATH), { recursive: true });
-    writeFileSync(DEVICE_ID_PATH, deviceId);
+    const existingMtime = statSync(DAU_STAMP_PATH).mtime;
+    return utcDayStamp(existingMtime) !== utcDayStamp(now);
   } catch {
-    // Best-effort — return the generated ID even if we can't persist it
+    return true;
   }
-  return deviceId;
+}
+
+export function markDauPingSent(now: Date = new Date()): void {
+  void now;
+  try {
+    mkdirSync(dirname(DAU_STAMP_PATH), { recursive: true });
+    writeFileSync(DAU_STAMP_PATH, "", { flag: "w" });
+  } catch {
+    // Best-effort
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Telemetry tiers
 // ---------------------------------------------------------------------------
 
-/**
- * Content-level telemetry (opt-in): requires explicit user consent.
- * Currently gates prompt:text only.
- */
-export function getTelemetryOverride(env: NodeJS.ProcessEnv = process.env): "off" | null {
+export function getTelemetryOverride(env: NodeJS.ProcessEnv = process.env): "off" | "true" | null {
   const value = env.VERCEL_PLUGIN_TELEMETRY?.trim().toLowerCase();
   if (value === "off") return value;
+  if (value === "true") return value;
   return null;
 }
 
 /**
- * Base telemetry is enabled by default, but users can disable all telemetry
+ * DAU telemetry is enabled by default, but users can disable all telemetry
  * with VERCEL_PLUGIN_TELEMETRY=off.
  */
-export function isBaseTelemetryEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isDauTelemetryEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return getTelemetryOverride(env) !== "off";
 }
 
 /**
- * Content-level telemetry (opt-in): requires explicit user consent.
- * VERCEL_PLUGIN_TELEMETRY=off disables it entirely.
+ * Expanded telemetry is opt-in and only enabled when
+ * VERCEL_PLUGIN_TELEMETRY=true.
  */
-export function isContentTelemetryEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const override = getTelemetryOverride(env);
-  if (override === "off") return false;
+export function isBaseTelemetryEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return getTelemetryOverride(env) === "true";
+}
 
-  try {
-    const prefPath = join(homedir(), ".claude", "vercel-plugin-telemetry-preference");
-    const pref = readFileSync(prefPath, "utf-8").trim();
-    return pref === "enabled";
-  } catch {
-    return false;
-  }
+/**
+ * Prompt/content telemetry is disabled entirely.
+ */
+export function isContentTelemetryEnabled(_env: NodeJS.ProcessEnv = process.env): boolean {
+  return false;
 }
 
 /**
@@ -123,7 +145,27 @@ export function isPromptTelemetryEnabled(env: NodeJS.ProcessEnv = process.env): 
 }
 
 // ---------------------------------------------------------------------------
-// Always-on base telemetry (session, tool, skill injection events)
+// DAU telemetry (default-on, opt-out via VERCEL_PLUGIN_TELEMETRY=off)
+// ---------------------------------------------------------------------------
+
+export async function trackDauActiveToday(now: Date = new Date()): Promise<void> {
+  if (!isDauTelemetryEnabled() || !shouldSendDauPing(now)) return;
+
+  const eventTime = now.getTime();
+  const sent = await sendDau([{
+    id: randomUUID(),
+    event_time: eventTime,
+    key: "dau:active_today",
+    value: "1",
+  }]);
+
+  if (sent) {
+    markDauPingSent(now);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Expanded telemetry (opt-in via VERCEL_PLUGIN_TELEMETRY=true)
 // ---------------------------------------------------------------------------
 
 export async function trackBaseEvent(sessionId: string, key: string, value: string): Promise<void> {
@@ -157,37 +199,21 @@ export async function trackBaseEvents(
 }
 
 // ---------------------------------------------------------------------------
-// Opt-in telemetry (raw prompt content)
+// Prompt/content telemetry is intentionally disabled.
 // ---------------------------------------------------------------------------
 
 export async function trackContentEvent(sessionId: string, key: string, value: string): Promise<void> {
-  if (!isContentTelemetryEnabled()) return;
-
-  const event: TelemetryEvent = {
-    id: randomUUID(),
-    event_time: Date.now(),
-    key,
-    value: truncateValue(value),
-  };
-
-  await send(sessionId, [event]);
+  void sessionId;
+  void key;
+  void value;
 }
 
 export async function trackContentEvents(
   sessionId: string,
   entries: Array<{ key: string; value: string }>,
 ): Promise<void> {
-  if (!isContentTelemetryEnabled() || entries.length === 0) return;
-
-  const now = Date.now();
-  const events: TelemetryEvent[] = entries.map((entry) => ({
-    id: randomUUID(),
-    event_time: now,
-    key: entry.key,
-    value: truncateValue(entry.value),
-  }));
-
-  await send(sessionId, events);
+  void sessionId;
+  void entries;
 }
 
 /**

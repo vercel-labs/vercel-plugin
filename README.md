@@ -22,15 +22,15 @@
 npx plugins add vercel/vercel-plugin
 ```
 
-That's it. The plugin activates automatically — no setup, no commands to learn. Just build.
+That's it. The plugin installs Vercel context, skills, and a lightweight default hook profile.
 
 ## What It Does
 
-This plugin pre-loads AI agents with a **relational knowledge graph** of the entire Vercel ecosystem — every product, library, CLI, API, and service — showing how they relate, when to use each, and providing deep guidance through bundled skills.
+This plugin gives AI agents a **relational knowledge graph** of the Vercel ecosystem plus a bundled skill library covering products, libraries, CLI, APIs, and workflows.
 
 ## How Do I Use This?
 
-After installing, there's nothing to learn — all Vercel guidance happens automatically. The plugin detects what you're working on from your tool calls, file paths, and project config, then injects the right expertise at the right time. Just use your AI agent as you normally would and the plugin handles the rest.
+After installing, the plugin keeps automatic behavior lightweight. Session-start context still runs automatically, but Vercel skills are no longer auto-injected on every tool call or every prompt by default. The default post-tool path is now observer-only. The skills remain available for direct use, and the repo still keeps the injection engine for targeted or future opt-in workflows.
 
 ## Components
 
@@ -94,14 +94,14 @@ A text-form relational graph covering:
 
 Lifecycle hooks that run automatically during your session:
 
-- **Session start context injection** — Injects `vercel.md` (ecosystem graph + conventions) into every session
-- **Session start repo profiler** — Scans config files and dependencies to pre-prime skill matching for faster first tool call
-- **Pre-tool-use skill injection** — Matches tool calls to skills and injects relevant guidance with dedup
-- **Pre-write/edit validation** — Catches deprecated patterns before they're written (sunset packages, old API names, renamed files)
+- **Session start context injection** — Injects a thin Vercel session context plus the knowledge-update guidance
+- **Session start repo profiler** — Scans config files and dependencies to cache likely-skill hints for subagents and targeted workflows
+- **Post-tool verification observer** — Watches relevant Bash activity for verification boundaries without injecting follow-up guidance
+- **Subagent bootstrap** — Gives spawned subagents lightweight project context without re-running the full session setup
 
 ## Usage
 
-After installing, skills and context are injected automatically. You can also invoke skills directly via slash commands:
+After installing, session context is injected automatically. Vercel skills are available on demand, and you can invoke them directly via slash commands:
 
 ```
 /vercel-plugin:nextjs
@@ -111,18 +111,15 @@ After installing, skills and context are injected automatically. You can also in
 
 ## Telemetry
 
-The plugin has two separate telemetry controls:
-
-- `~/.claude/vercel-plugin-telemetry-preference` controls prompt text only.
-- `VERCEL_PLUGIN_TELEMETRY=off` disables all telemetry.
+Prompt text and bash/tool-call telemetry are not collected.
 
 Behavior:
 
-- `echo 'enabled' > ~/.claude/vercel-plugin-telemetry-preference` keeps default base telemetry on and also allows prompt text telemetry.
-- `echo 'disabled' > ~/.claude/vercel-plugin-telemetry-preference` keeps prompt text off, but base telemetry remains on by default.
-- `VERCEL_PLUGIN_TELEMETRY=off` disables all telemetry, including prompt text, session metadata, tool names, and skill-injection telemetry.
+- Unset `VERCEL_PLUGIN_TELEMETRY`: default DAU-only telemetry. Sends a once-per-day `dau:active_today` phone-home.
+- `VERCEL_PLUGIN_TELEMETRY=true`: opts in to expanded anonymous telemetry, currently limited to skill-injection events.
+- `VERCEL_PLUGIN_TELEMETRY=off`: disables all telemetry, including the default DAU-only session-start event.
 
-Where to set `VERCEL_PLUGIN_TELEMETRY=off`:
+Where to set `VERCEL_PLUGIN_TELEMETRY`:
 
 - macOS / Linux: add it to the shell profile for the environment that launches your agent, such as `~/.zshrc`, `~/.bashrc`, `~/.bash_profile`, or `~/.config/fish/config.fish`, then restart that terminal or app session.
 - Windows: set it in the PowerShell environment that launches your agent, add it to your PowerShell profile (`$PROFILE`), or set it as a persistent user environment variable.
@@ -130,12 +127,12 @@ Where to set `VERCEL_PLUGIN_TELEMETRY=off`:
 Examples:
 
 ```bash
-echo 'disabled' > ~/.claude/vercel-plugin-telemetry-preference
+export VERCEL_PLUGIN_TELEMETRY=true
 export VERCEL_PLUGIN_TELEMETRY=off
 ```
 
 ```powershell
-$env:VERCEL_PLUGIN_TELEMETRY = "off"
+$env:VERCEL_PLUGIN_TELEMETRY = "true"
 setx VERCEL_PLUGIN_TELEMETRY off
 ```
 

@@ -83,7 +83,7 @@ sequenceDiagram
     Claude->>SS: session-start-profiler.mjs
     Note right of SS: Scan project → set VERCEL_PLUGIN_LIKELY_SKILLS
     Claude->>SS: inject-claude-md.mjs
-    Note right of SS: Output vercel.md ecosystem graph (~52KB)
+    Note right of SS: Output thin session context + knowledge update
 
     loop Every user message
         User->>Claude: Prompt text
@@ -102,15 +102,8 @@ sequenceDiagram
     end
 
     loop Every Bash completion
-        Claude->>PostTU: posttooluse-shadcn-font-fix.mjs
-        Note right of PostTU: Fix shadcn font loading (if applicable)
         Claude->>PostTU: posttooluse-verification-observe.mjs
         Note right of PostTU: Classify boundary → emit structured event
-    end
-
-    loop Every Write/Edit completion
-        Claude->>PostTU: posttooluse-validate.mjs
-        Note right of PostTU: Run skill validation rules → return fix instructions
     end
 
     rect rgb(240, 248, 255)
@@ -137,9 +130,7 @@ sequenceDiagram
 | PreToolUse | `pretooluse-skill-inject.mjs` | `Read\|Edit\|Write\|Bash` | 5 s |
 | PreToolUse | `pretooluse-subagent-spawn-observe.mjs` | `Agent` | 5 s |
 | UserPromptSubmit | `user-prompt-submit-skill-inject.mjs` | *(empty — all prompts)* | 5 s |
-| PostToolUse | `posttooluse-shadcn-font-fix.mjs` | `Bash` | 5 s |
 | PostToolUse | `posttooluse-verification-observe.mjs` | `Bash` | 5 s |
-| PostToolUse | `posttooluse-validate.mjs` | `Write\|Edit` | 5 s |
 | SubagentStart | `subagent-start-bootstrap.mjs` | `.+` | 5 s |
 | SubagentStop | `subagent-stop-sync.mjs` | `.+` | 5 s |
 | SessionEnd | `session-end-cleanup.mjs` | — | — |
@@ -317,32 +308,6 @@ Prompts shorter than 10 characters are rejected immediately.
 ```
 
 **Stdout:** Always `{}` (observer only). Emits a `verification.boundary_observed` log event to stderr.
-
-#### PostToolUse: `posttooluse-validate.mjs`
-
-**Stdin:**
-
-```json
-{
-  "tool_name": "Write",
-  "tool_input": { "file_path": "src/app/api/route.ts" },
-  "session_id": "abc-123",
-  "cwd": "/path/to/project"
-}
-```
-
-**Stdout (violations found):**
-
-```json
-{
-  "hookSpecificOutput": {
-    "hookEventName": "PostToolUse",
-    "additionalContext": "⚠️ Validation issues...\n<!-- postValidation: {\"version\":1,\"hook\":\"posttooluse-validate\",\"filePath\":\"...\",\"matchedSkills\":[...],\"errorCount\":1,\"warnCount\":0} -->"
-  }
-}
-```
-
-**Stdout (no violations):** `{}`
 
 #### SubagentStart: `subagent-start-bootstrap.mjs`
 
@@ -886,22 +851,6 @@ Every structured log event emitted by the plugin, organized by source hook and l
 | `complete` | summary | `reason`, `matchedCount`, `injectedCount` | End-of-hook summary |
 | `verification-observe-skip` | debug | `reason`, `command` | No boundary match or no bash input |
 
-#### PostToolUse (`posttooluse-validate`)
-
-| Event | Level | Payload Fields | Description |
-|-------|-------|---------------|-------------|
-| `posttooluse-validate-output` | summary | `filePath`, `matchedSkills`, `errorCount`, `warnCount` | Validation produced output |
-| `complete` | summary | `reason`, `matchedCount`, `injectedCount` | End-of-hook summary |
-| `posttooluse-validate-skip` | debug | `reason`, `toolName`, `filePath`, `hash`, `sessionId` | Validation skipped (various reasons) |
-| `posttooluse-validate-input` | debug | `toolName`, `filePath`, `sessionId` | Input parsed |
-| `posttooluse-validate-loaded` | debug | `totalSkills`, `skillsWithRules` | Validation rules loaded |
-| `posttooluse-validate-matched` | debug | `matchedSkills` | Skills matched for validation |
-| `posttooluse-validate-violations` | debug | `total`, `errors`, `warns` | Violation counts |
-| `posttooluse-validate-no-output` | debug | `reason` | No actionable violations |
-| `posttooluse-validate-match` | trace | `skill`, `matchType`, `pattern` | Individual skill-file match |
-| `posttooluse-validate-rule-skip` | trace | `skill`, `pattern`, `reason` | Rule skipped (skipIfFileContains matched) |
-| `posttooluse-validate-regex-fail` | debug | `skill`, `pattern` | Validation regex failed to compile |
-
 #### SubagentStart (`subagent-start-bootstrap`)
 
 | Event | Level | Payload Fields | Description |
@@ -1138,17 +1087,7 @@ The `verificationId` (UUIDv4) enables correlation of boundary observations with 
 
 ## Post-Write Validation
 
-**Source**: `hooks/src/posttooluse-validate.mts`
-
-Runs skill-defined validation rules against files after Write/Edit operations.
-
-### Validation Pipeline
-
-```
-Parse Input → Load Rules → Match File → Run Validation → Format Output
-```
-
-1. **Parse input**: Extract `toolName`, `filePath`, `sessionId`, `cwd` from hook stdin. Skip if not Write/Edit or no `file_path`.
+Removed from the runtime. Post-write validation is no longer part of the default or shipped hook pipeline.
 2. **Load rules**: Scan all skills' `validate:` arrays from SKILL.md frontmatter. Compile path and import patterns.
 3. **Match file**: Test file path against skill `pathPatterns` (glob) and file content against `importPatterns` (regex). Returns list of matched skills with validation rules.
 4. **Run validation**: For each matched skill and rule:
@@ -1166,15 +1105,6 @@ validate:
     severity: "error"
     skipIfFileContains: "process\\.env"
 ```
-
-### File-Hash Dedup
-
-Prevents re-validating unchanged files:
-- Computes MD5 hash of file content (first 12 chars)
-- Tracks validated `path:hash` pairs in `VERCEL_PLUGIN_VALIDATED_FILES` env var and session file (`…-validated-files.txt`)
-- Skips validation if the same `path:hash` pair was already validated in this session
-
----
 
 ## Session Cleanup
 
@@ -1207,6 +1137,4 @@ All session-scoped files live in `os.tmpdir()` with the prefix `vercel-plugin-<s
 | `…-pending-launches.jsonl` | JSONL | Pending subagent spawn metadata | `pretooluse-subagent-spawn-observe` |
 | `…-pending-launches.jsonl.lock` | Lock file | File-based lock for pending launches | `pretooluse-subagent-spawn-observe` |
 | `…-subagent-ledger.jsonl` | JSONL | Aggregate subagent stop metadata | `subagent-stop-sync` |
-| `…-validated-files.txt` | Comma-delimited | Validated file:hash pairs | `posttooluse-validate` |
-
 All entries are cleaned up by `session-end-cleanup.mjs` at SessionEnd.

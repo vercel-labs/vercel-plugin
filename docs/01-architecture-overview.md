@@ -1,6 +1,8 @@
 # Architecture Overview
 
 > **Audience**: Everyone — developers, skill authors, maintainers, and contributors.
+>
+> The automatic `PreToolUse` and `UserPromptSubmit` skill-injection registrations are no longer enabled in [`hooks/hooks.json`](/Users/melkeydev/Documents/vercel/vercel-plugin/hooks/hooks.json). This document still describes the injection engine because the code remains in-repo for internal testing, targeted workflows, and possible future opt-in use.
 
 The Vercel Plugin for Claude Code is an **event-driven skill injection system** that automatically delivers relevant context to Claude based on what the developer is doing. When a developer opens a Next.js project, edits a configuration file, or types a prompt about deployments, the plugin detects the intent and injects precisely the right knowledge — without the developer asking for it.
 
@@ -62,8 +64,6 @@ graph TB
         end
 
         subgraph "PostToolUse"
-            VALIDATE["posttooluse-validate.mjs<br/>skill validation rules"]
-            SHADCN["posttooluse-shadcn-font-fix.mjs<br/>shadcn font patch"]
             VERIFY_OBS["posttooluse-verification-observe.mjs<br/>verification boundary detection"]
         end
 
@@ -72,7 +72,6 @@ graph TB
 
     MANIFEST -->|"loaded at runtime"| SKILL_INJECT
     MANIFEST -->|"loaded at runtime"| PROMPT_INJECT
-    MANIFEST -->|"loaded at runtime"| VALIDATE
     MANIFEST -->|"loaded at runtime"| SUBAGENT_BOOT
     HOOKS_JSON -->|"registers all hooks"| PROFILER
     HOOKS_JSON --> SKILL_INJECT
@@ -150,10 +149,10 @@ sequenceDiagram
     CC->>CC: Writes app/api/cron/route.ts
 
     rect rgb(255, 230, 230)
-        Note over POU: Phase 4: Post-Write Validation
-        CC->>POU: posttooluse-validate (Write route.ts)
-        Note over POU: Check validation rules<br/>for matched skills
-        POU-->>CC: Validation passed ✓
+        Note over POU: Phase 4: PostToolUse observer only
+        CC->>POU: posttooluse-verification-observe (Bash completion)
+        Note over POU: Classify verification boundary<br/>emit structured event only
+        POU-->>CC: "{}"
     end
 
     opt If Claude spawns a subagent
@@ -238,9 +237,7 @@ Fires after tool execution. Two matchers handle different scenarios.
 
 | Hook | Matcher | Source | Purpose |
 |------|---------|--------|---------|
-| `posttooluse-shadcn-font-fix.mjs` | `Bash` | standalone (no .mts source) | Fixes shadcn font loading issues by patching font import statements |
 | `posttooluse-verification-observe.mjs` | `Bash` | `hooks/src/posttooluse-verification-observe.mts` | **Observer.** Classifies bash commands into verification boundaries: `uiRender` (browser/screenshot), `clientRequest` (curl/fetch), `serverHandler` (log tailing), `environment` (env var reads). Infers routes from recent file edits or command URLs. Emits structured log events |
-| `posttooluse-validate.mjs` | `Write\|Edit` | `hooks/src/posttooluse-validate.mts` | **Validation engine.** Matches written/edited files to skills, runs regex-based validation rules from skill frontmatter. Reports errors (mandatory fix) and warnings (suggestions) with line numbers |
 
 ### SessionEnd
 
@@ -342,7 +339,7 @@ When the session starts, three hooks fire in sequence:
    - **Result**: `VERCEL_PLUGIN_LIKELY_SKILLS="nextjs,ai-sdk,vercel-cron"`
    - Caches profile to `<tmpdir>/vercel-plugin-<sessionId>-profile.json`
 
-3. **`inject-claude-md`** loads `vercel.md` (~52KB ecosystem guide) and outputs it as additionalContext. Claude now has broad Vercel platform knowledge.
+3. **`inject-claude-md`** loads the thin session-start Vercel context and knowledge update guidance.
 
 ### Phase 2: Prompt Analysis
 
@@ -373,11 +370,8 @@ Claude decides to read `vercel.json` to understand existing cron configuration.
 
 Claude creates `app/api/cron/weekly-digest/route.ts`.
 
-**`posttooluse-validate`** fires (tool: Write):
-- Matches file path against skill validation rules
-- Checks `vercel-cron` validation rules (e.g., route handler patterns)
-- All rules pass → no violations reported
-- **Result**: Write proceeds without intervention
+`PostToolUse` no longer injects validation or follow-on guidance by default.
+Only the verification observer runs on Bash completions.
 
 ### Phase 5: Session End
 

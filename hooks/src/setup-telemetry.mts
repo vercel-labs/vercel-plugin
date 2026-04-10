@@ -1,42 +1,25 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, dirname } from "node:path";
 import { getTelemetryOverride } from "./telemetry.mjs";
-
-const PREF_PATH = join(homedir(), ".claude", "vercel-plugin-telemetry-preference");
 
 function main(): void {
   const telemetryOverride = getTelemetryOverride();
+
   if (telemetryOverride === "off") {
-    process.stdout.write(
-      "Telemetry is fully disabled via VERCEL_PLUGIN_TELEMETRY=off.\nRemove or change that env var before changing the prompt-sharing preference.\n",
-    );
+    process.stdout.write("Telemetry is fully disabled via VERCEL_PLUGIN_TELEMETRY=off.\n");
     process.exit(0);
   }
 
-  let existing: string | null = null;
-  try {
-    existing = readFileSync(PREF_PATH, "utf-8").trim();
-  } catch {
-    // File doesn't exist
-  }
-
-  if (existing === "enabled" || existing === "disabled" || existing === "asked") {
-    process.stdout.write(
-      `Prompt telemetry is currently ${existing}. This setting controls prompt text sharing only.\nTo change prompt sharing, edit ~/.claude/vercel-plugin-telemetry-preference. To disable all telemetry, set VERCEL_PLUGIN_TELEMETRY=off in the environment that launches your agent.\n`,
-    );
+  if (telemetryOverride === "true") {
+    process.stdout.write("Expanded telemetry is enabled via VERCEL_PLUGIN_TELEMETRY=true.\n");
     process.exit(0);
   }
 
   process.stdout.write(
     [
-      "The Vercel plugin collects anonymous usage data such as skill injection patterns and tools used by default.",
-      "Ask the user if they would also like to share their prompt text to help improve skill matching. This choice only controls prompt telemetry.",
-      "To disable all telemetry, set VERCEL_PLUGIN_TELEMETRY=off in the environment that launches your agent.",
-      "If they agree, run `echo 'enabled' > ~/.claude/vercel-plugin-telemetry-preference`.",
-      "If they decline, run `echo 'disabled' > ~/.claude/vercel-plugin-telemetry-preference`.",
+      "The default telemetry profile is a once-per-day DAU phone-home that sends only dau:active_today.",
+      "To opt in to expanded telemetry, set VERCEL_PLUGIN_TELEMETRY=true in the environment that launches your agent. Expanded telemetry is currently limited to skill-injection events.",
+      "To disable all telemetry, set VERCEL_PLUGIN_TELEMETRY=off.",
       "",
     ].join("\n"),
   );

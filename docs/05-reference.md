@@ -19,19 +19,17 @@
 
 ## Hook Registry
 
+The `pretooluse-skill-inject.mjs` and `user-prompt-submit-skill-inject.mjs` engines remain in the repo, but they are not registered in the default hook profile.
+
 Every hook registered in `hooks/hooks.json`. All hooks run via `node "${CLAUDE_PLUGIN_ROOT}/hooks/<file>.mjs"`.
 
 | Event | Hook File | Matcher | Timeout | Description |
 |-------|-----------|---------|---------|-------------|
 | SessionStart | `session-start-seen-skills.mjs` | `startup\|resume\|clear\|compact` | — | Initializes `VERCEL_PLUGIN_SEEN_SKILLS=""` in the env file for dedup tracking |
 | SessionStart | `session-start-profiler.mjs` | `startup\|resume\|clear\|compact` | — | Scans project config files + package deps → sets `VERCEL_PLUGIN_LIKELY_SKILLS` (+5 priority boost); detects greenfield mode |
-| SessionStart | `inject-claude-md.mjs` | `startup\|resume\|clear\|compact` | — | Injects `vercel.md` ecosystem guide (~52KB) as additionalContext |
-| PreToolUse | `pretooluse-skill-inject.mjs` | `Read\|Edit\|Write\|Bash` | 5s | **Main injection engine.** Pattern match → rank → dedup → budget enforcement (max 3 skills, 18KB) |
+| SessionStart | `inject-claude-md.mjs` | `startup\|resume\|clear\|compact` | — | Injects thin session-start Vercel context plus the knowledge update skill body |
 | PreToolUse | `pretooluse-subagent-spawn-observe.mjs` | `Agent` | 5s | **Observer.** Captures pending subagent spawn metadata to JSONL file |
-| UserPromptSubmit | `user-prompt-submit-skill-inject.mjs` | *(all prompts)* | 5s | Prompt signal scoring engine — phrases, allOf, anyOf, noneOf → inject up to 2 skills within 8KB |
-| PostToolUse | `posttooluse-shadcn-font-fix.mjs` | `Bash` | 5s | Fixes shadcn font loading issues by patching font import statements |
 | PostToolUse | `posttooluse-verification-observe.mjs` | `Bash` | 5s | **Observer.** Classifies bash commands into verification boundaries (uiRender, clientRequest, serverHandler, environment) |
-| PostToolUse | `posttooluse-validate.mjs` | `Write\|Edit` | 5s | Runs skill-defined validation rules on written/edited files; reports errors and warnings |
 | SubagentStart | `subagent-start-bootstrap.mjs` | `.+` | 5s | Budget-aware context injection for subagents — scales by agent type (Explore ~1KB, Plan ~3KB, GP ~8KB) |
 | SubagentStop | `subagent-stop-sync.mjs` | `.+` | 5s | **Observer.** Records subagent lifecycle metadata to JSONL ledger |
 | SessionEnd | `session-end-cleanup.mjs` | *(always)* | — | Best-effort cleanup of all session-scoped temp files (dedup claims, profile cache, pending launches, ledger) |
@@ -94,14 +92,9 @@ type SyncHookJSONOutput = {
 }
 ```
 
-**PostToolUse** (`posttooluse-validate`):
+**PostToolUse** (`posttooluse-verification-observe`):
 ```json
-{
-  "hookSpecificOutput": {
-    "hookEventName": "PostToolUse",
-    "additionalContext": "## Validation Results\n<violations>\n<!-- postValidation: {...} -->"
-  }
-}
+{}
 ```
 
 **SubagentStart** (`subagent-start-bootstrap`):

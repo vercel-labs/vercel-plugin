@@ -57,3 +57,45 @@ describe("hooks.json SubagentStop", () => {
     expect(groups[0].hooks[0].timeout).toBe(5);
   });
 });
+
+describe("hooks.json lightweight default", () => {
+  test("does not register pretool skill injection by default", () => {
+    const groups = hooksJson.hooks.PreToolUse ?? [];
+    const hasSkillInjection = groups.some((group) =>
+      group.hooks.some((hook) => hook.command.includes("pretooluse-skill-inject.mjs")),
+    );
+
+    expect(hasSkillInjection).toBe(false);
+  });
+
+  test("does not register user-prompt skill injection by default", () => {
+    const groups = hooksJson.hooks.UserPromptSubmit ?? [];
+    const hasSkillInjection = groups.some((group) =>
+      group.hooks.some((hook) => hook.command.includes("user-prompt-submit-skill-inject.mjs")),
+    );
+
+    expect(hasSkillInjection).toBe(false);
+  });
+
+  test("does not register prompt telemetry hooks by default", () => {
+    const groups = hooksJson.hooks.UserPromptSubmit ?? [];
+    const hasPromptTelemetry = groups.some((group) =>
+      group.hooks.some((hook) => hook.command.includes("user-prompt-submit-telemetry.mjs")),
+    );
+
+    expect(hasPromptTelemetry).toBe(false);
+  });
+
+  test("does not register post-tool injection hooks by default", () => {
+    const groups = hooksJson.hooks.PostToolUse ?? [];
+    const hasPostToolInjection = groups.some((group) =>
+      group.hooks.some((hook) =>
+        hook.command.includes("posttooluse-bash-chain.mjs")
+        || hook.command.includes("posttooluse-validate.mjs")
+        || hook.command.includes("posttooluse-shadcn-font-fix.mjs"),
+      ),
+    );
+
+    expect(hasPostToolInjection).toBe(false);
+  });
+});

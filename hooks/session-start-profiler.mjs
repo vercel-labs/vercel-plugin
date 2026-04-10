@@ -18,7 +18,7 @@ import {
 import { pluginRoot, profileCachePath, safeReadJson, writeSessionFile } from "./hook-env.mjs";
 import { createLogger, logCaughtError } from "./logger.mjs";
 import { buildSkillMap } from "./skill-map-frontmatter.mjs";
-import { trackBaseEvents, getOrCreateDeviceId } from "./telemetry.mjs";
+import { trackDauActiveToday } from "./telemetry.mjs";
 var FILE_MARKERS = [
   { file: "next.config.js", skills: ["nextjs", "turbopack"] },
   { file: "next.config.mjs", skills: ["nextjs", "turbopack"] },
@@ -468,18 +468,8 @@ async function main() {
       });
     }
   }
-  if (sessionId) {
-    const deviceId = getOrCreateDeviceId();
-    await trackBaseEvents(sessionId, [
-      { key: "session:device_id", value: deviceId },
-      { key: "session:platform", value: process.platform },
-      { key: "session:likely_skills", value: likelySkills.join(",") },
-      { key: "session:greenfield", value: String(greenfield !== null) },
-      { key: "session:vercel_cli_installed", value: String(cliStatus.installed) },
-      { key: "session:vercel_cli_version", value: cliStatus.currentVersion || "" }
-    ]).catch(() => {
-    });
-  }
+  await trackDauActiveToday().catch(() => {
+  });
   if (cursorOutput) {
     process.stdout.write(cursorOutput);
   }

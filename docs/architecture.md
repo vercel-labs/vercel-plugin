@@ -72,7 +72,7 @@ flowchart TB
     subgraph Startup ["SessionStart Phase"]
         SS1["session-start-seen-skills.mjs<br/>Initializes dedup state"]
         SS2["session-start-profiler.mjs<br/>Scans project → sets LIKELY_SKILLS"]
-        SS3["inject-claude-md.mjs<br/>Outputs vercel.md ecosystem graph"]
+        SS3["inject-claude-md.mjs<br/>Outputs thin session context"]
     end
 
     subgraph Runtime ["Runtime Phase"]
@@ -82,8 +82,6 @@ flowchart TB
     end
 
     subgraph PostAction ["Post-Action Phase"]
-        PTV["posttooluse-validate.mjs<br/>Write | Edit<br/>Skill validation rules"]
-        PTF["posttooluse-shadcn-font-fix.mjs<br/>Bash<br/>Shadcn font fix"]
         PVO["posttooluse-verification-observe.mjs<br/>Bash<br/>Verification boundary observer"]
     end
 
@@ -114,16 +112,14 @@ flowchart TB
 |---|-------|-----------|---------|---------|---------|
 | 1 | SessionStart | `session-start-seen-skills.mjs` | `startup\|resume\|clear\|compact` | — | Initialize dedup env var |
 | 2 | SessionStart | `session-start-profiler.mjs` | `startup\|resume\|clear\|compact` | — | Profile project, set LIKELY_SKILLS |
-| 3 | SessionStart | `inject-claude-md.mjs` | `startup\|resume\|clear\|compact` | — | Inject vercel.md ecosystem graph |
+| 3 | SessionStart | `inject-claude-md.mjs` | `startup\|resume\|clear\|compact` | — | Inject thin Vercel session context + knowledge update |
 | 4 | PreToolUse | `pretooluse-skill-inject.mjs` | `Read\|Edit\|Write\|Bash` | 5s | Main skill injection engine |
 | 5 | PreToolUse | `pretooluse-subagent-spawn-observe.mjs` | `Agent` | 5s | Record pending subagent launches |
 | 6 | UserPromptSubmit | `user-prompt-submit-skill-inject.mjs` | _(all prompts)_ | 5s | Prompt signal scoring + injection |
-| 7 | PostToolUse | `posttooluse-shadcn-font-fix.mjs` | `Bash` | 5s | Fix shadcn font loading |
-| 8 | PostToolUse | `posttooluse-verification-observe.mjs` | `Bash` | 5s | Observe verification boundaries |
-| 9 | PostToolUse | `posttooluse-validate.mjs` | `Write\|Edit` | 5s | Run skill validation rules |
-| 10 | SubagentStart | `subagent-start-bootstrap.mjs` | `.+` _(any)_ | 5s | Bootstrap subagent with context |
-| 11 | SubagentStop | `subagent-stop-sync.mjs` | `.+` _(any)_ | 5s | Write ledger, sync dedup |
-| 12 | SessionEnd | `session-end-cleanup.mjs` | — | — | Delete temp files |
+| 7 | PostToolUse | `posttooluse-verification-observe.mjs` | `Bash` | 5s | Observe verification boundaries |
+| 8 | SubagentStart | `subagent-start-bootstrap.mjs` | `.+` _(any)_ | 5s | Bootstrap subagent with context |
+| 9 | SubagentStop | `subagent-stop-sync.mjs` | `.+` _(any)_ | 5s | Write ledger, sync dedup |
+| 10 | SessionEnd | `session-end-cleanup.mjs` | — | — | Delete temp files |
 
 ---
 
@@ -454,7 +450,6 @@ All three steps are combined in `bun run build`. A pre-commit hook auto-compiles
 | `VERCEL_PLUGIN_TSX_EDIT_COUNT` | `0` | `pretooluse-skill-inject` | `pretooluse-skill-inject` | Current `.tsx` edit count |
 | `VERCEL_PLUGIN_DEV_VERIFY_COUNT` | `0` | `pretooluse-skill-inject` | `pretooluse-skill-inject` | Dev server verification event count |
 | `VERCEL_PLUGIN_DEV_COMMAND` | — | `pretooluse-skill-inject` | `pretooluse-skill-inject` | Detected dev server command |
-| `VERCEL_PLUGIN_VALIDATED_FILES` | — | `posttooluse-validate` | `posttooluse-validate` | Comma-delimited `path:hash` pairs of validated files |
 | `VERCEL_PLUGIN_RECENT_EDITS` | — | `pretooluse-skill-inject` | `posttooluse-verification-observe` | Comma-delimited recent file edit paths |
 | `VERCEL_PLUGIN_AUDIT_LOG_FILE` | — | User / shell | `hook-env` | Audit log file path, or `off` to disable |
 | `VERCEL_PLUGIN_LEXICAL_RESULT_MIN_SCORE` | `5.0` | User / shell | `lexical-index` | Minimum score for lexical fallback results |
@@ -472,7 +467,7 @@ All three steps are combined in `bun run build`. A pre-commit hook auto-compiles
 1. **Session starts** — The profiler scans `package.json`, finds `next` and `@prisma/client` -> sets `VERCEL_PLUGIN_LIKELY_SKILLS=nextjs,vercel-storage`.
 2. **Developer opens `schema.prisma`** — PreToolUse matches `**/*.prisma` glob -> injects the `vercel-storage` skill with Prisma best practices.
 3. **Developer edits `app/page.tsx`** — PreToolUse matches `.tsx` path -> TSX edit counter increments. After 3 edits, `react-best-practices` is injected.
-4. **Developer writes to `schema.prisma`** — PostToolUse validate runs rules from the skill, catching unsafe `executeRaw` usage.
+4. **Developer writes to `schema.prisma`** — no default post-write injection runs; guidance still comes from the active skill context and on-demand discovery.
 5. **Developer asks "how do I deploy to preview?"** — UserPromptSubmit scores against `promptSignals` and injects the `deployments-cicd` skill.
 
 ### "I'm starting a brand new project"
@@ -518,16 +513,14 @@ hooks/
 │   ├── subagent-state.mts            # Subagent pending launch state management
 │   ├── session-start-seen-skills.mts # Hook: initialize dedup env var
 │   ├── session-start-profiler.mts    # Hook: profile project -> set LIKELY_SKILLS
-│   ├── inject-claude-md.mts          # Hook: inject vercel.md ecosystem graph
+│   ├── inject-claude-md.mts          # Hook: inject thin session-start context
 │   ├── pretooluse-skill-inject.mts   # Hook: main injection engine
 │   ├── pretooluse-subagent-spawn-observe.mts  # Hook: record pending subagent launches
 │   ├── user-prompt-submit-skill-inject.mts    # Hook: prompt signal scoring + injection
-│   ├── posttooluse-validate.mts      # Hook: skill validation rules
 │   ├── posttooluse-verification-observe.mts   # Hook: verification boundary observer
 │   ├── subagent-start-bootstrap.mts  # Hook: bootstrap subagent context
 │   ├── subagent-stop-sync.mts        # Hook: write ledger, sync dedup
 │   └── session-end-cleanup.mts       # Hook: delete temp files
-├── posttooluse-shadcn-font-fix.mjs   # Standalone hook (no .mts source)
 ├── *.mjs                             # Compiled output (committed, ESM)
 
 skills/

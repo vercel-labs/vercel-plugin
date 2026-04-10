@@ -1,5 +1,7 @@
 # Hook Lifecycle Deep Dive
 
+> Note: the skill-injection engines described here still exist, but their `PreToolUse` and `UserPromptSubmit` registrations are disabled in the default [`hooks/hooks.json`](/Users/melkeydev/Documents/vercel/vercel-plugin/hooks/hooks.json) profile.
+
 This document covers every hook entry point in `hooks/hooks.json`, organized by lifecycle phase. Each section includes input/output contracts, sequence diagrams, and implementation details.
 
 ---
@@ -51,7 +53,7 @@ sequenceDiagram
 
     CC->>SS: startup | resume | clear | compact
     activate SS
-    SS-->>CC: Initialize dedup, profile project, inject vercel.md
+    SS-->>CC: Initialize dedup, profile project, inject thin session context
     deactivate SS
 
     loop Every user prompt
@@ -500,14 +502,7 @@ These hooks fire **after** a tool call completes. They observe results, validate
 
 ### 7. posttooluse-shadcn-font-fix
 
-**Source**: `hooks/posttooluse-shadcn-font-fix.mjs` (standalone, no `.mts` source)
-**Matcher**: `Bash`
-**Timeout**: 5 seconds
-**Output**: JSON with `additionalContext` (fix instructions)
-
-#### Purpose
-
-After a Bash command completes, detects and fixes shadcn font loading issues. This is a standalone hook with no TypeScript source — it's a simple pattern-match-and-fix.
+Removed from the runtime. This hook was deleted as part of the hook-reduction pass.
 
 ---
 
@@ -560,63 +555,7 @@ sequenceDiagram
 
 ### 9. posttooluse-validate
 
-**Source**: `hooks/src/posttooluse-validate.mts` (550 lines)
-**Matcher**: `Write|Edit`
-**Timeout**: 5 seconds
-**Output**: JSON with `additionalContext` (validation violations)
-
-#### Purpose
-
-After a Write or Edit, matches the target file against skills and runs any `validate` rules defined in skill frontmatter. Returns fix instructions if validation fails.
-
-#### Sequence
-
-```mermaid
-sequenceDiagram
-    participant CC as Claude Code
-    participant Hook as posttooluse-validate
-    participant Skills as Skill Map
-    participant FS as File System
-    participant Dedup as Validation Dedup
-
-    CC->>Hook: PostToolUse (stdin: { tool_name: "Write", tool_input: { file_path } })
-    Hook->>Hook: parseInput -> extract file path
-    Hook->>FS: Read file content from disk
-    Hook->>Dedup: Check file+hash already validated?
-    alt Already validated (same content)
-        Hook-->>CC: "{}" (skip)
-    end
-    Hook->>Skills: loadValidateRules -> filter skills with validate: rules
-    Hook->>Hook: matchFileToSkills -> match by path globs + import patterns
-    loop For each matched skill's validate rules
-        Hook->>Hook: Check skipIfFileContains regex
-        Hook->>Hook: Run pattern regex against each line
-        alt Pattern matches
-            Hook->>Hook: Record violation (line, message, severity)
-        end
-    end
-    Hook->>Dedup: Mark file+hash as validated
-    Hook-->>CC: JSON with violations or "{}"
-```
-
-#### Validation Rule Format
-
-```yaml
-validate:
-  - pattern: "executeRaw\\("
-    message: "Use $queryRaw for type safety instead of executeRaw"
-    severity: "error"
-    skipIfFileContains: "\\$queryRaw"
-```
-
-- **`pattern`**: Regex matched against each line of the file
-- **`message`**: Error description returned to the agent
-- **`severity`**: `error` (mandatory fix) or `warn` (suggestion)
-- **`skipIfFileContains`**: If this regex matches anywhere in the file, skip this rule
-
-#### Validation Dedup
-
-Tracks `file_path:content_hash` pairs in `VERCEL_PLUGIN_VALIDATED_FILES` to avoid re-validating unchanged files. Uses MD5 hash (first 12 hex chars) for fast comparison.
+Removed from the runtime. This hook and its validated-file dedup state were deleted as part of the hook-reduction pass.
 
 ---
 
@@ -913,7 +852,6 @@ These are set and read by the plugin's hooks. Writers and readers are listed to 
 | `VERCEL_PLUGIN_TSX_EDIT_COUNT` | `0` | `pretooluse-skill-inject` | `pretooluse-skill-inject` | Session-scoped, counter |
 | `VERCEL_PLUGIN_DEV_VERIFY_COUNT` | `0` | `pretooluse-skill-inject` | `pretooluse-skill-inject` | Session-scoped, counter |
 | `VERCEL_PLUGIN_DEV_COMMAND` | — | `pretooluse-skill-inject` | `pretooluse-skill-inject` | Session-scoped |
-| `VERCEL_PLUGIN_VALIDATED_FILES` | — | `posttooluse-validate` | `posttooluse-validate` | Session-scoped |
 | `VERCEL_PLUGIN_RECENT_EDITS` | — | `pretooluse-skill-inject` | `posttooluse-verification-observe` | Session-scoped |
 
 ### User-Configurable Variables

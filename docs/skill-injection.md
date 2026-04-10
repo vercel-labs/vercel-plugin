@@ -1,6 +1,8 @@
 # Skill Injection Engine
 
 > **Audience**: Plugin developers, skill authors, and anyone debugging why a skill did or didn't inject.
+>
+> The automatic `PreToolUse` and `UserPromptSubmit` registrations for this engine are disabled by default in [`hooks/hooks.json`](/Users/melkeydev/Documents/vercel/vercel-plugin/hooks/hooks.json). This document explains the engine that remains in-repo for debugging, testing, and targeted opt-in use.
 
 This document explains the complete skill injection pipeline — how vercel-plugin decides which skills to surface, when, and why. It covers both injection hooks (PreToolUse and UserPromptSubmit), the ranking system with all boost factors, the dedup state machine, budget enforcement, prompt signal scoring, and special-case triggers.
 
@@ -700,51 +702,6 @@ sequenceDiagram
 
 ---
 
-## PostToolUse Validation
-
-**Source**: `hooks/src/posttooluse-validate.mts`
-
-After Claude writes or edits a file, the PostToolUse hook runs validation rules from matched skills.
-
-```mermaid
-flowchart TD
-    WRITE["Claude writes/edits file"] --> MATCH["Match file path → skills<br/>(using pathPatterns)"]
-    MATCH --> LOOP["For each matched skill"]
-    LOOP --> RULE["For each validate rule"]
-    RULE --> SKIP{"skipIfFileContains<br/>matches?"}
-    SKIP -->|Yes| NEXT["Skip rule"]
-    SKIP -->|No| TEST{"pattern matches<br/>any line?"}
-    TEST -->|Yes| REPORT["Report violation<br/>(severity + message)"]
-    TEST -->|No| NEXT
-    NEXT --> RULE
-    REPORT --> LOOP
-```
-
-**Validation rule fields**:
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `pattern` | `string` (regex) | Yes | Pattern to search for in file content |
-| `message` | `string` | Yes | Actionable fix instruction for Claude |
-| `severity` | `"error"` or `"warn"` | Yes | `error` = must fix; `warn` = advisory |
-| `skipIfFileContains` | `string` (regex) | No | Skip rule if file matches this pattern |
-
-**Example** — Next.js async cookies rule:
-
-```yaml
-validate:
-  - pattern: (?<!await )\bcookies\(\s*\)
-    message: 'cookies() is async in Next.js 16 — add await'
-    severity: error
-    skipIfFileContains: "^['\"]use client['\"]"
-```
-
-This catches `cookies()` calls without `await`, but skips client components (which can't call `cookies()` anyway).
-
-**Dedup**: Validation uses MD5 content hashing to avoid re-validating the same file content. The hash is tracked in `VERCEL_PLUGIN_VALIDATED_FILES`.
-
----
-
 ## Environment Variables Reference
 
 | Variable | Default | Set By | Description |
@@ -757,7 +714,6 @@ This catches `cookies()` calls without `await`, but skips client components (whi
 | `VERCEL_PLUGIN_AGENT_BROWSER_AVAILABLE` | `"0"` | profiler | `"1"` if agent-browser CLI is on PATH |
 | `VERCEL_PLUGIN_TSX_EDIT_COUNT` | `"0"` | pretooluse | Current `.tsx` edit count |
 | `VERCEL_PLUGIN_DEV_VERIFY_COUNT` | `"0"` | pretooluse | Dev server injection iteration count |
-| `VERCEL_PLUGIN_VALIDATED_FILES` | — | posttooluse | Content hashes of validated files |
 | `VERCEL_PLUGIN_INJECTION_BUDGET` | `18000` | — | PreToolUse byte budget |
 | `VERCEL_PLUGIN_PROMPT_INJECTION_BUDGET` | `8000` | — | UserPromptSubmit byte budget |
 | `VERCEL_PLUGIN_REVIEW_THRESHOLD` | `3` | — | TSX edits before react-best-practices triggers |

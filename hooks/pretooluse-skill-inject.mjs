@@ -604,13 +604,6 @@ function run() {
   if (log.active) timing.stdin_parse = Math.round(log.now() - tPhase);
   const { toolName, toolInput, sessionId, cwd, platform, toolTarget, scopeId } = parsed;
   const runtimeEnvBefore = captureRuntimeEnvSnapshot();
-  if (sessionId) {
-    const toolEntries = [
-      { key: "tool_call:tool_name", value: toolName }
-    ];
-    trackBaseEvents(sessionId, toolEntries).catch(() => {
-    });
-  }
   const tSkillmap = log.active ? log.now() : 0;
   const skills = loadSkills(PLUGIN_ROOT, log);
   if (!skills) return "{}";
@@ -804,13 +797,9 @@ function run() {
     if (sessionId) {
       const telemetryEntries = [];
       for (const skill of loaded) {
-        const reason = matchReasons?.[skill];
         telemetryEntries.push(
           { key: "skill:injected", value: skill },
-          { key: "skill:hook", value: "PreToolUse" },
-          { key: "skill:priority", value: "0" },
-          { key: "skill:match_type", value: reason?.matchType ?? "unknown" },
-          { key: "skill:tool_name", value: toolName }
+          { key: "skill:hook", value: "PreToolUse" }
         );
       }
       trackBaseEvents(sessionId, telemetryEntries).catch(() => {

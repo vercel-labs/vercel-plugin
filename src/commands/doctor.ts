@@ -48,6 +48,39 @@ export function doctor(projectRoot: string): DoctorResult {
   const issues: DoctorIssue[] = [];
   const skillsDir = join(projectRoot, "skills");
   const manifestPath = join(projectRoot, "generated", "skill-manifest.json");
+  const hooksJsonPath = join(projectRoot, "hooks", "hooks.json");
+
+  let hooksConfig: { hooks?: Record<string, any[]> } = {};
+  if (existsSync(hooksJsonPath)) {
+    try {
+      hooksConfig = JSON.parse(readFileSync(hooksJsonPath, "utf-8"));
+    } catch (err: any) {
+      issues.push({
+        severity: "error",
+        check: "subagent-hooks",
+        message: `Failed to parse hooks.json: ${err.message}`,
+      });
+    }
+  }
+
+  const registeredHooks = hooksConfig.hooks ?? {};
+  const hasAutomaticSkillInjectionHooks =
+    (registeredHooks.PreToolUse ?? []).some((entry: any) =>
+      Array.isArray(entry?.hooks)
+      && entry.hooks.some(
+        (hook: any) =>
+          typeof hook?.command === "string"
+          && hook.command.includes("pretooluse-skill-inject.mjs"),
+      ),
+    )
+    || (registeredHooks.UserPromptSubmit ?? []).some((entry: any) =>
+      Array.isArray(entry?.hooks)
+      && entry.hooks.some(
+        (hook: any) =>
+          typeof hook?.command === "string"
+          && hook.command.includes("user-prompt-submit-skill-inject.mjs"),
+      ),
+    );
 
   // --- Live scan ---
   const { validation, skills: loadedSkills, buildDiagnostics } = loadValidatedSkillMap(skillsDir);
@@ -191,7 +224,7 @@ export function doctor(projectRoot: string): DoctorResult {
       (skill.pathPatterns?.length ?? 0) + (skill.bashPatterns?.length ?? 0);
   }
 
-  if (liveSkillCount > SKILL_COUNT_WARN_THRESHOLD) {
+  if (hasAutomaticSkillInjectionHooks && liveSkillCount > SKILL_COUNT_WARN_THRESHOLD) {
     issues.push({
       severity: "warning",
       check: "hook-timeout",
@@ -200,7 +233,7 @@ export function doctor(projectRoot: string): DoctorResult {
     });
   }
 
-  if (totalPatterns > PATTERN_COUNT_WARN_THRESHOLD) {
+  if (hasAutomaticSkillInjectionHooks && totalPatterns > PATTERN_COUNT_WARN_THRESHOLD) {
     issues.push({
       severity: "warning",
       check: "hook-timeout",
@@ -329,22 +362,7 @@ export function doctor(projectRoot: string): DoctorResult {
   }
 
   // --- Subagent hook registration ---
-  const hooksJsonPath = join(projectRoot, "hooks", "hooks.json");
   if (existsSync(hooksJsonPath)) {
-    let hooksConfig: { hooks?: Record<string, any[]> };
-    try {
-      hooksConfig = JSON.parse(readFileSync(hooksJsonPath, "utf-8"));
-    } catch (err: any) {
-      hooksConfig = {};
-      issues.push({
-        severity: "error",
-        check: "subagent-hooks",
-        message: `Failed to parse hooks.json: ${err.message}`,
-      });
-    }
-
-    const registeredHooks = hooksConfig.hooks ?? {};
-
     for (const event of REQUIRED_SUBAGENT_EVENTS) {
       const entries = registeredHooks[event];
       if (!entries || !Array.isArray(entries) || entries.length === 0) {
@@ -352,7 +370,7 @@ export function doctor(projectRoot: string): DoctorResult {
           severity: "error",
           check: "subagent-hooks",
           message: `${event} hook is not registered in hooks.json`,
-          hint: `Add a ${event} entry to hooks/hooks.json to enable subagent skill injection`,
+          hint: `Add a ${event} entry to hooks/hooks.json to enable subagent bootstrap and cleanup`,
         });
         continue;
       }
