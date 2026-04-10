@@ -30,7 +30,6 @@ All hooks are registered in `hooks/hooks.json` and run via `node "${CLAUDE_PLUGI
 | SessionStart | `session-start-seen-skills.mjs` | `startup\|resume\|clear\|compact` | — |
 | SessionStart | `session-start-profiler.mjs` | `startup\|resume\|clear\|compact` | — |
 | SessionStart | `inject-claude-md.mjs` | `startup\|resume\|clear\|compact` | — |
-| PreToolUse | `pretooluse-subagent-spawn-observe.mjs` | `Agent` | 5s |
 | PostToolUse | `posttooluse-verification-observe.mjs` | `Bash` | 5s |
 | SubagentStart | `subagent-start-bootstrap.mjs` | `.+` | 5s |
 | SubagentStop | `subagent-stop-sync.mjs` | `.+` | 5s |
@@ -44,7 +43,6 @@ Source lives in `hooks/src/*.mts` (TypeScript) and compiles to `hooks/*.mjs` (ES
 - `session-start-seen-skills.mts` — initializes `VERCEL_PLUGIN_SEEN_SKILLS=""` in `CLAUDE_ENV_FILE`
 - `session-start-profiler.mts` — scans config files + package deps → sets `VERCEL_PLUGIN_LIKELY_SKILLS` (+5 priority boost); detects greenfield mode
 - `inject-claude-md.mts` — outputs the thin session-start Vercel context plus knowledge update guidance
-- `pretooluse-subagent-spawn-observe.mts` — records pending subagent launch metadata
 - `posttooluse-verification-observe.mts` — observer-only Bash verification boundary logging
 - `subagent-start-bootstrap.mts` — bootstraps subagents with budget-aware context
 - `subagent-stop-sync.mts` — records subagent lifecycle metadata
@@ -154,7 +152,7 @@ Heading extraction is case-insensitive and captures everything from the heading 
 
 32 test files across `tests/`. Key categories:
 
-- **Hook integration**: `session-start-profiler`, `session-start-seen-skills`, `pretooluse-subagent-spawn-observe`, `posttooluse-verification-observe`
+- **Hook integration**: `session-start-profiler`, `session-start-seen-skills`, `posttooluse-verification-observe`
 - **Pattern matching**: `patterns`, `fuzz-glob`, `fuzz-yaml`, `prompt-signals`, `prompt-analysis`
 - **Snapshots**: `snapshot-runner` (golden snapshots of skill injection metadata per vercel.json fixture), `snapshots` (snapshot assertions)
 - **Validation**: `validate`, `validate-rules`, `build-skill-map`

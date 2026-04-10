@@ -96,11 +96,6 @@ sequenceDiagram
         Note right of PTU: Match patterns → rank → dedup → inject ≤3 skills (18KB)
     end
 
-    loop Every Agent tool call
-        Claude->>PTU: pretooluse-subagent-spawn-observe.mjs
-        Note right of PTU: Record pending launch metadata (JSONL)
-    end
-
     loop Every Bash completion
         Claude->>PostTU: posttooluse-verification-observe.mjs
         Note right of PostTU: Classify boundary → emit structured event
@@ -128,14 +123,13 @@ sequenceDiagram
 | SessionStart | `session-start-profiler.mjs` | `startup\|resume\|clear\|compact` | — |
 | SessionStart | `inject-claude-md.mjs` | `startup\|resume\|clear\|compact` | — |
 | PreToolUse | `pretooluse-skill-inject.mjs` | `Read\|Edit\|Write\|Bash` | 5 s |
-| PreToolUse | `pretooluse-subagent-spawn-observe.mjs` | `Agent` | 5 s |
 | UserPromptSubmit | `user-prompt-submit-skill-inject.mjs` | *(empty — all prompts)* | 5 s |
 | PostToolUse | `posttooluse-verification-observe.mjs` | `Bash` | 5 s |
 | SubagentStart | `subagent-start-bootstrap.mjs` | `.+` | 5 s |
 | SubagentStop | `subagent-stop-sync.mjs` | `.+` | 5 s |
 | SessionEnd | `session-end-cleanup.mjs` | — | — |
 
-All hooks output JSON conforming to `SyncHookJSONOutput` from `@anthropic-ai/claude-agent-sdk`. Observer hooks (spawn-observe, verification-observe, stop-sync) output empty `{}`.
+All hooks output JSON conforming to `SyncHookJSONOutput` from `@anthropic-ai/claude-agent-sdk`. Observer hooks (`posttooluse-verification-observe`, `subagent-stop-sync`) output empty `{}`.
 
 ### Hook I/O Contracts
 
@@ -246,26 +240,6 @@ For Bash tools, `tool_input.command` replaces `file_path`. The `agent_id` field 
 ```
 
 For Bash tool calls, `toolTarget` is redacted for security.
-
-#### PreToolUse: `pretooluse-subagent-spawn-observe.mjs`
-
-**Stdin:**
-
-```json
-{
-  "tool_name": "Agent",
-  "tool_input": {
-    "name": "researcher",
-    "description": "Research API patterns",
-    "prompt": "Find all API routes...",
-    "subagent_type": "Explore",
-    "resume": null
-  },
-  "session_id": "abc-123"
-}
-```
-
-**Stdout:** Always `{}` (observer only). Records a pending launch to `<tmpdir>/vercel-plugin-<sessionId>-pending-launches.jsonl`.
 
 #### UserPromptSubmit: `user-prompt-submit-skill-inject.mjs`
 
@@ -855,12 +829,10 @@ Every structured log event emitted by the plugin, organized by source hook and l
 
 | Event | Level | Payload Fields | Description |
 |-------|-------|---------------|-------------|
-| `subagent-start-bootstrap:complete` | summary | `agent_id`, `agent_type`, `claimed_skills`, `budget_used`, `budget_max`, `budget_category`, `pending_launch_matched` | Bootstrap finished |
+| `subagent-start-bootstrap:complete` | summary | `agent_id`, `agent_type`, `claimed_skills`, `budget_used`, `budget_max`, `budget_category` | Bootstrap finished |
 | `subagent-start-bootstrap` | debug | `agentId`, `agentType`, `sessionId` | Bootstrap started |
 | `subagent-start-bootstrap:profile-cache-hit` | debug | `sessionId`, `skills` | Profiler cache found |
 | `subagent-start-bootstrap:profile-cache-miss` | debug | `sessionId` | Profiler cache not found |
-| `subagent-start-bootstrap:prompt-skill-match` | debug | `promptLength`, `matchedSkills` | Prompt scored against skill signals |
-| `subagent-start-bootstrap:pending-launch` | debug | `sessionId`, `agentType`, `claimedLaunch`, `promptMatchedSkills`, `likelySkills` | Pending launch routing result |
 | `subagent-start-bootstrap:dedup-claims` | debug | `sessionId`, `agentId`, `scopeId`, `claimed` | Skills claimed for subagent scope |
 
 #### SubagentStop (`subagent-stop-sync`)
@@ -869,13 +841,6 @@ Every structured log event emitted by the plugin, organized by source hook and l
 |-------|-------|---------------|-------------|
 | `subagent-stop-sync:complete` | summary | `agent_id`, `agent_type`, `skills_injected`, `ledger_entry_written` | Stop sync finished |
 | `subagent-stop-sync` | debug | `sessionId`, `agentId`, `agentType` | Stop sync started |
-
-#### PreToolUse (`pretooluse-subagent-spawn-observe`)
-
-| Event | Level | Payload Fields | Description |
-|-------|-------|---------------|-------------|
-| `pretooluse-subagent-spawn-observe-recorded` | debug | `sessionId`, `subagentType`, `name` | Pending launch recorded |
-| `pretooluse-subagent-spawn-observe-skip` | debug | `reason`, `toolName` | Observation skipped |
 
 #### Issue Codes
 
@@ -941,22 +906,17 @@ sequenceDiagram
 
 ## Subagent Lifecycle
 
-When Claude spawns a subagent (via the Agent tool), four hooks coordinate to transfer context, prevent re-injection waste, and record observability data.
+When Claude spawns a subagent (via the Agent tool), the bootstrap and stop hooks coordinate to transfer context, prevent re-injection waste, and record observability data.
 
 ```mermaid
 sequenceDiagram
     participant Lead as Lead Agent
-    participant Observe as spawn-observe
     participant Bootstrap as subagent-start-bootstrap
     participant Sub as Subagent
     participant Sync as subagent-stop-sync
 
-    Lead->>Observe: PreToolUse (Agent tool call)
-    Note right of Observe: Record pending launch<br/>(description, prompt, subagent_type)<br/>→ pending-launches.jsonl
-
     Lead->>Bootstrap: SubagentStart fires
-    Bootstrap->>Bootstrap: claimPendingLaunch(sessionId, agentType)
-    Note right of Bootstrap: Match oldest pending launch<br/>Score prompt against skill signals<br/>Merge with profiler likelySkills
+    Note right of Bootstrap: Read profiler cache or env likelySkills<br/>Choose budget by agent type
     Bootstrap->>Sub: Inject additionalContext<br/>(profiler + skills, budget-scaled)
     Note right of Sub: Runs with own dedup scope<br/>(scoped claim dir by agent_id)
 
@@ -965,27 +925,6 @@ sequenceDiagram
     Sub->>Sync: SubagentStop fires
     Note right of Sync: Append to session ledger<br/>(agent_id, type, skills_injected)
 ```
-
-### Spawn Observation (PreToolUse → Agent)
-
-**Source**: `hooks/src/pretooluse-subagent-spawn-observe.mts`
-
-Intercepts Agent tool calls and records metadata for later correlation:
-
-```typescript
-interface PendingLaunch {
-  description: string;
-  prompt: string;
-  subagent_type: string;
-  resume?: string;
-  name?: string;
-  createdAt: number;
-}
-```
-
-Storage: `<tmpdir>/vercel-plugin-<sessionId>-pending-launches.jsonl`
-
-Uses file-based locking (`.lock` file with 2s wait timeout, 10ms polling, 5s stale-lock clearance) and atomic write via temp file + rename.
 
 ### Bootstrap Injection (SubagentStart)
 
@@ -1002,10 +941,9 @@ Injects project context into spawned subagents, **scaled by agent type budget**:
 
 **Context assembly**:
 1. Read cached profiler results (`profile.json`) — fall back to `VERCEL_PLUGIN_LIKELY_SKILLS`
-2. Claim pending launch via `claimPendingLaunch(sessionId, agentType)` — matches against pending records and scores the launch prompt against skill `promptSignals`
-3. Merge profiler skills + prompt-matched skills (prompt scores highest, deduplicated)
-4. Build wrapped context with `<!-- vercel-plugin:subagent-bootstrap ... -->` markers
-5. Persist dedup claims scoped by `agentId` via `tryClaimSessionKey()`
+2. Resolve the budget category from `agentType`
+3. Build wrapped context with `<!-- vercel-plugin:subagent-bootstrap ... -->` markers
+4. Persist dedup claims scoped by `agentId` via `tryClaimSessionKey()`
 
 ### Stop Sync and Ledger (SubagentStop)
 
@@ -1115,7 +1053,7 @@ At SessionEnd, the cleanup hook deletes all session-scoped temp files:
 ```typescript
 const prefix = `vercel-plugin-${tempSessionIdSegment(sessionId)}-`
 // Glob tmpdir for entries starting with prefix
-// Directories (*.d, *-pending-launches) → rmSync({ recursive: true, force: true })
+// Directories (*.d) → rmSync({ recursive: true, force: true })
 // Files → unlinkSync()
 ```
 
@@ -1134,7 +1072,5 @@ All session-scoped files live in `os.tmpdir()` with the prefix `vercel-plugin-<s
 | `…-<agentHash>-seen-skills.d/` | Dir of empty files | Scoped subagent dedup claims | `subagent-start-bootstrap` |
 | `…-<agentHash>-seen-skills.txt` | Comma-delimited | Scoped subagent dedup snapshot | `subagent-start-bootstrap` |
 | `…-profile.json` | JSON | Cached profiler results | `session-start-profiler` |
-| `…-pending-launches.jsonl` | JSONL | Pending subagent spawn metadata | `pretooluse-subagent-spawn-observe` |
-| `…-pending-launches.jsonl.lock` | Lock file | File-based lock for pending launches | `pretooluse-subagent-spawn-observe` |
 | `…-subagent-ledger.jsonl` | JSONL | Aggregate subagent stop metadata | `subagent-stop-sync` |
 All entries are cleaned up by `session-end-cleanup.mjs` at SessionEnd.

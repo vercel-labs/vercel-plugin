@@ -15,7 +15,6 @@ This document covers every hook entry point in `hooks/hooks.json`, organized by 
    - [inject-claude-md](#3-inject-claude-md)
 3. [PreToolUse Phase](#pretooluse-phase)
    - [pretooluse-skill-inject](#4-pretooluse-skill-inject)
-   - [pretooluse-subagent-spawn-observe](#5-pretooluse-subagent-spawn-observe)
 4. [UserPromptSubmit Phase](#userpromptsubmit-phase)
    - [user-prompt-submit-skill-inject](#6-user-prompt-submit-skill-inject)
 5. [PostToolUse Phase](#posttooluse-phase)
@@ -364,47 +363,6 @@ parseInput -> loadSkills -> matchSkills -> deduplicateSkills -> injectSkills -> 
 
 ---
 
-### 5. pretooluse-subagent-spawn-observe
-
-**Source**: `hooks/src/pretooluse-subagent-spawn-observe.mts` (141 lines)
-**Matcher**: `Agent`
-**Timeout**: 5 seconds
-**Output**: `{}` (observer only)
-
-#### Purpose
-
-Fires when the agent spawns a subagent. Records the pending launch metadata (description, prompt, subagent_type) in tmpdir so the `subagent-start-bootstrap` hook can correlate the launch with the right skill context.
-
-#### Sequence
-
-```mermaid
-sequenceDiagram
-    participant CC as Claude Code
-    participant Hook as pretooluse-subagent-spawn-observe
-    participant State as Pending Launch State (tmpdir)
-
-    CC->>Hook: PreToolUse (stdin: { tool_name: "Agent", tool_input: {...} })
-    Hook->>Hook: parseInput -> validate Agent tool, extract session_id
-    Hook->>Hook: buildPendingLaunchRecord(toolInput, timestamp)
-    Hook->>State: appendPendingLaunch(sessionId, payload)
-    Note over State: JSONL in <tmpdir>/vercel-plugin-<sid>-pending-launches/
-    Hook-->>CC: "{}" (no mutation)
-```
-
-#### What Gets Recorded
-
-```json
-{
-  "description": "Research authentication patterns",
-  "prompt": "Find how auth is implemented in this codebase",
-  "subagent_type": "Explore",
-  "createdAt": 1710000000000,
-  "name": "auth-researcher"
-}
-```
-
----
-
 ## UserPromptSubmit Phase
 
 This hook fires when the user submits a prompt, before the agent processes it.
@@ -590,7 +548,6 @@ sequenceDiagram
     participant CC as Claude Code
     participant Hook as subagent-start-bootstrap
     participant Cache as Profile Cache
-    participant State as Pending Launch State
     participant Skills as Skill Map
     participant Dedup as Dedup Claims
 
@@ -600,11 +557,6 @@ sequenceDiagram
         Hook->>Hook: Use cached likelySkills
     else Cache miss
         Hook->>Hook: Fallback to VERCEL_PLUGIN_LIKELY_SKILLS env var
-    end
-    Hook->>State: claimPendingLaunch(sessionId, agentType)
-    alt Pending launch found
-        Hook->>Hook: Match prompt text against skill signals
-        Hook->>Hook: Merge prompt-matched skills with profiler skills
     end
     Hook->>Hook: resolveBudgetCategory(agentType)
     alt Minimal (Explore)
@@ -619,12 +571,6 @@ sequenceDiagram
     Hook->>Dedup: Claim injected skills (scoped by agentId)
     Hook-->>CC: JSON { hookSpecificOutput: { hookEventName: "SubagentStart", additionalContext } }
 ```
-
-#### Pending Launch Correlation
-
-The hook reads the pending launch directory written by `pretooluse-subagent-spawn-observe` to extract the subagent's description and prompt. It then runs prompt signal matching against this text to determine additional relevant skills beyond what the profiler detected.
-
----
 
 ## SubagentStop Phase
 
@@ -697,7 +643,6 @@ Best-effort cleanup of all session-scoped temporary files. Always exits successf
 |-------------|------|----------|
 | `<tmpdir>/vercel-plugin-<sid>-seen-skills.d/` | Directory | Atomic skill claim files |
 | `<tmpdir>/vercel-plugin-<sid>-seen-skills.txt` | File | Comma-delimited seen skills |
-| `<tmpdir>/vercel-plugin-<sid>-pending-launches/` | Directory | Subagent pending launch records |
 | `<tmpdir>/vercel-plugin-<sid>-subagent-ledger.jsonl` | File | Subagent lifecycle ledger |
 | `<tmpdir>/vercel-plugin-<sid>-profile.json` | File | Profiler cache |
 | `<tmpdir>/vercel-plugin-<sid>-validated-files.txt` | File | Validation dedup state |
@@ -715,7 +660,7 @@ sequenceDiagram
     Hook->>Hook: Hash session_id if non-alphanumeric
     Hook->>FS: readdirSync(tmpdir) -> filter by prefix
     loop For each matching entry
-        alt Entry ends with .d or -pending-launches
+        alt Entry ends with .d
             Hook->>FS: rmSync(path, { recursive: true })
         else Regular file
             Hook->>FS: unlinkSync(path)

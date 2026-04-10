@@ -51,7 +51,6 @@ graph TB
 
         subgraph "PreToolUse"
             SKILL_INJECT["pretooluse-skill-inject.mjs<br/>pattern match → rank → inject"]
-            SUBAGENT_OBSERVE["pretooluse-subagent-spawn-observe.mjs<br/>captures pending Agent launches"]
         end
 
         subgraph "UserPromptSubmit"
@@ -158,8 +157,6 @@ sequenceDiagram
     opt If Claude spawns a subagent
         rect rgb(245, 230, 255)
             Note over SA: Phase 5: Subagent Context
-            CC->>PTU: pretooluse-subagent-spawn-observe (Agent tool)
-            Note over PTU: Captures pending launch metadata
             CC->>SA: subagent-start-bootstrap
             Note over SA: Budget-aware injection<br/>Explore=1KB, Plan=3KB, GP=8KB
             SA-->>CC: Skill context for subagent
@@ -200,7 +197,6 @@ Fires before each tool execution. Two matchers handle different tool types.
 | Hook | Matcher | Source | Purpose |
 |------|---------|--------|---------|
 | `pretooluse-skill-inject.mjs` | `Read\|Edit\|Write\|Bash` | `hooks/src/pretooluse-skill-inject.mts` | **Main injection engine.** Matches file paths (glob), bash commands (regex), and imports (regex) against skill patterns. Applies vercel.json routing (±10), profiler boost (+5), ranks by priority, deduplicates, and injects up to **3 skills within 18KB budget** |
-| `pretooluse-subagent-spawn-observe.mjs` | `Agent` | `hooks/src/pretooluse-subagent-spawn-observe.mts` | **Observer.** Captures pending subagent spawn metadata (description, prompt, type) to a JSONL file. Later consumed by `subagent-start-bootstrap` to correlate skills with the subagent's task |
 
 **Special triggers in pretooluse-skill-inject:**
 - **TSX review**: After N `.tsx` edits (default 3, configurable via `VERCEL_PLUGIN_REVIEW_THRESHOLD`), injects `react-best-practices`
@@ -221,7 +217,7 @@ Fires when a subagent is spawned (matches any agent type via `.+`).
 
 | Hook | Source | Purpose |
 |------|--------|---------|
-| `subagent-start-bootstrap.mjs` | `hooks/src/subagent-start-bootstrap.mts` | **Budget-aware subagent context injection.** Scales content by agent type: `Explore` gets ~1KB (skill names + profile summary), `Plan` gets ~3KB (summaries + deployment constraints), `general-purpose` gets ~8KB (full skill bodies with summary fallback). Reads profiler cache and pending launch metadata. Marks injected skills in agent-scoped dedup claims |
+| `subagent-start-bootstrap.mjs` | `hooks/src/subagent-start-bootstrap.mts` | **Budget-aware subagent context injection.** Scales content by agent type: `Explore` gets ~1KB (skill names + profile summary), `Plan` gets ~3KB (summaries + deployment constraints), `general-purpose` gets ~8KB (full skill bodies with summary fallback). Reads profiler cache and marks injected skills in agent-scoped dedup claims |
 
 ### SubagentStop
 
@@ -245,7 +241,7 @@ Fires when the session ends (no matcher — always fires).
 
 | Hook | Source | Purpose |
 |------|--------|---------|
-| `session-end-cleanup.mjs` | `hooks/src/session-end-cleanup.mts` | **Best-effort cleanup.** Removes all session-scoped temp files: dedup claims, dedup session file, profile cache, pending launches JSONL, subagent ledger. Silently ignores failures |
+| `session-end-cleanup.mjs` | `hooks/src/session-end-cleanup.mts` | **Best-effort cleanup.** Removes all session-scoped temp files: dedup claims, dedup session file, profile cache, subagent ledger. Silently ignores failures |
 
 ### Shared Library Modules
 
@@ -261,7 +257,6 @@ These are not hooks themselves but are imported by entry-point hooks:
 | `vercel-config.mts` | Reads `vercel.json` keys → maps to skill routing adjustments (±10 priority) |
 | `prompt-analysis.mts` | Dry-run prompt analysis reports (for debugging prompt matching) |
 | `lexical-index.mts` | MiniSearch-based lexical fallback index for fuzzy skill matching |
-| `subagent-state.mts` | File-locked JSONL operations for pending launches and agent-scoped dedup claims |
 
 ---
 
@@ -409,7 +404,7 @@ All of this happened transparently. The developer got expert-level Vercel guidan
 | **Priority** | A numeric score (typically 4–8) that determines injection order. Base priority is set in SKILL.md frontmatter. Modified at runtime by vercel.json routing (±10), profiler boost (+5), and prompt signal scores. Higher priority = injected first |
 | **additionalContext** | The mechanism hooks use to inject content into Claude's context. Returned as part of the hook's JSON output. Claude Code prepends this to the tool result or prompt, so the agent sees it before acting |
 | **Greenfield** | A project with no source files (only dot-directories). The profiler detects this and sets `VERCEL_PLUGIN_GREENFIELD=true`, which triggers a special execution mode: skip planning, use sensible defaults, bootstrap immediately |
-| **Observer Hook** | A hook that records telemetry but does not modify behavior. Returns empty JSON `{}`. Examples: `pretooluse-subagent-spawn-observe`, `posttooluse-verification-observe`, `subagent-stop-sync` |
+| **Observer Hook** | A hook that records telemetry but does not modify behavior. Returns empty JSON `{}`. Examples: `posttooluse-verification-observe`, `subagent-stop-sync` |
 
 ---
 

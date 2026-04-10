@@ -55,7 +55,7 @@ function main() {
   }
   for (const entry of entries) {
     const fullPath = join(tempRoot, entry);
-    if (entry.endsWith(".d") || entry.endsWith("-pending-launches")) {
+    if (entry.endsWith(".d")) {
       removeDirIfPresent(fullPath);
     } else {
       removeFileIfPresent(fullPath);

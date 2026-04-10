@@ -2,7 +2,6 @@ import { describe, test, expect, beforeEach } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { appendPendingLaunch, type PendingLaunch } from "../hooks/src/subagent-state.mts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const HOOK_SCRIPT = join(ROOT, "hooks", "subagent-start-bootstrap.mjs");
@@ -85,14 +84,6 @@ function cleanupProfileCache(sessionId: string): void {
   const cachePath = join(tmpdir(), `vercel-plugin-${sessionId}-profile.json`);
   try {
     rmSync(cachePath, { force: true });
-  } catch {}
-}
-
-function cleanupPendingLaunches(sessionId: string): void {
-  const pendingLaunchPath = join(tmpdir(), `vercel-plugin-${sessionId}-pending-launches.jsonl`);
-  try {
-    rmSync(pendingLaunchPath, { force: true });
-    rmSync(`${pendingLaunchPath}.lock`, { force: true });
   } catch {}
 }
 
@@ -275,41 +266,6 @@ describe("subagent-start-context: profile cache and fallback", () => {
     const ctx = parseContext(stdout);
     expect(ctx).toContain("Vercel plugin active");
     expect(ctx).toContain("unknown stack");
-  });
-
-  test("merges pending launch prompt matches into likely skills before context assembly", async () => {
-    writeProfileCache(testSession, ["nextjs"]);
-
-    const pendingLaunch: PendingLaunch = {
-      description: "Plan a durable workflow",
-      prompt: "Use Workflow DevKit retries and step orchestration for this task",
-      subagent_type: "Plan",
-      createdAt: Date.now(),
-    };
-    appendPendingLaunch(testSession, pendingLaunch);
-
-    try {
-      const firstRun = await runSubagentStart({
-        agent_id: "plan-prompt",
-        agent_type: "Plan",
-      });
-
-      expect(firstRun.code).toBe(0);
-      const firstContext = parseContext(firstRun.stdout);
-      expect(firstContext).toContain("Project likely uses: workflow, nextjs.");
-
-      const secondRun = await runSubagentStart({
-        agent_id: "plan-prompt-2",
-        agent_type: "Plan",
-      });
-
-      expect(secondRun.code).toBe(0);
-      const secondContext = parseContext(secondRun.stdout);
-      expect(secondContext).toContain("Project likely uses: nextjs.");
-    } finally {
-      cleanupProfileCache(testSession);
-      cleanupPendingLaunches(testSession);
-    }
   });
 
   test("empty stdin produces empty output (no crash)", async () => {

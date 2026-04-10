@@ -263,7 +263,6 @@ graph LR
         B3["subagent-start-context"]
         B4["subagent-start-bootstrap-routing"]
         B5["subagent-scope-dedup"]
-        B6["subagent-state"]
         B7["session-timeline-subagent"]
     end
 

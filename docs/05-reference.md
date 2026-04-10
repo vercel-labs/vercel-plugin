@@ -28,11 +28,10 @@ Every hook registered in `hooks/hooks.json`. All hooks run via `node "${CLAUDE_P
 | SessionStart | `session-start-seen-skills.mjs` | `startup\|resume\|clear\|compact` | — | Initializes `VERCEL_PLUGIN_SEEN_SKILLS=""` in the env file for dedup tracking |
 | SessionStart | `session-start-profiler.mjs` | `startup\|resume\|clear\|compact` | — | Scans project config files + package deps → sets `VERCEL_PLUGIN_LIKELY_SKILLS` (+5 priority boost); detects greenfield mode |
 | SessionStart | `inject-claude-md.mjs` | `startup\|resume\|clear\|compact` | — | Injects thin session-start Vercel context plus the knowledge update skill body |
-| PreToolUse | `pretooluse-subagent-spawn-observe.mjs` | `Agent` | 5s | **Observer.** Captures pending subagent spawn metadata to JSONL file |
 | PostToolUse | `posttooluse-verification-observe.mjs` | `Bash` | 5s | **Observer.** Classifies bash commands into verification boundaries (uiRender, clientRequest, serverHandler, environment) |
 | SubagentStart | `subagent-start-bootstrap.mjs` | `.+` | 5s | Budget-aware context injection for subagents — scales by agent type (Explore ~1KB, Plan ~3KB, GP ~8KB) |
 | SubagentStop | `subagent-stop-sync.mjs` | `.+` | 5s | **Observer.** Records subagent lifecycle metadata to JSONL ledger |
-| SessionEnd | `session-end-cleanup.mjs` | *(always)* | — | Best-effort cleanup of all session-scoped temp files (dedup claims, profile cache, pending launches, ledger) |
+| SessionEnd | `session-end-cleanup.mjs` | *(always)* | — | Best-effort cleanup of all session-scoped temp files (dedup claims, profile cache, ledger) |
 
 ### Shared Library Modules
 
@@ -48,7 +47,6 @@ These are imported by entry-point hooks, not registered in `hooks.json`:
 | `logger.mts` | `hooks/src/logger.mts` | Structured JSON logging to stderr (off/summary/debug/trace levels) |
 | `vercel-config.mts` | `hooks/src/vercel-config.mts` | Reads `vercel.json` keys → maps to skill routing adjustments (±10 priority) |
 | `lexical-index.mts` | `hooks/src/lexical-index.mts` | MiniSearch-based lexical fallback index for fuzzy skill matching |
-| `subagent-state.mts` | `hooks/src/subagent-state.mts` | File-locked JSONL operations for pending launches and agent-scoped dedup claims |
 | `shared-contractions.mts` | `hooks/src/shared-contractions.mts` | Contraction expansion map shared across prompt normalizers |
 | `stemmer.mts` | `hooks/src/stemmer.mts` | Lightweight word stemmer for lexical index tokenization |
 

@@ -350,7 +350,6 @@ Run `vercel-plugin doctor` to see which strategy is active.
 The `session-end-cleanup.mjs` hook runs at SessionEnd and removes all session-scoped temporary files:
 
 - **Claim directories**: `<tmpdir>/vercel-plugin-<sessionId>-seen-skills.d/`
-- **Pending launch dirs**: `<tmpdir>/vercel-plugin-<sessionId>-pending-launches/`
 - **Session files**: `<tmpdir>/vercel-plugin-<sessionId>-seen-skills.txt`
 
 **Safety**: The hook validates session IDs (alphanumeric, underscore, dash only) and SHA-256 hashes unsafe IDs before using them in file paths. Cleanup failures are silently ignored — the hook always exits 0.

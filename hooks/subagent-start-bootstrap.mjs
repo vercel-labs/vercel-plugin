@@ -5,11 +5,9 @@ import { readFileSync } from "fs";
 import { join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { pluginRoot as resolvePluginRoot, profileCachePath, safeReadFile, safeReadJson, tryClaimSessionKey } from "./hook-env.mjs";
-import { createLogger, logCaughtError } from "./logger.mjs";
-import { compilePromptSignals, matchPromptWithReason, normalizePromptText } from "./prompt-patterns.mjs";
+import { createLogger } from "./logger.mjs";
 import { loadSkills } from "./pretooluse-skill-inject.mjs";
 import { extractFrontmatter } from "./skill-map-frontmatter.mjs";
-import { claimPendingLaunch } from "./subagent-state.mjs";
 var PLUGIN_ROOT = resolvePluginRoot();
 var MINIMAL_BUDGET_BYTES = 1024;
 var LIGHT_BUDGET_BYTES = 3072;
@@ -50,79 +48,6 @@ function budgetBytesForCategory(category) {
       return LIGHT_BUDGET_BYTES;
     case "standard":
       return STANDARD_BUDGET_BYTES;
-  }
-}
-function getPromptMatchedSkills(promptText) {
-  const normalizedPrompt = normalizePromptText(promptText);
-  if (!normalizedPrompt) return [];
-  try {
-    const loaded = loadSkills(PLUGIN_ROOT, log);
-    if (!loaded) return [];
-    const matches = [];
-    for (const [skill, config] of Object.entries(loaded.skillMap)) {
-      if (!config.promptSignals) continue;
-      const compiled = compilePromptSignals(config.promptSignals);
-      const result = matchPromptWithReason(normalizedPrompt, compiled);
-      if (!result.matched) continue;
-      matches.push({
-        skill,
-        score: result.score,
-        priority: config.priority
-      });
-    }
-    matches.sort((left, right) => {
-      if (right.score !== left.score) return right.score - left.score;
-      if (right.priority !== left.priority) return right.priority - left.priority;
-      return left.skill.localeCompare(right.skill);
-    });
-    log.debug("subagent-start-bootstrap:prompt-skill-match", {
-      promptLength: promptText.length,
-      matchedSkills: matches.map(({ skill, score }) => ({ skill, score }))
-    });
-    return matches;
-  } catch (error) {
-    logCaughtError(log, "subagent-start-bootstrap:prompt-skill-match-failed", error, {
-      promptLength: promptText.length
-    });
-    return [];
-  }
-}
-function mergeLikelySkills(likelySkills, promptMatchedSkills) {
-  if (promptMatchedSkills.length === 0) return likelySkills;
-  const promptSkillNames = promptMatchedSkills.map((entry) => entry.skill);
-  return [.../* @__PURE__ */ new Set([...promptSkillNames, ...likelySkills])];
-}
-function resolveLikelySkillsFromPendingLaunch(sessionId, agentType, likelySkills) {
-  if (!sessionId) return likelySkills;
-  try {
-    const pendingLaunch = claimPendingLaunch(sessionId, agentType);
-    if (!pendingLaunch) {
-      log.debug("subagent-start-bootstrap:pending-launch", {
-        sessionId,
-        agentType,
-        claimedLaunch: false,
-        likelySkills
-      });
-      return likelySkills;
-    }
-    const promptText = `${pendingLaunch.description} ${pendingLaunch.prompt}`.trim();
-    const promptMatchedSkills = getPromptMatchedSkills(promptText);
-    const effectiveLikelySkills = mergeLikelySkills(likelySkills, promptMatchedSkills);
-    log.debug("subagent-start-bootstrap:pending-launch", {
-      sessionId,
-      agentType,
-      claimedLaunch: true,
-      promptMatchedSkills: promptMatchedSkills.map(({ skill, score }) => ({ skill, score })),
-      likelySkills: effectiveLikelySkills
-    });
-    return effectiveLikelySkills;
-  } catch (error) {
-    logCaughtError(log, "subagent-start-bootstrap:pending-launch-route-failed", error, {
-      sessionId,
-      agentType,
-      likelySkills
-    });
-    return likelySkills;
   }
 }
 function profileLine(agentType, likelySkills) {
@@ -213,12 +138,7 @@ function main() {
   const agentType = input.agent_type ?? "unknown";
   const sessionId = input.session_id;
   log.debug("subagent-start-bootstrap", { agentId, agentType, sessionId });
-  const profilerLikelySkills = getLikelySkills(sessionId);
-  const likelySkills = resolveLikelySkillsFromPendingLaunch(
-    sessionId,
-    agentType,
-    profilerLikelySkills
-  );
+  const likelySkills = getLikelySkills(sessionId);
   const category = resolveBudgetCategory(agentType);
   const maxBytes = budgetBytesForCategory(category);
   let context;
@@ -249,15 +169,13 @@ function main() {
     }
   }
   const budgetUsed = Buffer.byteLength(context, "utf8");
-  const pendingLaunchMatched = likelySkills.length !== profilerLikelySkills.length || likelySkills.some((s) => !profilerLikelySkills.includes(s));
   log.summary("subagent-start-bootstrap:complete", {
     agent_id: agentId,
     agent_type: agentType,
     claimed_skills: likelySkills.length,
     budget_used: budgetUsed,
     budget_max: maxBytes,
-    budget_category: category,
-    pending_launch_matched: pendingLaunchMatched
+    budget_category: category
   });
   const output = {
     hookSpecificOutput: {

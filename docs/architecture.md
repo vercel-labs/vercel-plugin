@@ -77,7 +77,6 @@ flowchart TB
 
     subgraph Runtime ["Runtime Phase"]
         PTU["pretooluse-skill-inject.mjs<br/>Read | Edit | Write | Bash<br/>Main injection engine"]
-        PSO["pretooluse-subagent-spawn-observe.mjs<br/>Agent<br/>Records pending subagent launches"]
         UPS["user-prompt-submit-skill-inject.mjs<br/>All prompts<br/>Prompt signal scoring"]
     end
 
@@ -114,12 +113,11 @@ flowchart TB
 | 2 | SessionStart | `session-start-profiler.mjs` | `startup\|resume\|clear\|compact` | — | Profile project, set LIKELY_SKILLS |
 | 3 | SessionStart | `inject-claude-md.mjs` | `startup\|resume\|clear\|compact` | — | Inject thin Vercel session context + knowledge update |
 | 4 | PreToolUse | `pretooluse-skill-inject.mjs` | `Read\|Edit\|Write\|Bash` | 5s | Main skill injection engine |
-| 5 | PreToolUse | `pretooluse-subagent-spawn-observe.mjs` | `Agent` | 5s | Record pending subagent launches |
-| 6 | UserPromptSubmit | `user-prompt-submit-skill-inject.mjs` | _(all prompts)_ | 5s | Prompt signal scoring + injection |
-| 7 | PostToolUse | `posttooluse-verification-observe.mjs` | `Bash` | 5s | Observe verification boundaries |
-| 8 | SubagentStart | `subagent-start-bootstrap.mjs` | `.+` _(any)_ | 5s | Bootstrap subagent with context |
-| 9 | SubagentStop | `subagent-stop-sync.mjs` | `.+` _(any)_ | 5s | Write ledger, sync dedup |
-| 10 | SessionEnd | `session-end-cleanup.mjs` | — | — | Delete temp files |
+| 5 | UserPromptSubmit | `user-prompt-submit-skill-inject.mjs` | _(all prompts)_ | 5s | Prompt signal scoring + injection |
+| 6 | PostToolUse | `posttooluse-verification-observe.mjs` | `Bash` | 5s | Observe verification boundaries |
+| 7 | SubagentStart | `subagent-start-bootstrap.mjs` | `.+` _(any)_ | 5s | Bootstrap subagent with context |
+| 8 | SubagentStop | `subagent-stop-sync.mjs` | `.+` _(any)_ | 5s | Write ledger, sync dedup |
+| 9 | SessionEnd | `session-end-cleanup.mjs` | — | — | Delete temp files |
 
 ---
 
@@ -251,7 +249,7 @@ The system uses a fallback chain (visible in debug logs):
 
 ### Cleanup
 
-`session-end-cleanup.mjs` deletes the claim directory, session files, pending launch dirs, and profile cache when the session ends. If the session crashes, the OS tmpdir cleanup eventually reclaims the files.
+`session-end-cleanup.mjs` deletes the claim directory, session files, subagent ledgers, and profile cache when the session ends. If the session crashes, the OS tmpdir cleanup eventually reclaims the files.
 
 ---
 
@@ -283,20 +281,13 @@ When the main agent spawns subagents, the plugin manages their skill context ind
 ```mermaid
 sequenceDiagram
     participant Main as Main Agent
-    participant PreTool as pretooluse-subagent-spawn-observe
-    participant State as Subagent State (tmpdir)
     participant Bootstrap as subagent-start-bootstrap
     participant Sub as Subagent
     participant Sync as subagent-stop-sync
     participant Ledger as Subagent Ledger (JSONL)
 
-    Main->>PreTool: Agent tool call (description, prompt, type)
-    PreTool->>State: appendPendingLaunch(sessionId, payload)
-    Note over State: Records description, prompt, subagent_type
-
     Main->>Sub: Spawn subagent
     Sub->>Bootstrap: SubagentStart event
-    Bootstrap->>State: claimPendingLaunch(sessionId, agentType)
     Bootstrap->>Bootstrap: Resolve budget category
     Note over Bootstrap: Explore=1KB, Plan=3KB, general=8KB
     Bootstrap->>Sub: additionalContext (profiler + skills)
@@ -487,9 +478,8 @@ All three steps are combined in `bun run build`. A pre-commit hook auto-compiles
 ### "Agent spawns a research subagent"
 
 1. **Developer triggers a complex task** — Main agent decides to spawn an `Explore` subagent.
-2. **PreToolUse (Agent matcher)** — `pretooluse-subagent-spawn-observe` records the pending launch with description and prompt text.
-3. **SubagentStart** — `subagent-start-bootstrap` reads the pending launch, runs prompt signal matching against the subagent's description, and injects a 1KB minimal context (Explore budget).
-4. **Subagent completes** — `subagent-stop-sync` writes a JSONL ledger entry with agent metadata and transcript path.
+2. **SubagentStart** — `subagent-start-bootstrap` reads the profiler cache and injects a 1KB minimal context (Explore budget).
+3. **Subagent completes** — `subagent-stop-sync` writes a JSONL ledger entry with agent metadata and transcript path.
 
 ---
 
@@ -510,12 +500,10 @@ hooks/
 │   ├── lexical-index.mts             # Lexical fallback scoring for unmatched prompts
 │   ├── stemmer.mts                   # Word stemming for lexical matching
 │   ├── shared-contractions.mts       # Contraction expansion for text normalization
-│   ├── subagent-state.mts            # Subagent pending launch state management
 │   ├── session-start-seen-skills.mts # Hook: initialize dedup env var
 │   ├── session-start-profiler.mts    # Hook: profile project -> set LIKELY_SKILLS
 │   ├── inject-claude-md.mts          # Hook: inject thin session-start context
 │   ├── pretooluse-skill-inject.mts   # Hook: main injection engine
-│   ├── pretooluse-subagent-spawn-observe.mts  # Hook: record pending subagent launches
 │   ├── user-prompt-submit-skill-inject.mts    # Hook: prompt signal scoring + injection
 │   ├── posttooluse-verification-observe.mts   # Hook: verification boundary observer
 │   ├── subagent-start-bootstrap.mts  # Hook: bootstrap subagent context

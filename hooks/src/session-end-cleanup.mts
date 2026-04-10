@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * SessionEnd hook: best-effort cleanup of session-scoped temp files.
- * Deletes main and all agent-scoped claim dirs, session files, and profile cache.
+ * Deletes main and all agent-scoped claim dirs, session files, profile cache, and ledgers.
  * Always exits successfully.
  */
 
@@ -83,7 +83,7 @@ function main(): void {
 
   for (const entry of entries) {
     const fullPath = join(tempRoot, entry);
-    if (entry.endsWith(".d") || entry.endsWith("-pending-launches")) {
+    if (entry.endsWith(".d")) {
       removeDirIfPresent(fullPath);
     } else {
       removeFileIfPresent(fullPath);
