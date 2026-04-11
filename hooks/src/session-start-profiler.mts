@@ -16,7 +16,6 @@ import {
   existsSync,
   readFileSync,
   readdirSync,
-  writeFileSync,
   type Dirent,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -29,10 +28,10 @@ import {
   setSessionEnv,
   type HookPlatform,
 } from "./compat.mjs";
-import { pluginRoot, profileCachePath, safeReadJson, writeSessionFile } from "./hook-env.mjs";
+import { pluginRoot, safeReadJson, writeSessionFile } from "./hook-env.mjs";
 import { createLogger, logCaughtError, type Logger } from "./logger.mjs";
 import { buildSkillMap } from "./skill-map-frontmatter.mjs";
-import { trackBaseEvents, getOrCreateDeviceId } from "./telemetry.mjs";
+import { trackDauActiveToday } from "./telemetry.mjs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -675,39 +674,8 @@ async function main(): Promise<void> {
     process.stdout.write(`${additionalContext}\n\n`);
   }
 
-  // Write profile cache so SubagentStart hooks can read it without re-profiling
-  if (sessionId) {
-    try {
-      const cache = {
-        projectRoot,
-        likelySkills,
-        greenfield: greenfield !== null,
-        bootstrapHints: setupSignals.bootstrapHints,
-        resourceHints: setupSignals.resourceHints,
-        setupMode: setupSignals.setupMode,
-        timestamp: new Date().toISOString(),
-      };
-      writeFileSync(profileCachePath(sessionId), JSON.stringify(cache), "utf-8");
-    } catch (error) {
-      logCaughtError(log, "session-start-profiler:write-profile-cache-failed", error, {
-        sessionId,
-        projectRoot,
-      });
-    }
-  }
-
-  // Base telemetry — enabled by default unless VERCEL_PLUGIN_TELEMETRY=off
-  if (sessionId) {
-    const deviceId = getOrCreateDeviceId();
-    await trackBaseEvents(sessionId, [
-      { key: "session:device_id", value: deviceId },
-      { key: "session:platform", value: process.platform },
-      { key: "session:likely_skills", value: likelySkills.join(",") },
-      { key: "session:greenfield", value: String(greenfield !== null) },
-      { key: "session:vercel_cli_installed", value: String(cliStatus.installed) },
-      { key: "session:vercel_cli_version", value: cliStatus.currentVersion || "" },
-    ]).catch(() => {});
-  }
+  // DAU phone-home — enabled by default unless VERCEL_PLUGIN_TELEMETRY=off
+  await trackDauActiveToday().catch(() => {});
 
   if (cursorOutput) {
     process.stdout.write(cursorOutput);
