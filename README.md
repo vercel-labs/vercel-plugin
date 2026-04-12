@@ -30,7 +30,7 @@ This plugin gives AI agents a **relational knowledge graph** of the Vercel ecosy
 
 ## How Do I Use This?
 
-After installing, the plugin keeps automatic behavior lightweight. Session-start context still runs automatically, but Vercel skills are no longer auto-injected on every tool call or every prompt by default. The default post-tool path is now observer-only. The skills remain available for direct use, and the repo still keeps the injection engine for targeted or future opt-in workflows.
+After installing, the plugin keeps automatic behavior lightweight. Session-start activation now only kicks in for empty directories and detected Vercel/Next.js projects, and Vercel skills are no longer auto-injected on every tool call or every prompt by default. The default post-tool path is now observer-only. The skills remain available for direct use, and the repo still keeps the injection engine for targeted or future opt-in workflows.
 
 ## Components
 
@@ -94,12 +94,12 @@ A text-form relational graph covering:
 
 Lifecycle hooks that run automatically during your session:
 
-- **Session start context injection** — Injects a thin Vercel session context plus the knowledge-update guidance
-- **Session start repo profiler** — Scans config files and dependencies to set likely-skill hints for the session
+- **Session start context injection** — Injects a thin Vercel session context plus the knowledge-update guidance for empty directories and detected Vercel/Next.js projects
+- **Session start repo profiler** — Scans config files and dependencies to set likely-skill hints, but only after that same activation check passes
 
 ## Usage
 
-After installing, session context is injected automatically. Vercel skills are available on demand, and you can invoke them directly via slash commands:
+After installing, session context is injected automatically only for empty directories and detected Vercel/Next.js projects. Vercel skills are available on demand, and you can invoke them directly via slash commands:
 
 ```
 /vercel-plugin:nextjs

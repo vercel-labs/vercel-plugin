@@ -16,6 +16,7 @@ import {
 } from "./compat.mjs";
 import { pluginRoot, safeReadJson, writeSessionFile } from "./hook-env.mjs";
 import { createLogger, logCaughtError } from "./logger.mjs";
+import { hasSessionStartActivationMarkers } from "./session-start-activation.mjs";
 import { buildSkillMap } from "./skill-map-frontmatter.mjs";
 import { trackDauActiveToday } from "./telemetry.mjs";
 var FILE_MARKERS = [
@@ -408,8 +409,25 @@ async function main() {
   const platform = detectSessionStartPlatform(hookInput);
   const sessionId = normalizeSessionStartSessionId(hookInput);
   const projectRoot = resolveSessionStartProjectRoot();
-  logBrokenSkillFrontmatterSummary();
   const greenfield = checkGreenfield(projectRoot);
+  const shouldActivate = greenfield !== null || !existsSync(projectRoot) || hasSessionStartActivationMarkers(projectRoot);
+  if (!shouldActivate) {
+    log.debug("session-start-profiler:skipped-non-vercel-project", {
+      projectRoot,
+      reason: "non-empty-without-vercel-markers"
+    });
+    if (sessionId) {
+      writeSessionFile(sessionId, SESSION_GREENFIELD_KIND, "");
+      writeSessionFile(sessionId, SESSION_LIKELY_SKILLS_KIND, "");
+    }
+    if (platform === "cursor") {
+      process.stdout.write(JSON.stringify(formatOutput("cursor", {})));
+    }
+    await trackDauActiveToday().catch(() => {
+    });
+    process.exit(0);
+  }
+  logBrokenSkillFrontmatterSummary();
   const cliStatus = checkVercelCli();
   const userMessages = buildSessionStartProfilerUserMessages(greenfield, cliStatus);
   const likelySkills = greenfield ? GREENFIELD_DEFAULT_SKILLS : profileProject(projectRoot);

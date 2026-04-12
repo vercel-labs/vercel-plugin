@@ -38,8 +38,8 @@ Source lives in `hooks/src/*.mts` (TypeScript) and compiles to `hooks/*.mjs` (ES
 
 **Entry-point hooks** (wired in hooks.json):
 - `session-start-seen-skills.mts` — initializes `VERCEL_PLUGIN_SEEN_SKILLS=""` in `CLAUDE_ENV_FILE`
-- `session-start-profiler.mts` — scans config files + package deps → sets `VERCEL_PLUGIN_LIKELY_SKILLS` (+5 priority boost); detects greenfield mode
-- `inject-claude-md.mts` — outputs the thin session-start Vercel context plus knowledge update guidance
+- `session-start-profiler.mts` — activates only for greenfield directories or detected Vercel/Next.js projects, then scans config files + package deps → sets `VERCEL_PLUGIN_LIKELY_SKILLS` (+5 priority boost)
+- `inject-claude-md.mts` — outputs the thin session-start Vercel context plus knowledge update guidance for that same activation set
 - `session-end-cleanup.mts` — deletes session-scoped temp files
 
 **Library modules** (imported by entry-point hooks):
@@ -53,7 +53,7 @@ Source lives in `hooks/src/*.mts` (TypeScript) and compiles to `hooks/*.mjs` (ES
 
 ### Skill Injection Flow
 
-1. **SessionStart**: Profiler scans project → sets `VERCEL_PLUGIN_LIKELY_SKILLS`
+1. **SessionStart**: For greenfield directories or detected Vercel/Next.js projects, the profiler scans the project → sets `VERCEL_PLUGIN_LIKELY_SKILLS`
 2. **PreToolUse** (on Read/Edit/Write/Bash): Match file paths (glob), bash commands (regex), imports (regex+flags) → apply vercel.json routing → apply profiler boost → rank by priority → dedup → inject up to 3 skills within 18KB budget
 3. **UserPromptSubmit**: Score prompt text against `promptSignals` (phrases/allOf/anyOf/noneOf) → inject up to 2 skills within 8KB budget
    - **3b. Lexical fallback** (when `VERCEL_PLUGIN_LEXICAL_PROMPT=on`): If phrase/allOf/anyOf scoring yields no matches above `minScore`, re-score using a lexical stemmer that normalizes prompt tokens before comparison — catches natural phrasing that exact-substring matching misses
